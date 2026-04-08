@@ -1,0 +1,16 @@
+from pydantic import BaseModel
+
+
+class EventResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    venue: list[str]
+    rounds: dict
+    participants_count: int
+
+
+class EventRegisterResponse(BaseModel):
+    message: str
+    event_id: str
+    user_id: str
