@@ -17,7 +17,8 @@ async def sync_unstop(
     current_user: User = Depends(get_current_user),
 ) -> UnstopSyncResponse:
     if current_user.role.value != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     result = await sync_unstop_users(session, payload.users)
     return UnstopSyncResponse(**result)

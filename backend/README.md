@@ -36,6 +36,12 @@ uv run init-db
 uv run ascent-api
 ```
 
+5. Run tests:
+
+```bash
+uv run pytest
+```
+
 ## Supabase Setup
 
 Create the Supabase project before applying the SQL files in `migrations/sql/`.

@@ -19,10 +19,12 @@ async def sync_unstop_users(session: AsyncSession, users: list[UnstopUserItem]) 
 
     for incoming in users:
         if incoming.access_level not in VALID_ACCESS_LEVELS:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid access level for {incoming.username}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"Invalid access level for {incoming.username}")
 
         result = await session.execute(
-            select(User).where((User.unstop_id == incoming.unstop_id) | (User.username == incoming.username))
+            select(User).where((User.unstop_id == incoming.unstop_id)
+                               | (User.username == incoming.username))
         )
         user = result.scalar_one_or_none()
         if user is None:

@@ -61,6 +61,13 @@ cd backend
 uv run init-db
 ```
 
+### 6. Run backend tests
+
+```bash
+cd backend
+uv run pytest
+```
+
 ## Documentation
 
 See planning and architecture documents in `docs/`:
