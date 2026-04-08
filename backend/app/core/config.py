@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    FILE_SIGNING_SECRET: str = "change-this-file-secret"
+    UPLOAD_ROOT: str = "uploads"
+
+    BACKGROUND_JOB_INTERVAL_SECONDS: int = 300
+    UNSTOP_SYNC_SOURCE_JSON: str | None = None
+
+    QR_RATE_LIMIT_PER_MINUTE: int = 10
+
 
 @lru_cache
 def get_settings() -> Settings:

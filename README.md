@@ -13,6 +13,7 @@ It powers user onboarding, event participation, submissions, and QR-based valida
 
 - Backend foundation is implemented with FastAPI.
 - Core modules are scaffolded: auth, admin sync, users, events, submissions, qr.
+- Background jobs, auth/role middleware, signed file uploads, and route-level/API tests are now included.
 - Access-control and dual-update consistency rules are enforced in service logic.
 
 ## Tech Stack
@@ -67,6 +68,15 @@ uv run init-db
 cd backend
 uv run pytest
 ```
+
+The test suite covers route wiring, the scheduled-job helpers, signed file storage, and the Unstop sync flow.
+
+## Implemented Backend Additions Since the First Cut
+
+- Lifespan-managed background jobs for phase cleanup and file-based Unstop sync.
+- JWT role claims with middleware enforcement for admin and scanner routes.
+- Multipart submission handling with signed file URLs and a file download endpoint.
+- API-level tests covering auth, events, submissions, admin sync, QR scanning, background jobs, and signed storage.
 
 ## Documentation
 

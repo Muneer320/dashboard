@@ -58,6 +58,19 @@ async def submit_for_event(
     return submitted_at
 
 
+def build_file_submission_value(signed_url: str, storage_path: str | None = None) -> str:
+    if storage_path:
+        return f"{signed_url}|{storage_path}"
+    return signed_url
+
+
+def split_file_submission_value(value: str) -> tuple[str, str | None]:
+    if "|" not in value:
+        return value, None
+    signed_url, storage_path = value.split("|", 1)
+    return signed_url, storage_path or None
+
+
 def get_submission_for_phase(user: User, event: Event, phase: int) -> dict:
     participants = event.participants or {}
     participant_entry = participants.get(str(user.id), {})

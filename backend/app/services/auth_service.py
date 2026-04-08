@@ -14,7 +14,7 @@ async def login_with_credentials(session: AsyncSession, username: str, password:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    return create_access_token(subject=str(user.id))
+    return create_access_token(subject=str(user.id), role=user.role.value)
 
 
 async def register_user(

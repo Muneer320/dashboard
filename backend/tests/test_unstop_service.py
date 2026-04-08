@@ -1,4 +1,7 @@
 import pytest
+from typing import cast
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import AccessLevel, User, UserRole
 from app.schemas.unstop import UnstopUserItem
@@ -66,9 +69,11 @@ async def test_sync_unstop_users_creates_and_updates_users(monkeypatch) -> None:
         ),
     ]
 
-    monkeypatch.setattr("app.services.unstop_service.get_password_hash", lambda _: "hashed-password")
+    monkeypatch.setattr(
+        "app.services.unstop_service.get_password_hash", lambda _: "hashed-password")
 
-    result = await sync_unstop_users(session, payload)  # type: ignore[arg-type]
+    # type: ignore[arg-type]
+    result = await sync_unstop_users(cast(AsyncSession, session), payload)
 
     assert result["created"] == 1
     assert result["updated"] == 1

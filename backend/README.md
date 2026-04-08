@@ -64,8 +64,15 @@ Then copy the Supabase database connection string into `.env` as `DATABASE_URL`.
 - `users`: read/update profile
 - `events`: list/get/register
 - `submissions`: submit for event phase
+- `files`: signed file download handling
 - `qr`: food + event scan flows
 - `health`: service liveness
+
+## Runtime Behavior
+
+- JWTs include role claims for middleware checks.
+- Background jobs run through the FastAPI lifespan and can be disabled in tests by setting `BACKGROUND_JOB_INTERVAL_SECONDS=0`.
+- File submissions are stored locally with signed download URLs.
 
 ## Database URL Note
 
@@ -85,3 +92,8 @@ The backend normalizes plain `postgresql://` URLs to the asyncpg driver at runti
 - `migrations/README.md`
 - `migrations/sql/001_init_schema.sql`
 - `migrations/sql/002_seed_admin_user.sql`
+
+## Test Coverage
+
+- `uv run pytest`
+- Covers route wiring, admin sync, QR handling, submission parsing, background jobs, signed file storage, and DB URL normalization.
