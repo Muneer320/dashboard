@@ -14,3 +14,9 @@ class EventRegisterResponse(BaseModel):
     message: str
     event_id: str
     user_id: str
+
+
+class EventParticipantsResponse(BaseModel):
+    event_id: str
+    participants_count: int
+    participants: dict

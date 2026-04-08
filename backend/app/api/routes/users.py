@@ -4,8 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db_session
 from app.models.user import User
-from app.schemas.user import UserProfileUpdate, UserResponse
-from app.services.user_service import get_user_by_id, update_user_profile
+from app.schemas.user import UserAccessResponse, UserEventsResponse, UserProfileUpdate, UserResponse
+from app.services.user_service import get_user_access_payload, get_user_by_id, get_user_events_payload, update_user_profile
 
 router = APIRouter()
 
@@ -50,3 +50,31 @@ async def patch_user(
         role=updated.role.value,
         is_profile_complete=updated.is_profile_complete,
     )
+
+
+@router.get("/{user_id}/events", response_model=UserEventsResponse)
+async def get_user_events(
+    user_id: str,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> UserEventsResponse:
+    user = await get_user_by_id(session, user_id)
+    if str(current_user.id) != str(user.id) and current_user.role.value != "admin":
+        user = current_user
+
+    payload = get_user_events_payload(user)
+    return UserEventsResponse(**payload)
+
+
+@router.get("/{user_id}/access", response_model=UserAccessResponse)
+async def get_user_access(
+    user_id: str,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> UserAccessResponse:
+    user = await get_user_by_id(session, user_id)
+    if str(current_user.id) != str(user.id) and current_user.role.value != "admin":
+        user = current_user
+
+    payload = get_user_access_payload(user)
+    return UserAccessResponse(**payload)

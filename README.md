@@ -31,7 +31,19 @@ uv sync
 copy .env.example .env
 ```
 
-### 2. Run backend
+### 2. Create the Supabase project first
+
+Create the Supabase project before applying any SQL migrations.
+You need the Supabase connection details to set `backend/.env` correctly.
+
+### 3. Apply SQL migrations
+
+Open the Supabase SQL editor and run the migration files in order:
+
+1. `backend/migrations/sql/001_init_schema.sql`
+2. `backend/migrations/sql/002_seed_admin_user.sql` if you want a local/dev admin user
+
+### 4. Run backend
 
 ```bash
 cd backend
@@ -40,7 +52,7 @@ uv run ascent-api
 
 API base path: `/api/v1`
 
-### 3. Optional DB table bootstrap (local)
+### 5. Optional DB table bootstrap (local)
 
 ```bash
 cd backend
@@ -63,3 +75,4 @@ See planning and architecture documents in `docs/`:
 - Keep backend logic authoritative; frontend should stay thin.
 - For dual-structure updates (`users.events` and `events.participants`), always write both in one transaction.
 - Enforce event-scoped access control for all protected operations.
+- The SQLAlchemy models and the SQL migration files are intentionally aligned so the Supabase SQL editor can be used directly.

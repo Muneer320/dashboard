@@ -56,3 +56,17 @@ async def submit_for_event(
 
     await session.commit()
     return submitted_at
+
+
+def get_submission_for_phase(user: User, event: Event, phase: int) -> dict:
+    participants = event.participants or {}
+    participant_entry = participants.get(str(user.id), {})
+    phase_key = f"phase{phase}"
+    submission = (participant_entry.get("submission") or {}).get(phase_key)
+
+    return {
+        "event_id": str(event.id),
+        "phase": phase,
+        "has_submission": submission is not None,
+        "submission": submission,
+    }

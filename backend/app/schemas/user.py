@@ -17,3 +17,15 @@ class UserResponse(BaseModel):
     access_level: str
     role: str
     is_profile_complete: bool
+
+
+class UserEventsResponse(BaseModel):
+    user_id: str
+    events: dict
+
+
+class UserAccessResponse(BaseModel):
+    user_id: str
+    global_access_level: str
+    role: str
+    event_access: dict

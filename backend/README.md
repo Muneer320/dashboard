@@ -36,6 +36,17 @@ uv run init-db
 uv run ascent-api
 ```
 
+## Supabase Setup
+
+Create the Supabase project before applying the SQL files in `migrations/sql/`.
+
+Apply them in order through the Supabase SQL editor:
+
+1. `migrations/sql/001_init_schema.sql`
+2. `migrations/sql/002_seed_admin_user.sql` if you need a local/dev admin user
+
+Then copy the Supabase database connection string into `.env` as `DATABASE_URL`.
+
 ## API Base URL
 
 `/api/v1`
@@ -57,3 +68,9 @@ uv run ascent-api
 - Transactional dual updates for:
   - `users.events`
   - `events.participants`
+
+## Migration Files Included
+
+- `migrations/README.md`
+- `migrations/sql/001_init_schema.sql`
+- `migrations/sql/002_seed_admin_user.sql`

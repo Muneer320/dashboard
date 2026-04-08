@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db_session
 from app.models.user import User
-from app.schemas.submission import SubmissionRequest, SubmissionResponse
+from app.schemas.submission import SubmissionFetchResponse, SubmissionRequest, SubmissionResponse
 from app.services.event_service import get_event
-from app.services.submission_service import submit_for_event
+from app.services.submission_service import get_submission_for_phase, submit_for_event
 
 router = APIRouter()
 
@@ -33,3 +33,15 @@ async def submit_event(
         phase=payload.phase,
         submitted_at=submitted_at,
     )
+
+
+@router.get("/{event_id}/submission", response_model=SubmissionFetchResponse)
+async def get_submission(
+    event_id: str,
+    phase: int,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> SubmissionFetchResponse:
+    event = await get_event(session, event_id)
+    payload = get_submission_for_phase(current_user, event, phase)
+    return SubmissionFetchResponse(**payload)

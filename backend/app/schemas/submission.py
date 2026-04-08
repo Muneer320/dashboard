@@ -14,3 +14,10 @@ class SubmissionResponse(BaseModel):
     event_id: str
     phase: int
     submitted_at: datetime
+
+
+class SubmissionFetchResponse(BaseModel):
+    event_id: str
+    phase: int
+    has_submission: bool
+    submission: dict | None = None

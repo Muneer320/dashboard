@@ -16,3 +16,17 @@ class MeResponse(BaseModel):
     username: str
     name: str
     role: str
+
+
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=6, max_length=128)
+    name: str = Field(min_length=1, max_length=255)
+    unstop_id: str | None = Field(default=None, max_length=128)
+
+
+class RegisterResponse(BaseModel):
+    id: str
+    username: str
+    name: str
+    role: str

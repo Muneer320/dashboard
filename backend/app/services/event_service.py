@@ -77,3 +77,12 @@ async def register_for_event(session: AsyncSession, user: User, event: Event) ->
         session.add(user)
 
     await session.commit()
+
+
+def get_event_participants_payload(event: Event) -> dict:
+    participants = event.participants or {}
+    return {
+        "event_id": str(event.id),
+        "participants_count": len(participants),
+        "participants": participants,
+    }
