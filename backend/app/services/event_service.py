@@ -100,7 +100,8 @@ async def set_event_phase_state(
     phase_key = f"phase{phase}"
     round_data = rounds.get(phase_key)
     if round_data is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phase not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Phase not found")
 
     if is_active is not None:
         round_data["is_active"] = is_active

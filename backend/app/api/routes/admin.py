@@ -33,7 +33,8 @@ async def activate_event_phase(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     if current_user.role.value != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     event = await set_event_phase_state(session, event_id, phase, is_active=True, is_locked=False)
     return {"message": "Phase activated", "event_id": str(event.id), "phase": phase}
@@ -47,7 +48,8 @@ async def lock_event_phase(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     if current_user.role.value != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     event = await set_event_phase_state(session, event_id, phase, is_locked=True)
     return {"message": "Phase locked", "event_id": str(event.id), "phase": phase}
@@ -61,7 +63,8 @@ async def unlock_event_phase(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     if current_user.role.value != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     event = await set_event_phase_state(session, event_id, phase, is_locked=False)
     return {"message": "Phase unlocked", "event_id": str(event.id), "phase": phase}

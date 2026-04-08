@@ -19,7 +19,8 @@ async def allow_rate_limited_action(
     entry = result.scalar_one_or_none()
 
     if entry is None:
-        entry = RateLimitEntry(rate_key=rate_key, request_count=1, window_started_at=now)
+        entry = RateLimitEntry(
+            rate_key=rate_key, request_count=1, window_started_at=now)
         session.add(entry)
         await session.commit()
         return True

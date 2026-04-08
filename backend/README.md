@@ -96,10 +96,12 @@ The backend normalizes plain `postgresql://` URLs to the asyncpg driver at runti
 - `migrations/sql/001_init_schema.sql`
 - `migrations/sql/002_seed_admin_user.sql`
 - `migrations/sql/003_rate_limit_entries.sql`
+- `migrations/sql/004_rls_policies.sql`
 
 ## Supabase Manual Steps Still Required
 
 - Run `migrations/sql/003_rate_limit_entries.sql` in the Supabase SQL editor.
+- Run `migrations/sql/004_rls_policies.sql` if you want direct client-side Supabase access restrictions.
 - Configure SMTP settings in `.env` later if you want automatic credential emails.
 
 ## Test Coverage
