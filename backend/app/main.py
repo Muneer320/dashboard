@@ -12,7 +12,8 @@ from app.services.background_jobs import run_background_jobs_loop
 @asynccontextmanager
 async def lifespan(app_instance: FastAPI):
     if settings.BACKGROUND_JOB_INTERVAL_SECONDS > 0:
-        app_instance.state.background_jobs_task = asyncio.create_task(run_background_jobs_loop())
+        app_instance.state.background_jobs_task = asyncio.create_task(
+            run_background_jobs_loop())
     try:
         yield
     finally:

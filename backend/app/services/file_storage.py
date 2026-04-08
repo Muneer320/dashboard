@@ -33,7 +33,8 @@ def _sign_payload(payload: bytes) -> str:
     signature = hmac.new(
         settings.FILE_SIGNING_SECRET.encode("utf-8"), payload, hashlib.sha256
     ).hexdigest()
-    token = base64.urlsafe_b64encode(payload + b"." + signature.encode("utf-8")).decode("utf-8")
+    token = base64.urlsafe_b64encode(
+        payload + b"." + signature.encode("utf-8")).decode("utf-8")
     return token.rstrip("=")
 
 
@@ -45,11 +46,13 @@ def _decode_token(token: str) -> dict:
         settings.FILE_SIGNING_SECRET.encode("utf-8"), payload, hashlib.sha256
     ).hexdigest().encode("utf-8")
     if not hmac.compare_digest(signature, expected_signature):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid file signature")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Invalid file signature")
     data = json.loads(payload.decode("utf-8"))
     expires_at = datetime.fromisoformat(data["expires_at"])
     if datetime.now(timezone.utc) > expires_at:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Signed URL expired")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Signed URL expired")
     return data
 
 

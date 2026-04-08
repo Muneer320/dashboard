@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.event import Event
 from app.schemas.unstop import UnstopUserItem
+from app.services.rate_limit_service import cleanup_expired_rate_limits
 from app.services.unstop_service import sync_unstop_users
 
 
@@ -33,7 +34,8 @@ async def enforce_event_phase_state() -> None:
                 except ValueError:
                     continue
                 if parsed_end_time.tzinfo is None:
-                    parsed_end_time = parsed_end_time.replace(tzinfo=timezone.utc)
+                    parsed_end_time = parsed_end_time.replace(
+                        tzinfo=timezone.utc)
                 if parsed_end_time <= now and round_data.get("is_active", False):
                     round_data["is_active"] = False
                     round_data["is_locked"] = True
@@ -63,6 +65,8 @@ async def sync_unstop_from_file_source() -> None:
 async def run_background_jobs_once() -> None:
     await enforce_event_phase_state()
     await sync_unstop_from_file_source()
+    async with AsyncSessionLocal() as session:
+        await cleanup_expired_rate_limits(session, settings.QR_RATE_LIMIT_WINDOW_SECONDS)
 
 
 async def run_background_jobs_loop() -> None:

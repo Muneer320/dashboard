@@ -2,7 +2,7 @@ import asyncio
 
 from app.db.base import Base
 from app.db.session import engine
-from app.models import Event, User  # noqa: F401
+from app.models import Event, RateLimitEntry, User  # noqa: F401
 
 
 async def init_db() -> None:

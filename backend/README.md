@@ -73,6 +73,9 @@ Then copy the Supabase database connection string into `.env` as `DATABASE_URL`.
 - JWTs include role claims for middleware checks.
 - Background jobs run through the FastAPI lifespan and can be disabled in tests by setting `BACKGROUND_JOB_INTERVAL_SECONDS=0`.
 - File submissions are stored locally with signed download URLs.
+- QR scan rate limiting is persisted in PostgreSQL.
+- Admin endpoints can activate, lock, and unlock event phases.
+- Unstop sync can optionally send temporary credentials by SMTP when email settings are configured.
 
 ## Database URL Note
 
@@ -92,6 +95,12 @@ The backend normalizes plain `postgresql://` URLs to the asyncpg driver at runti
 - `migrations/README.md`
 - `migrations/sql/001_init_schema.sql`
 - `migrations/sql/002_seed_admin_user.sql`
+- `migrations/sql/003_rate_limit_entries.sql`
+
+## Supabase Manual Steps Still Required
+
+- Run `migrations/sql/003_rate_limit_entries.sql` in the Supabase SQL editor.
+- Configure SMTP settings in `.env` later if you want automatic credential emails.
 
 ## Test Coverage
 

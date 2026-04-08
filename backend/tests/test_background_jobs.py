@@ -65,7 +65,8 @@ async def test_enforce_event_phase_state(monkeypatch):
         registration_deadline=datetime.now(timezone.utc),
     )
     session = FakeSession([event])
-    monkeypatch.setattr(background_jobs, "AsyncSessionLocal", lambda: FakeSessionContext(session))
+    monkeypatch.setattr(background_jobs, "AsyncSessionLocal",
+                        lambda: FakeSessionContext(session))
 
     await background_jobs.enforce_event_phase_state()
 
@@ -81,7 +82,8 @@ async def test_sync_unstop_from_file_source(monkeypatch, tmp_path: Path):
         '[{"unstop_id":"U-1","username":"user1","name":"User 1","details":{},"access_level":"ROUND1","is_profile_complete":true}]',
         encoding="utf-8",
     )
-    monkeypatch.setattr(background_jobs.settings, "UNSTOP_SYNC_SOURCE_JSON", str(source_file))
+    monkeypatch.setattr(background_jobs.settings,
+                        "UNSTOP_SYNC_SOURCE_JSON", str(source_file))
 
     captured = {}
 
@@ -90,8 +92,10 @@ async def test_sync_unstop_from_file_source(monkeypatch, tmp_path: Path):
         captured["first_username"] = users[0].username
         return {"created": 1, "updated": 0, "created_credentials": []}
 
-    monkeypatch.setattr(background_jobs, "sync_unstop_users", fake_sync_unstop_users)
-    monkeypatch.setattr(background_jobs, "AsyncSessionLocal", lambda: FakeSessionContext(FakeSession([])))
+    monkeypatch.setattr(background_jobs, "sync_unstop_users",
+                        fake_sync_unstop_users)
+    monkeypatch.setattr(background_jobs, "AsyncSessionLocal",
+                        lambda: FakeSessionContext(FakeSession([])))
 
     await background_jobs.sync_unstop_from_file_source()
 

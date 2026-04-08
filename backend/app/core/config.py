@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     UNSTOP_SYNC_SOURCE_JSON: str | None = None
 
     QR_RATE_LIMIT_PER_MINUTE: int = 10
+    QR_RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    SMTP_HOST: str | None = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str | None = None
+    SMTP_PASSWORD: str | None = None
+    SMTP_USE_TLS: bool = True
+    SMTP_FROM_EMAIL: str | None = None
 
 
 @lru_cache

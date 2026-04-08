@@ -12,8 +12,8 @@ It powers user onboarding, event participation, submissions, and QR-based valida
 ## Current Status
 
 - Backend foundation is implemented with FastAPI.
-- Core modules are scaffolded: auth, admin sync, users, events, submissions, qr.
-- Background jobs, auth/role middleware, signed file uploads, and route-level/API tests are now included.
+- Core modules are implemented: auth, admin sync, users, events, submissions, files, qr.
+- Background jobs, auth/role middleware, signed file uploads, persistent QR rate limiting, email hooks, and route-level/API tests are now included.
 - Access-control and dual-update consistency rules are enforced in service logic.
 
 ## Tech Stack
@@ -43,6 +43,7 @@ Open the Supabase SQL editor and run the migration files in order:
 
 1. `backend/migrations/sql/001_init_schema.sql`
 2. `backend/migrations/sql/002_seed_admin_user.sql` if you want a local/dev admin user
+3. `backend/migrations/sql/003_rate_limit_entries.sql`
 
 ### 4. Run backend
 
@@ -69,14 +70,15 @@ cd backend
 uv run pytest
 ```
 
-The test suite covers route wiring, the scheduled-job helpers, signed file storage, and the Unstop sync flow.
+The test suite covers route wiring, admin phase controls, the scheduled-job helpers, signed file storage, persistent rate limiting, and the Unstop sync flow.
 
 ## Implemented Backend Additions Since the First Cut
 
-- Lifespan-managed background jobs for phase cleanup and file-based Unstop sync.
+- Lifespan-managed background jobs for phase cleanup, rate-limit cleanup, and file-based Unstop sync.
 - JWT role claims with middleware enforcement for admin and scanner routes.
 - Multipart submission handling with signed file URLs and a file download endpoint.
-- API-level tests covering auth, events, submissions, admin sync, QR scanning, background jobs, and signed storage.
+- Admin phase activation/locking endpoints for event lifecycle control.
+- API-level tests covering auth, events, submissions, admin sync, QR scanning, background jobs, signed storage, and persistent rate limiting.
 
 ## Documentation
 

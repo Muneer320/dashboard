@@ -8,6 +8,7 @@ Apply them in order after creating your Supabase project and copying the databas
 
 1. `001_init_schema.sql`
 2. `002_seed_admin_user.sql` (optional, local/dev only)
+3. `003_rate_limit_entries.sql`
 
 ## When to create the Supabase project
 

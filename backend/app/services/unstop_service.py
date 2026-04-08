@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import get_password_hash
 from app.models.user import AccessLevel, User, UserRole
 from app.schemas.unstop import UnstopUserItem
+from app.services.email_service import send_temporary_credentials
 
 
 VALID_ACCESS_LEVELS = {level.value for level in AccessLevel}
@@ -14,6 +15,7 @@ VALID_ACCESS_LEVELS = {level.value for level in AccessLevel}
 
 async def sync_unstop_users(session: AsyncSession, users: list[UnstopUserItem]) -> dict:
     created_credentials: list[dict[str, str]] = []
+    pending_emails: list[dict[str, str]] = []
     created_count = 0
     updated_count = 0
 
@@ -50,6 +52,15 @@ async def sync_unstop_users(session: AsyncSession, users: list[UnstopUserItem]) 
                     "temporary_password": temporary_password,
                 }
             )
+            email_address = (incoming.details or {}).get("email")
+            if email_address:
+                pending_emails.append(
+                    {
+                        "email": email_address,
+                        "username": incoming.username,
+                        "temporary_password": temporary_password,
+                    }
+                )
             continue
 
         user.unstop_id = incoming.unstop_id
@@ -60,6 +71,13 @@ async def sync_unstop_users(session: AsyncSession, users: list[UnstopUserItem]) 
         updated_count += 1
 
     await session.commit()
+
+    for email_payload in pending_emails:
+        await send_temporary_credentials(
+            recipient_email=email_payload["email"],
+            username=email_payload["username"],
+            temporary_password=email_payload["temporary_password"],
+        )
 
     return {
         "created": created_count,

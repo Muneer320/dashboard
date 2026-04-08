@@ -86,3 +86,30 @@ def get_event_participants_payload(event: Event) -> dict:
         "participants_count": len(participants),
         "participants": participants,
     }
+
+
+async def set_event_phase_state(
+    session: AsyncSession,
+    event_id: str,
+    phase: int,
+    is_active: bool | None = None,
+    is_locked: bool | None = None,
+) -> Event:
+    event = await get_event(session, event_id)
+    rounds = event.rounds or {}
+    phase_key = f"phase{phase}"
+    round_data = rounds.get(phase_key)
+    if round_data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Phase not found")
+
+    if is_active is not None:
+        round_data["is_active"] = is_active
+    if is_locked is not None:
+        round_data["is_locked"] = is_locked
+
+    rounds[phase_key] = round_data
+    event.rounds = rounds
+    session.add(event)
+    await session.commit()
+    await session.refresh(event)
+    return event

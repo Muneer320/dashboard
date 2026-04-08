@@ -30,15 +30,18 @@ async def submit_event(
         value = str(form.get("value", ""))
 
         if submission_type not in {"url", "file"}:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid submission type")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid submission type")
 
         if submission_type == "file":
             if file_upload is None:
-                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File upload is required")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail="File upload is required")
             file_reference = await save_submission_file(str(event.id), str(current_user.id), file_upload)
             value = file_reference.signed_url
         elif not value:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="value is required for url submissions")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="value is required for url submissions")
     else:
         payload = SubmissionRequest.model_validate(await request.json())
         phase = payload.phase
