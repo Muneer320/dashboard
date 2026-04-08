@@ -12,7 +12,7 @@ It powers user onboarding, event participation, submissions, and QR-based valida
 ## Current Status
 
 - Backend foundation is implemented with FastAPI.
-- Core modules are scaffolded: auth, users, events, submissions, qr.
+- Core modules are scaffolded: auth, admin sync, users, events, submissions, qr.
 - Access-control and dual-update consistency rules are enforced in service logic.
 
 ## Tech Stack
@@ -51,6 +51,8 @@ uv run ascent-api
 ```
 
 API base path: `/api/v1`
+
+The backend normalizes plain `postgresql://` URLs to the async driver at runtime, so the Supabase connection string in `backend/.env` can work as long as it points to the correct database.
 
 ### 5. Optional DB table bootstrap (local)
 

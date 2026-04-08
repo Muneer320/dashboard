@@ -54,11 +54,16 @@ Then copy the Supabase database connection string into `.env` as `DATABASE_URL`.
 ## Implemented Modules
 
 - `auth`: login + me
+- `admin`: Unstop sync
 - `users`: read/update profile
 - `events`: list/get/register
 - `submissions`: submit for event phase
 - `qr`: food + event scan flows
 - `health`: service liveness
+
+## Database URL Note
+
+The backend normalizes plain `postgresql://` URLs to the asyncpg driver at runtime, so the database URL in `.env` can be the standard Supabase connection string format.
 
 ## Core Rules Enforced
 

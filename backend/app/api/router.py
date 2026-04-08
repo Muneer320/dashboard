@@ -1,10 +1,11 @@
 from fastapi import APIRouter
 
-from app.api.routes import auth, events, health, qr, submissions, users
+from app.api.routes import admin, auth, events, health, qr, submissions, users
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(events.router, prefix="/events", tags=["events"])
 api_router.include_router(
