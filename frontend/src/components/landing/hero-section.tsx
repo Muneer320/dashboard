@@ -11,7 +11,7 @@ export function HeroSection() {
           <div className="flex items-center justify-start">
             <Link
               href="#hero"
-              className="text-[18px] font-extrabold tracking-[-0.05em] text-slate-900"
+              className="font-[family-name:var(--font-space-grotesk)] text-[24px] font-[900] leading-[32px] tracking-[-0.4px] text-slate-900"
             >
               TechFest
             </Link>
@@ -40,7 +40,7 @@ export function HeroSection() {
 
           <div className="flex justify-start sm:justify-end">
             <Link
-              href="#verification"
+              href="/auth-choice"
               className="inline-flex h-10 items-center justify-center rounded-full bg-[linear-gradient(180deg,#5f55ee_0%,#4f45e0_100%)] px-6 text-[14px] font-semibold text-white shadow-[0_8px_22px_rgba(79,69,224,0.35)] transition-transform duration-200 hover:-translate-y-0.5"
             >
               Get Access
@@ -57,7 +57,7 @@ export function HeroSection() {
               EXCLUSIVELY FOR STUDENTS
             </div>
 
-            <h1 className="max-w-[620px] font-[family-name:var(--font-space-grotesk)] text-[60px] leading-[0.94] tracking-[-0.08em] text-[#1f2430] sm:text-[72px] lg:text-[82px]">
+            <h1 className="max-w-[620px] font-[family-name:var(--font-space-grotesk)] text-[72px] font-normal leading-[72px] tracking-[-1.8px] text-[#1f2430]">
               Student Access Portal
             </h1>
 
@@ -68,7 +68,7 @@ export function HeroSection() {
 
             <div className="mt-8 flex flex-wrap gap-3.5">
               <Link
-                href="#verification"
+                href="/auth-choice"
                 className="inline-flex h-11 items-center justify-center rounded-full bg-[linear-gradient(180deg,#5f55ee_0%,#4f45e0_100%)] px-6 text-[14px] font-semibold text-white shadow-[0_10px_24px_rgba(79,69,224,0.35)] transition-transform duration-200 hover:-translate-y-0.5"
               >
                 Get Access
@@ -96,7 +96,7 @@ function ShowcaseArtwork() {
       <div className="relative rotate-[1.2deg] rounded-[18px] border-[10px] border-white bg-white shadow-[0_28px_72px_rgba(116,124,141,0.22)]">
         <div className="relative aspect-[1.35/1] overflow-hidden rounded-[8px] bg-[#0f141b]">
           <Image
-            src="/Tech%20Fest%20Atmosphere.svg"
+            src="/images/hero/tech-fest-atmosphere.svg"
             alt="TechFest atmosphere"
             fill
             priority
