@@ -90,7 +90,7 @@ The test suite covers route wiring, admin phase controls, the scheduled-job help
 
 ## Documentation
 
-See planning and architecture documents in `docs/`:
+See planning and architecture documents in `docs/BackendDocs`:
 
 - `0. User & Event Dashboard_ Backend & System Design (Detailed PRD).md`
 - `1. SystemOverview.md`
