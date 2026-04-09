@@ -10,6 +10,7 @@ Apply them in order after creating your Supabase project and copying the databas
 2. `002_seed_admin_user.sql` (optional, local/dev only)
 3. `003_rate_limit_entries.sql`
 4. `004_rls_policies.sql`
+5. `005_create_submissions_bucket.sql`
 
 ## When to create the Supabase project
 
@@ -21,3 +22,4 @@ You need the project connection details first so `DATABASE_URL` can point to the
 - The app expects PostgreSQL with `pgcrypto` available.
 - The schema is designed to match the current SQLAlchemy models in `backend/app/models/`.
 - `004_rls_policies.sql` is for direct Supabase client access. The backend can still use its existing database connection path.
+- `005_create_submissions_bucket.sql` creates the private Storage bucket used by file submissions.
