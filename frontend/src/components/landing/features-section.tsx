@@ -19,8 +19,12 @@ export function FeaturesSection() {
           </p>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-3">
-          {featureCards.slice(0, 3).map((card) => (
+        <div className="grid gap-4 lg:grid-cols-4">
+          <div className="lg:col-span-2">
+            <FeatureTile card={featureCards[0]} />
+          </div>
+
+          {featureCards.slice(1, 3).map((card) => (
             <FeatureTile key={card.title} card={card} />
           ))}
 
@@ -41,9 +45,9 @@ function FeatureTile({ card }: { card: FeatureCard }) {
           src={card.iconSrc}
           alt=""
           aria-hidden="true"
-          width={150}
-          height={150}
-          className="pointer-events-none absolute -right-2 top-5 h-28 w-28 opacity-20"
+          width={190}
+          height={190}
+          className="pointer-events-none absolute -right-4 top-2 h-36 w-36 opacity-35"
         />
         <div className="relative flex h-full flex-col justify-between">
           <div>

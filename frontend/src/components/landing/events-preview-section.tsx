@@ -8,7 +8,7 @@ import { ArrowRight, LockIcon } from "./icons";
 
 export function EventsPreviewSection() {
   return (
-    <section id="events" className="bg-[#EEF1F3] px-5 py-24 sm:px-8 lg:px-10">
+    <section id="events" className="bg-[#F5F7F9] px-5 py-24 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1280px]">
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
