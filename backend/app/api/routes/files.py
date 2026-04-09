@@ -1,11 +1,11 @@
-from fastapi import APIRouter
-from fastapi.responses import FileResponse
-
-from app.services.file_storage import file_response_from_token
+from fastapi import APIRouter, HTTPException, status
 
 router = APIRouter()
 
 
-@router.get("/{token}", response_class=FileResponse)
-async def download_file(token: str) -> FileResponse:
-    return file_response_from_token(token)
+@router.get("/{token}")
+async def download_file(token: str) -> dict:
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Local file route is deprecated. Use Supabase signed URLs returned at submission time.",
+    )

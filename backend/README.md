@@ -61,6 +61,13 @@ Apply them in order through the Supabase SQL editor:
 
 Then copy the Supabase database connection string into `.env` as `DATABASE_URL`.
 
+Configure storage for file submissions:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_STORAGE_BUCKET` (default: `submissions`)
+- `SUPABASE_SIGNED_URL_EXPIRES_SECONDS`
+
 ## API Base URL
 
 `/api/v1`
@@ -81,6 +88,7 @@ Then copy the Supabase database connection string into `.env` as `DATABASE_URL`.
 - JWTs include role claims for middleware checks.
 - Background jobs run through the FastAPI lifespan and can be disabled in tests by setting `BACKGROUND_JOB_INTERVAL_SECONDS=0`.
 - File submissions are stored locally with signed download URLs.
+- File submissions are uploaded to Supabase Storage and returned as signed URLs.
 - QR scan rate limiting is persisted in PostgreSQL.
 - Admin endpoints can activate, lock, and unlock event phases.
 - Unstop sync can optionally send temporary credentials by SMTP when email settings are configured.
@@ -110,6 +118,7 @@ The backend normalizes plain `postgresql://` URLs to the asyncpg driver at runti
 
 - Run `migrations/sql/003_rate_limit_entries.sql` in the Supabase SQL editor.
 - Run `migrations/sql/004_rls_policies.sql` if you want direct client-side Supabase access restrictions.
+- Create the configured storage bucket in Supabase (default: `submissions`) if it does not exist.
 - Configure SMTP settings in `.env` later if you want automatic credential emails.
 
 ## Test Coverage

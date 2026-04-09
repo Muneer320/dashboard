@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     FILE_SIGNING_SECRET: str = "change-this-file-secret"
     UPLOAD_ROOT: str = "uploads"
 
+    SUPABASE_URL: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    SUPABASE_STORAGE_BUCKET: str = "submissions"
+    SUPABASE_SIGNED_URL_EXPIRES_SECONDS: int = 604800
+
     BACKGROUND_JOB_INTERVAL_SECONDS: int = 300
     UNSTOP_SYNC_SOURCE_JSON: str | None = None
 
