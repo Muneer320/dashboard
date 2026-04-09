@@ -2,51 +2,13 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { LockIcon } from "./icons";
+import { SiteHeader } from "./site-header";
 
 export function HeroSection() {
   return (
     <section className="bg-[#F5F7F9] px-5 pb-24 pt-6 sm:px-8 lg:px-10">
       <div className="mx-auto max-w-[1280px]">
-        <header className="grid items-center gap-5 px-1 pb-16 sm:grid-cols-[1fr_auto_1fr] sm:pb-20">
-          <div className="flex items-center justify-start">
-            <Link
-              href="#hero"
-              className="font-[family-name:var(--font-space-grotesk)] text-[24px] font-[900] leading-[32px] tracking-[-0.4px] text-slate-900"
-            >
-              TechFest
-            </Link>
-          </div>
-
-          <nav className="hidden items-center justify-center gap-10 text-[13px] font-medium text-slate-500 sm:flex">
-            <Link
-              href="#events"
-              className="transition-colors hover:text-slate-900"
-            >
-              Events
-            </Link>
-            <Link
-              href="#schedule"
-              className="transition-colors hover:text-slate-900"
-            >
-              Schedule
-            </Link>
-            <Link
-              href="#faq"
-              className="transition-colors hover:text-slate-900"
-            >
-              FAQ
-            </Link>
-          </nav>
-
-          <div className="flex justify-start sm:justify-end">
-            <Link
-              href="/auth-choice"
-              className="inline-flex h-10 items-center justify-center rounded-full bg-[linear-gradient(180deg,#5f55ee_0%,#4f45e0_100%)] px-6 text-[14px] font-semibold text-white shadow-[0_8px_22px_rgba(79,69,224,0.35)] transition-transform duration-200 hover:-translate-y-0.5"
-            >
-              Get Access
-            </Link>
-          </div>
-        </header>
+        <SiteHeader />
 
         <div
           id="hero"

@@ -2,26 +2,20 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { ArrowRight } from "@/components/landing/icons";
+import { SiteHeader } from "@/components/landing/site-header";
 
 export function AuthChoicePage() {
   return (
     <main className="min-h-screen bg-[#f6f7fb] text-slate-900">
-      <section className="relative isolate min-h-screen overflow-hidden px-5 pb-8 pt-5 sm:px-8 lg:px-10">
+      <section className="relative isolate min-h-screen overflow-hidden px-5 pb-6 pt-5 sm:px-8 lg:px-10">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(99,102,241,0.12),transparent_32%),radial-gradient(circle_at_100%_70%,rgba(168,85,247,0.12),transparent_30%),radial-gradient(circle_at_50%_45%,rgba(255,255,255,0.9),transparent_48%)]" />
 
-        <div className="relative mx-auto flex min-h-[calc(100vh-2.5rem)] max-w-[1280px] flex-col">
-          <header className="flex items-center justify-between pb-8">
-            <Link
-              href="/"
-              className="font-[family-name:var(--font-space-grotesk)] text-[24px] font-[900] leading-[32px] tracking-[-0.4px] text-[#1f2430]"
-            >
-              TechFest
-            </Link>
-          </header>
+        <div className="relative mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1280px] flex-col">
+          <SiteHeader />
 
-          <div className="flex flex-1 items-center justify-center py-6 sm:py-10">
-            <div className="w-full max-w-[780px] overflow-hidden rounded-[22px] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
-              <div className="grid md:grid-cols-2">
+          <div className="flex flex-1 items-center justify-center py-4 sm:py-8">
+            <div className="w-full max-w-[1024px] overflow-hidden rounded-[12px] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
+              <div className="grid md:h-[410px] md:grid-cols-2">
                 <AuthChoiceCard
                   iconSrc="/images/auth/add-user-icon.svg"
                   iconLabel="Sign up"
@@ -46,7 +40,7 @@ export function AuthChoicePage() {
             </div>
           </div>
 
-          <footer className="flex flex-col gap-6 border-t border-black/5 py-6 text-[#7f8797] sm:flex-row sm:items-end sm:justify-between">
+          <footer className="flex flex-col gap-6 py-6 text-[#7f8797] sm:flex-row sm:items-end sm:justify-between">
             <div>
               <div className="font-[family-name:var(--font-space-grotesk)] text-[18px] font-[900] tracking-[-0.04em] text-[#1f2430]">
                 TechFest Curator
@@ -101,17 +95,13 @@ function AuthChoiceCard({
 }) {
   return (
     <article
-      className={`flex min-h-[304px] flex-col items-center justify-center px-8 py-10 text-center sm:px-10 ${
+      className={`flex flex-col items-center justify-center px-8 py-10 text-center md:min-h-full sm:px-10 ${
         isSecondary
-          ? "border-t border-black/5 md:border-l md:border-t-0"
-          : "border-black/5 md:border-r"
+          ? "bg-[#EEF1F34D] md:border-l md:border-t-0"
+          : "bg-[#ABADAF1A] md:border-r"
       }`}
     >
-      <div
-        className={`flex h-14 w-14 items-center justify-center rounded-full ${
-          isSecondary ? "bg-[#e8ecf6]" : "bg-[#e5e0ff]"
-        }`}
-      >
+      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/70">
         <Image
           src={iconSrc}
           alt={iconLabel}
