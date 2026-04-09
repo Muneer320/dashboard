@@ -6,28 +6,28 @@ export const featureCards: FeatureCard[] = [
     description:
       "Discover hidden workshops, late-night hackathons, and networking mixers exclusively for student pass holders.",
     tone: "light",
-    iconSrc: "/Compass.svg",
+    iconSrc: "/images/icons/compass.svg",
   },
   {
     title: "Submit entries",
     description:
       "Seamless project uploads for competitions and talent showcases.",
     tone: "light",
-    iconSrc: "/FileUpload.svg",
+    iconSrc: "/images/icons/file-upload.svg",
   },
   {
     title: "Track activity",
     description:
       "Real-time stats on your leaderboard position and schedule updates.",
     tone: "light",
-    iconSrc: "/Chart.svg",
+    iconSrc: "/images/icons/chart.svg",
   },
   {
     title: "Access perks",
     description:
       "Unlock student-only discounts, early access to limited workshops, and digital swag kits that never expire.",
     tone: "purple",
-    iconSrc: "/AccessTick.svg",
+    iconSrc: "/images/icons/access-tick.svg",
   },
 ];
 
@@ -35,22 +35,22 @@ export const eventCards: EventCard[] = [
   {
     title: "Cyber Defense Cup",
     date: "March 14 • 10:00 AM",
-    imageSrc: "/Cybersecurity%20Hackathon.png",
+    imageSrc: "/images/events/cybersecurity-hackathon.png",
   },
   {
     title: "AI & Future Tech",
     date: "March 14 • 02:00 PM",
-    imageSrc: "/AI%20Symposium.png",
+    imageSrc: "/images/events/ai-symposium.png",
   },
   {
     title: "E-Sports Invitational",
     date: "March 15 • 11:00 AM",
-    imageSrc: "/Esports%20Arena.png",
+    imageSrc: "/images/events/esports-arena.png",
   },
   {
     title: "Design Sprint 2.0",
     date: "March 16 • 09:00 AM",
-    imageSrc: "/Design%20Thinking.png",
+    imageSrc: "/images/events/design-thinking.png",
   },
 ];
 

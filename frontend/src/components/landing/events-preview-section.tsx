@@ -22,9 +22,9 @@ export function EventsPreviewSection() {
 
           <Link
             href="#faq"
-            className="hidden items-center gap-2 text-[14px] font-semibold text-[#5145e0] sm:inline-flex"
+            className="hidden items-center gap-2 whitespace-nowrap text-[14px] font-semibold text-[#5145e0] sm:inline-flex"
           >
-            Browse More <ArrowRight className="text-[#5145e0]" />
+            Browse More <ArrowRight className="h-4 w-4 text-[#5145e0]" />
           </Link>
         </div>
 

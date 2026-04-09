@@ -1,8 +1,43 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/fonts/PlusJakartaSans-VariableFont_wght.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  src: url("/fonts/PlusJakartaSans-Italic-VariableFont_wght.ttf")
+    format("truetype");
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-VariableFont_opsz,wght.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Italic-VariableFont_opsz,wght.ttf") format("truetype");
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 :root {
   --background: #f5f7f9;
   --foreground: #111827;
+  --font-space-grotesk: "Plus Jakarta Sans";
+  --font-manrope: "Inter";
 }
 
 @theme inline {
@@ -25,6 +60,19 @@ body {
   color: var(--foreground);
   font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
   min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-space-grotesk), Arial, Helvetica, sans-serif;
+}
+
+p {
+  font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
 }
 
 ::selection {

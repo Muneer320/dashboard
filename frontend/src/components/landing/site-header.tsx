@@ -1,8 +1,10 @@
 import Link from "next/link";
 
-export function SiteHeader() {
+export function SiteHeader({ className = "" }: { className?: string }) {
   return (
-    <header className="grid items-center gap-5 px-1 pb-16 sm:grid-cols-[1fr_auto_1fr] sm:pb-20">
+    <header
+      className={`grid items-center gap-5 bg-[#F5F7F9] px-1 py-6 sm:grid-cols-[1fr_auto_1fr] ${className}`}
+    >
       <div className="flex items-center justify-start">
         <Link
           href="/"

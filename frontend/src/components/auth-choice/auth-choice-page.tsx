@@ -6,13 +6,17 @@ import { SiteHeader } from "@/components/landing/site-header";
 
 export function AuthChoicePage() {
   return (
-    <main className="min-h-screen bg-[#f6f7fb] text-slate-900">
-      <section className="relative isolate min-h-screen overflow-hidden px-5 pb-6 pt-5 sm:px-8 lg:px-10">
+    <main className="flex min-h-screen flex-col bg-[#F5F7F9] text-slate-900">
+      <div className="relative z-10 w-full bg-[#F5F7F9]">
+        <div className="mx-auto w-full max-w-[1280px] px-5 pt-5 sm:px-8 lg:px-10">
+          <SiteHeader />
+        </div>
+      </div>
+
+      <section className="relative isolate flex flex-1 flex-col overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(99,102,241,0.12),transparent_32%),radial-gradient(circle_at_100%_70%,rgba(168,85,247,0.12),transparent_30%),radial-gradient(circle_at_50%_45%,rgba(255,255,255,0.9),transparent_48%)]" />
 
-        <div className="relative mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1280px] flex-col">
-          <SiteHeader />
-
+        <div className="relative mx-auto flex w-full max-w-[1280px] flex-1 flex-col px-5 sm:px-8 lg:px-10">
           <div className="flex flex-1 items-center justify-center py-4 sm:py-8">
             <div className="w-full max-w-[1024px] overflow-hidden rounded-[12px] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.08)] ring-1 ring-black/5">
               <div className="grid md:h-[410px] md:grid-cols-2">
@@ -39,37 +43,39 @@ export function AuthChoicePage() {
               </div>
             </div>
           </div>
-
-          <footer className="flex flex-col gap-6 py-6 text-[#7f8797] sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="font-[family-name:var(--font-space-grotesk)] text-[18px] font-[900] tracking-[-0.04em] text-[#1f2430]">
-                TechFest Curator
-              </div>
-              <p className="mt-1 text-[13px]">© 2024 TechFest Curator</p>
-            </div>
-
-            <div className="hidden items-center gap-8 text-[13px] sm:flex">
-              <Link href="/" className="transition-colors hover:text-[#1f2430]">
-                Home
-              </Link>
-              <Link href="#" className="transition-colors hover:text-[#1f2430]">
-                Terms
-              </Link>
-              <Link href="#" className="transition-colors hover:text-[#1f2430]">
-                Privacy
-              </Link>
-              <Link href="#" className="transition-colors hover:text-[#1f2430]">
-                Support
-              </Link>
-            </div>
-
-            <div className="flex items-center gap-3 self-start sm:self-auto">
-              <RoundIcon iconSrc="/images/auth/world-icon.svg" label="Global" />
-              <RoundIcon iconSrc="/images/auth/share-icon.svg" label="Share" />
-            </div>
-          </footer>
         </div>
       </section>
+
+      <footer className="relative z-10 w-full border-t border-black/5 bg-[#F5F7F9]">
+        <div className="mx-auto flex w-full max-w-[1280px] flex-col items-center justify-between gap-6 px-5 py-6 text-[#7f8797] sm:flex-row sm:px-8 lg:px-10">
+          <div className="flex flex-col items-center sm:items-start">
+            <div className="font-[family-name:var(--font-space-grotesk)] text-[18px] font-[900] tracking-[-0.04em] text-[#1f2430]">
+              TechFest Curator
+            </div>
+            <p className="mt-1 text-[13px]">© 2024 TechFest Curator</p>
+          </div>
+
+          <div className="hidden items-center gap-8 text-[13px] sm:flex">
+            <Link href="/" className="transition-colors hover:text-[#1f2430]">
+              Home
+            </Link>
+            <Link href="#" className="transition-colors hover:text-[#1f2430]">
+              Terms
+            </Link>
+            <Link href="#" className="transition-colors hover:text-[#1f2430]">
+              Privacy
+            </Link>
+            <Link href="#" className="transition-colors hover:text-[#1f2430]">
+              Support
+            </Link>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <RoundIcon iconSrc="/images/auth/world-icon.svg" label="Global" />
+            <RoundIcon iconSrc="/images/auth/share-icon.svg" label="Share" />
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }
@@ -97,11 +103,17 @@ function AuthChoiceCard({
     <article
       className={`flex flex-col items-center justify-center px-8 py-10 text-center md:min-h-full sm:px-10 ${
         isSecondary
-          ? "bg-[#EEF1F34D] md:border-l md:border-t-0"
-          : "bg-[#ABADAF1A] md:border-r"
+          ? "bg-[rgba(171,173,175,0.10)]"
+          : "bg-[rgba(238,241,243,0.30)]"
       }`}
     >
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/70">
+      <div
+        className={`flex h-14 w-14 items-center justify-center rounded-full ${
+          isSecondary
+            ? "bg-[rgba(218,226,253,0.50)]"
+            : "bg-[rgba(151,149,255,0.30)]"
+        }`}
+      >
         <Image
           src={iconSrc}
           alt={iconLabel}

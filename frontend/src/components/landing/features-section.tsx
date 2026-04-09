@@ -47,7 +47,7 @@ function FeatureTile({ card }: { card: FeatureCard }) {
           aria-hidden="true"
           width={190}
           height={190}
-          className="pointer-events-none absolute -right-4 top-2 h-36 w-36 opacity-35"
+          className="pointer-events-none absolute right-8 top-4 h-28 w-28 opacity-60"
         />
         <div className="relative flex h-full flex-col justify-between">
           <div>

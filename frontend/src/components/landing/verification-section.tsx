@@ -22,9 +22,15 @@ export function VerificationSection() {
               </p>
 
               <div className="mt-10 flex flex-wrap items-center gap-8 sm:gap-10">
-                <VerificationStep iconSrc="/Mail.svg" label="EDU EMAIL" />
+                <VerificationStep
+                  iconSrc="/images/icons/mail.svg"
+                  label="EDU EMAIL"
+                />
                 <div className="h-px w-12 bg-white/15 sm:w-16" />
-                <VerificationStep iconSrc="/ID.svg" label="STUDENT ID" />
+                <VerificationStep
+                  iconSrc="/images/icons/id.svg"
+                  label="STUDENT ID"
+                />
               </div>
             </div>
 

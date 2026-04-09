@@ -35,7 +35,7 @@ export function ArrowRight({ className = "h-4 w-4" }: { className?: string }) {
       className={className}
     >
       <path
-        d="M5 12h12m0 0-5-5m5 5-5 5"
+        d="M3 12h15m0 0-4.5-4.5m4.5 4.5-4.5 4.5"
         stroke="currentColor"
         strokeWidth="1.9"
         strokeLinecap="round"
