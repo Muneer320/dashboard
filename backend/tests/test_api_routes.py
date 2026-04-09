@@ -157,7 +157,7 @@ def test_submission_url_and_file_routes(monkeypatch, client, user_factory):
         return datetime(2026, 4, 8, tzinfo=timezone.utc)
 
     async def fake_save_submission_file(*args, **kwargs):
-        return SimpleNamespace(signed_url="/api/v1/files/token123")
+        return SimpleNamespace(signed_url="https://example.supabase.co/storage/v1/object/sign/submissions/event-1/user-1/file?token=abc")
 
     monkeypatch.setattr(submissions_routes, "get_event", fake_get_event)
     monkeypatch.setattr(submissions_routes,

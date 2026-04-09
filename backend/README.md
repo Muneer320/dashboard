@@ -87,7 +87,6 @@ Configure storage for file submissions:
 
 - JWTs include role claims for middleware checks.
 - Background jobs run through the FastAPI lifespan and can be disabled in tests by setting `BACKGROUND_JOB_INTERVAL_SECONDS=0`.
-- File submissions are stored locally with signed download URLs.
 - File submissions are uploaded to Supabase Storage and returned as signed URLs.
 - QR scan rate limiting is persisted in PostgreSQL.
 - Admin endpoints can activate, lock, and unlock event phases.

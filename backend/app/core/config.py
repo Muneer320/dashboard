@@ -17,9 +17,6 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
-    FILE_SIGNING_SECRET: str = "change-this-file-secret"
-    UPLOAD_ROOT: str = "uploads"
-
     SUPABASE_URL: str | None = None
     SUPABASE_SERVICE_ROLE_KEY: str | None = None
     SUPABASE_STORAGE_BUCKET: str = "submissions"
