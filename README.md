@@ -32,6 +32,8 @@ uv sync
 copy .env.example .env
 ```
 
+If you prefer pip over uv for dependency installation, use `backend/requirements.txt`.
+
 ### 2. Create the Supabase project first
 
 Create the Supabase project before applying any SQL migrations.

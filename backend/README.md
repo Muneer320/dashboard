@@ -18,6 +18,12 @@ FastAPI backend for user identity, event participation, submissions, and QR vali
 uv sync
 ```
 
+If you need a pip-compatible install path, use:
+
+```bash
+pip install -r requirements.txt
+```
+
 2. Configure environment:
 
 ```bash
@@ -50,6 +56,8 @@ Apply them in order through the Supabase SQL editor:
 
 1. `migrations/sql/001_init_schema.sql`
 2. `migrations/sql/002_seed_admin_user.sql` if you need a local/dev admin user
+3. `migrations/sql/003_rate_limit_entries.sql`
+4. `migrations/sql/004_rls_policies.sql`
 
 Then copy the Supabase database connection string into `.env` as `DATABASE_URL`.
 
@@ -107,4 +115,4 @@ The backend normalizes plain `postgresql://` URLs to the asyncpg driver at runti
 ## Test Coverage
 
 - `uv run pytest`
-- Covers route wiring, admin sync, QR handling, submission parsing, background jobs, signed file storage, and DB URL normalization.
+- Covers route wiring, admin sync, admin phase controls, QR handling, submission parsing, background jobs, signed file storage, persistent rate limiting, and DB URL normalization.
