@@ -130,7 +130,8 @@ export function LoginPage() {
         </div>
       </section>
 
-      <SiteFooter variant="login" />
+      {/* <SiteFooter variant="login" /> */}
+      <SiteFooter />
     </main>
   );
 }

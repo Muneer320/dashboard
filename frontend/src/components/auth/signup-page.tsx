@@ -98,7 +98,8 @@ export function SignUpPage() {
         </div>
       </section>
 
-      <SiteFooter variant="signup" />
+      {/* <SiteFooter variant="signup" /> */}
+      <SiteFooter />
     </main>
   );
 }

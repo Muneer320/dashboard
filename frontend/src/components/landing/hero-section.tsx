@@ -37,7 +37,7 @@ export function HeroSection() {
                 Get Access
               </Link>
               <Link
-                href="#events"
+                href="/login"
                 className="inline-flex h-11 items-center justify-center rounded-full bg-[#e3e5ea] px-6 text-[14px] font-semibold text-[#555b68] shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] transition-transform duration-200 hover:-translate-y-0.5"
               >
                 Log In

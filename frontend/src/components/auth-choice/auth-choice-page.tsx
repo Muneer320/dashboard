@@ -46,7 +46,8 @@ export function AuthChoicePage() {
         </div>
       </section>
 
-      <SiteFooter variant="auth-choice" />
+      {/* <SiteFooter variant="auth-choice" /> */}
+      <SiteFooter />
     </main>
   );
 }
