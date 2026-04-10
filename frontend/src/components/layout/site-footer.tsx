@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
-type SiteFooterVariant = "landing" | "auth-choice" | "signup";
+type SiteFooterVariant = "landing" | "auth-choice" | "signup" | "login";
 
 export function SiteFooter({
   variant = "landing",
@@ -69,6 +69,38 @@ export function SiteFooter({
           </div>
 
           <div className="text-right">© 2024 TechFest Curator</div>
+        </div>
+      </footer>
+    );
+  }
+
+  if (variant === "login") {
+    return (
+      <footer className="w-full bg-[#F5F7F9]">
+        <div className="mx-auto flex w-full max-w-[1280px] items-end justify-between gap-4 px-5 pb-4 pt-2 text-[13px] text-[#8f96a5] sm:px-8 lg:px-10">
+          <div>
+            <div className="font-[family-name:var(--font-space-grotesk)] text-[18px] font-[900] tracking-[-0.04em] text-[#1f2430]">
+              TechFest Curator
+            </div>
+            <p className="mt-0.5 text-[12px] text-[#8d95a4]">
+              © 2024 TechFest Curator
+            </p>
+          </div>
+
+          <div className="hidden items-center gap-8 text-[13px] sm:flex">
+            <Link href="/" className="transition-colors hover:text-[#1f2430]">
+              Home
+            </Link>
+            <Link href="#" className="transition-colors hover:text-[#1f2430]">
+              Terms
+            </Link>
+            <Link href="#" className="transition-colors hover:text-[#1f2430]">
+              Privacy
+            </Link>
+            <Link href="#" className="transition-colors hover:text-[#1f2430]">
+              Support
+            </Link>
+          </div>
         </div>
       </footer>
     );
