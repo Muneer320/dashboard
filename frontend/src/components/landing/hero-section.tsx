@@ -1,8 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { SiteHeader } from "@/components/layout";
+
 import { LockIcon } from "./icons";
-import { SiteHeader } from "./site-header";
 
 export function HeroSection() {
   return (

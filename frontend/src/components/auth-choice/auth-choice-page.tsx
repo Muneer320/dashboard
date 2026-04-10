@@ -1,15 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { SiteFooter, SiteHeader } from "@/components/layout";
 import { ArrowRight } from "@/components/landing/icons";
-import { SiteHeader } from "@/components/landing/site-header";
 
 export function AuthChoicePage() {
   return (
     <main className="flex min-h-screen flex-col bg-[#F5F7F9] text-slate-900">
       <div className="relative z-10 w-full bg-[#F5F7F9]">
-        <div className="mx-auto w-full max-w-[1280px] px-5 pt-5 sm:px-8 lg:px-10">
-          <SiteHeader />
+        <div className="mx-auto w-full max-w-[1280px] px-5 sm:px-8 lg:px-10">
+          <SiteHeader className="!bg-transparent" />
         </div>
       </div>
 
@@ -26,7 +26,7 @@ export function AuthChoicePage() {
                   title="New here?"
                   description="Join the next generation of innovators. Create your account to access curated tech experiences."
                   buttonLabel="Sign Up"
-                  buttonHref="#"
+                  buttonHref="/signup"
                   buttonTone="primary"
                 />
 
@@ -36,7 +36,7 @@ export function AuthChoicePage() {
                   title="Already registered?"
                   description="Welcome back. Log in to your curator dashboard and continue your journey."
                   buttonLabel="Log In"
-                  buttonHref="#"
+                  buttonHref="/login"
                   buttonTone="secondary"
                   isSecondary
                 />
@@ -46,36 +46,7 @@ export function AuthChoicePage() {
         </div>
       </section>
 
-      <footer className="relative z-10 w-full border-t border-black/5 bg-[#F5F7F9]">
-        <div className="mx-auto flex w-full max-w-[1280px] flex-col items-center justify-between gap-6 px-5 py-6 text-[#7f8797] sm:flex-row sm:px-8 lg:px-10">
-          <div className="flex flex-col items-center sm:items-start">
-            <div className="font-[family-name:var(--font-space-grotesk)] text-[18px] font-[900] tracking-[-0.04em] text-[#1f2430]">
-              TechFest Curator
-            </div>
-            <p className="mt-1 text-[13px]">© 2024 TechFest Curator</p>
-          </div>
-
-          <div className="hidden items-center gap-8 text-[13px] sm:flex">
-            <Link href="/" className="transition-colors hover:text-[#1f2430]">
-              Home
-            </Link>
-            <Link href="#" className="transition-colors hover:text-[#1f2430]">
-              Terms
-            </Link>
-            <Link href="#" className="transition-colors hover:text-[#1f2430]">
-              Privacy
-            </Link>
-            <Link href="#" className="transition-colors hover:text-[#1f2430]">
-              Support
-            </Link>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <RoundIcon iconSrc="/images/auth/world-icon.svg" label="Global" />
-            <RoundIcon iconSrc="/images/auth/share-icon.svg" label="Share" />
-          </div>
-        </div>
-      </footer>
+      <SiteFooter variant="auth-choice" />
     </main>
   );
 }
@@ -145,19 +116,5 @@ function AuthChoiceCard({
         </span>
       </Link>
     </article>
-  );
-}
-
-function RoundIcon({ iconSrc, label }: { iconSrc: string; label: string }) {
-  return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e8ebef] shadow-[0_8px_20px_rgba(15,23,42,0.08)]">
-      <Image
-        src={iconSrc}
-        alt={label}
-        width={18}
-        height={18}
-        className="h-[18px] w-[18px]"
-      />
-    </div>
   );
 }
