@@ -11,6 +11,8 @@ Apply them in order after creating your Supabase project and copying the databas
 3. `003_rate_limit_entries.sql`
 4. `004_rls_policies.sql`
 5. `005_create_submissions_bucket.sql`
+6. `006_update_users_schema.sql`
+7. `007_update_user_roles.sql`
 
 ## When to create the Supabase project
 

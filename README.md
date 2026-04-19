@@ -47,6 +47,9 @@ Open the Supabase SQL editor and run the migration files in order:
 2. `backend/migrations/sql/002_seed_admin_user.sql` if you want a local/dev admin user
 3. `backend/migrations/sql/003_rate_limit_entries.sql`
 4. `backend/migrations/sql/004_rls_policies.sql`
+5. `backend/migrations/sql/005_create_submissions_bucket.sql`
+6. `backend/migrations/sql/006_update_users_schema.sql`
+7. `backend/migrations/sql/007_update_user_roles.sql`
 
 ### 4. Run backend
 
@@ -82,6 +85,8 @@ The test suite covers route wiring, admin phase controls, the scheduled-job help
 - Multipart submission handling with signed file URLs and a file download endpoint.
 - Admin phase activation/locking endpoints for event lifecycle control.
 - API-level tests covering auth, events, submissions, admin sync, QR scanning, background jobs, signed storage, and persistent rate limiting.
+- Extended QR scanning functionality to include collegeEntry mode and expanded scanner authorization roles.
+- Schema updates to support is_attending flags and user cents balancing.
 
 ## Supabase Note
 

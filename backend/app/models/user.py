@@ -19,6 +19,9 @@ class UserRole(str, enum.Enum):
     USER = "user"
     ADMIN = "admin"
     SCANNER = "scanner"
+    SUPERADMIN = "superAdmin"
+    EVENTMANAGE = "eventManage"
+    EM = "EM"
 
 
 class User(Base):

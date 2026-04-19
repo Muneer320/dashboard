@@ -53,7 +53,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         if path.startswith("/api/v1/admin") and role != "admin":
             return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": "Admin role required"})
 
-        if (path.startswith("/api/v1/qr") or path.endswith("/participants")) and role not in {"scanner", "admin"}:
+        if (path.startswith("/api/v1/qr") or path.endswith("/participants")) and role not in {"scanner", "admin", "superAdmin", "eventManage", "EM"}:
             return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": "Scanner role required"})
 
         if path.startswith("/api/v1/qr") and not getattr(request.app.state, RATE_LIMIT_DISABLED_STATE_NAME, False):

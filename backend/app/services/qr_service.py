@@ -2,7 +2,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.event import Event
 from app.models.user import User
-from app.services.access_control import validate_event_access
 
 
 async def scan_food(session: AsyncSession, user: User, meal: str) -> str:
@@ -18,21 +17,32 @@ async def scan_food(session: AsyncSession, user: User, meal: str) -> str:
     return "Meal marked as consumed"
 
 
-async def scan_event_entry(session: AsyncSession, user: User, event: Event, phase: int) -> str:
-    validate_event_access(user, event, phase)
+async def scan_college_entry(session: AsyncSession, user: User) -> str:
+    if user.is_attending:
+        return "User already attending"
+    
+    user.is_attending = True
+    session.add(user)
+    await session.commit()
+    return "College entry marked successfully"
+
+
+async def scan_event_entry(session: AsyncSession, user: User, event: Event) -> str:
     participants = event.participants or {}
-    participant_entry = participants.get(str(user.id), {})
+    
+    if str(user.id) not in participants:
+        return "User not registered for this event"
+        
+    participant_entry = participants[str(user.id)]
 
-    attendance = participant_entry.get("attendance", {})
-    phase_key = f"phase{phase}"
-    if attendance.get(phase_key):
-        return "Already marked present"
+    if participant_entry.get("isAttending"):
+        return "User already scanned for this event"
 
-    attendance[phase_key] = True
-    participant_entry["attendance"] = attendance
+    participant_entry["isAttending"] = True
     participants[str(user.id)] = participant_entry
+    
     event.participants = participants
 
     session.add(event)
     await session.commit()
-    return "Attendance marked"
+    return "Attendance marked successfully"

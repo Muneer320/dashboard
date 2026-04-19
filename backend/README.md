@@ -200,6 +200,8 @@ Apply the SQL files in order through the Supabase SQL editor:
 3. `migrations/sql/003_rate_limit_entries.sql`
 4. `migrations/sql/004_rls_policies.sql`
 5. `migrations/sql/005_create_submissions_bucket.sql`
+6. `migrations/sql/006_update_users_schema.sql`
+7. `migrations/sql/007_update_user_roles.sql`
 
 ### 4. Run the application
 
@@ -235,6 +237,25 @@ The migration in `migrations/sql/005_create_submissions_bucket.sql` creates the 
 ### RLS
 
 The repository includes `migrations/sql/004_rls_policies.sql` for direct client-side Supabase access control. The backend itself uses its own database connection path, so RLS is mainly for hardening direct Supabase access.
+
+## QR Scanning Flow
+
+The backend provides a unified endpoint (`POST /api/v1/qr/scan`) to handle QR code scans for participant activities.
+
+### Authorization and Rate Limiting
+- **Roles:** The endpoint requires the caller to hold one of the following roles: `scanner`, `admin`, `superAdmin`, `eventManage`, or `EM`.
+- **Rate Limiting:** Scans are subjected to persistent, database-backed rate limiting (configurable via `QR_RATE_LIMIT_PER_MINUTE`) to prevent abuse and spam scanning.
+
+### Scan Modes
+
+The request payload accepts three different `mode` values:
+
+1. **`collegeEntry`**: Marks the user's initial arrival. Toggles the `is_attending` flag on their profile to `true`.
+2. **`event`**: Marks a user's attendance for a specific event. Requires an `event_id` and verifies that the user is in the event's `participants` dictionary before toggling `isAttending` to `true` within their participant record.
+3. **`food`**: Marks meal consumption. Requires a `meal` identifier (e.g., `meal1`). Updates the user's `food` JSONB dictionary.
+
+### Response Behavior
+The endpoint evaluates the backend's action and returns an `accepted` status if the flag was successfully set. It returns `rejected` if the user was already marked for that specific mode (e.g., already scanned for the event, or already consumed the meal).
 
 ## Runtime Behavior
 
@@ -348,3 +369,5 @@ The backend already implements the major platform slices from the project docume
 - [migrations/sql/003_rate_limit_entries.sql](migrations/sql/003_rate_limit_entries.sql)
 - [migrations/sql/004_rls_policies.sql](migrations/sql/004_rls_policies.sql)
 - [migrations/sql/005_create_submissions_bucket.sql](migrations/sql/005_create_submissions_bucket.sql)
+- [migrations/sql/006_update_users_schema.sql](migrations/sql/006_update_users_schema.sql)
+- [migrations/sql/007_update_user_roles.sql](migrations/sql/007_update_user_roles.sql)

@@ -10,7 +10,7 @@ BEGIN
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-        CREATE TYPE user_role AS ENUM ('user', 'admin', 'scanner');
+        CREATE TYPE user_role AS ENUM ('user', 'admin', 'scanner', 'superAdmin', 'eventManage', 'EM');
     END IF;
 END$$;
 
@@ -35,7 +35,9 @@ CREATE TABLE IF NOT EXISTS users (
     food jsonb NOT NULL DEFAULT '{"meal1": false, "meal2": false, "meal3": false}'::jsonb,
     access_level access_level NOT NULL DEFAULT 'ROUND1',
     role user_role NOT NULL DEFAULT 'user',
+    is_attending boolean NOT NULL DEFAULT false,
     is_profile_complete boolean NOT NULL DEFAULT false,
+    cents integer NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now()
 );
