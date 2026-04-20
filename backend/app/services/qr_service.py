@@ -28,21 +28,23 @@ async def scan_college_entry(session: AsyncSession, user: User) -> str:
 
 
 async def scan_event_entry(session: AsyncSession, user: User, event: Event) -> str:
-    participants = event.participants or {}
-    
-    if str(user.id) not in participants:
-        return "User not registered for this event"
-        
-    participant_entry = participants[str(user.id)]
+    user_events = user.events or {}
+    event_key = str(event.id)
 
-    if participant_entry.get("isAttending"):
+    event_entry = user_events.get(event_key)
+    if not event_entry:
+        return "User not registered for this event"
+
+    if event_entry.get("restricted"):
+        return "User is restricted from this event"
+
+    if event_entry.get("isAttending"):
         return "User already scanned for this event"
 
-    participant_entry["isAttending"] = True
-    participants[str(user.id)] = participant_entry
-    
-    event.participants = participants
+    event_entry["isAttending"] = True
+    user_events[event_key] = event_entry
+    user.events = user_events
 
-    session.add(event)
+    session.add(user)
     await session.commit()
     return "Attendance marked successfully"

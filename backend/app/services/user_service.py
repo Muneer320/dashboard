@@ -42,16 +42,3 @@ def get_user_events_payload(user: User) -> dict:
         "user_id": str(user.id),
         "events": user.events or {},
     }
-
-
-def get_user_access_payload(user: User) -> dict:
-    event_access: dict[str, str] = {}
-    for event_id, event_data in (user.events or {}).items():
-        event_access[event_id] = event_data.get("accessLevel", "ROUND1")
-
-    return {
-        "user_id": str(user.id),
-        "global_access_level": user.access_level.value,
-        "role": user.role.value,
-        "event_access": event_access,
-    }

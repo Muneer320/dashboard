@@ -57,14 +57,16 @@ async def register_for_event(session: AsyncSession, user: User, event: Event) ->
         "submission": {},
     }
     user_events[event_key] = {
+        "isAttending": False,           # flipped to True at the event gate scanner
         "phase": 1,
-        "status": "active",
-        "accessLevel": "ROUND1",
+        "status": "active",             # active | completed | eliminated
+        "restricted": False,            # set True to ban from further participation
         "submission": False,
-        "submissionType": None,
+        "submissionType": None,         # "url" | "file"
         "submissionURL": None,
         "submissionFile": None,
         "submissionTime": None,
+        "teamId": None,                 # assigned when the user joins a team for this event
         "score": 0,
         "rank": None,
     }
