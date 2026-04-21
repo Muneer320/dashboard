@@ -9,12 +9,11 @@ services:
       PROJECT_NAME: Ascent Dashboard Backend
       VERSION: 0.1.0
       API_V1_PREFIX: /api/v1
-      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL to your Supabase Postgres connection string}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-secret-change-me}
       JWT_ALGORITHM: HS256
       ACCESS_TOKEN_EXPIRE_MINUTES: 60
-      SUPABASE_URL: ${SUPABASE_URL:-}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL to your Supabase project URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?Set SUPABASE_SERVICE_ROLE_KEY to your Supabase service role key}
       SUPABASE_STORAGE_BUCKET: submissions
       SUPABASE_SIGNED_URL_EXPIRES_SECONDS: 604800
       BACKGROUND_JOB_INTERVAL_SECONDS: 0
@@ -27,8 +26,6 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
-      WAIT_FOR_DB: "true"
-      RUN_DB_INIT: "false"
       PORT: 8000
     ports:
       - "8000:8000"

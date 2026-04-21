@@ -1,5 +1,5 @@
 -- Ascent Dashboard initial schema for Supabase SQL editor
--- Apply after creating the Supabase project and linking DATABASE_URL.
+-- Apply after creating the Supabase project and configuring backend Supabase credentials.
 
 create extension if not exists pgcrypto;
 
