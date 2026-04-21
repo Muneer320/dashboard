@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from supabase import AsyncClient
 
-from app.api.deps import get_current_user
+from app.api.deps import get_admin_or_em, get_current_user
 from app.db.supabase_client import get_supabase
+from app.models.admin import Admin
 from app.models.user import User
 from app.schemas.submission import SubmissionFetchResponse, SubmissionRequest, SubmissionResponse
 from app.services.event_service import get_event
@@ -19,37 +20,31 @@ async def submit_event(
     current_user: User = Depends(get_current_user),
 ) -> SubmissionResponse:
     """
-    Submit repo and/or deploy links for a specific event phase.
+    Submit answers for a specific event phase.
 
     Body:
-        phase       int   ≥ 1
-        repo_link   str   GitHub / other repo URL  (optional if deploy_link given)
-        deploy_link str   Live deployment URL       (optional if repo_link given)
+        phase    int          >= 1
+        answers  list[{question_id, answer}]
 
-    At least one link must be non-empty.
-    Calling again on the same phase overwrites the previous submission.
+    All required questions must be answered; the phase must be active and
+    unlocked. Re-submitting overwrites the previous answers for that phase.
     """
-    if not payload.has_content():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Provide at least one of repo_link or deploy_link",
-        )
-
     event = await get_event(supabase, event_id)
-    submitted_at, links = await submit_for_event(
+    submitted_at, normalised = await submit_for_event(
         supabase=supabase,
         user=current_user,
         event=event,
         phase=payload.phase,
-        repo_link=payload.repo_link,
-        deploy_link=payload.deploy_link,
+        answers=payload.answers,
     )
+    phase_key = f"phase{payload.phase}"
     return SubmissionResponse(
         message="Submission accepted",
         event_id=str(event.id),
         phase=payload.phase,
+        phase_key=phase_key,
         submitted_at=submitted_at,
-        submission=links,
+        answers=normalised,
     )
 
 
@@ -60,7 +55,7 @@ async def get_submission(
     supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> SubmissionFetchResponse:
-    """Return the current submission for a given event phase, or null if none."""
+    """Return the calling user's stored answers for a given event phase."""
     event = await get_event(supabase, event_id)
-    payload = get_submission_for_phase(current_user, event, phase)
-    return SubmissionFetchResponse(**payload)
+    data = get_submission_for_phase(current_user, event, phase)
+    return SubmissionFetchResponse(**data)
