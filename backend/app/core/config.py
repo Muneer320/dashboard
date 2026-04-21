@@ -11,10 +11,6 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"
     API_V1_PREFIX: str = "/api/v1"
 
-    # Legacy DATABASE_URL retained only to avoid .env load errors;
-    # the backend now talks to Supabase exclusively via supabase-py.
-    DATABASE_URL: str | None = None
-
     JWT_SECRET_KEY: str = "change-this-in-env"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
