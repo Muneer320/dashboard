@@ -10,12 +10,16 @@ from typing import Any
 from app.models._util import coerce_date, coerce_datetime, coerce_uuid
 
 
+DEFAULT_MEALS_COUNT = 3
+
+
 @dataclass
 class GlobalSchedule:
     id: uuid.UUID
     date: date
     schedule: list = field(default_factory=list)
     announcements: list = field(default_factory=list)
+    meals_count: int = DEFAULT_MEALS_COUNT
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -29,6 +33,7 @@ class GlobalSchedule:
             date=row_date,
             schedule=list(row.get("schedule") or []),
             announcements=list(row.get("announcements") or []),
+            meals_count=int(row.get("meals_count") or DEFAULT_MEALS_COUNT),
             created_at=coerce_datetime(row.get("created_at")),
             updated_at=coerce_datetime(row.get("updated_at")),
         )

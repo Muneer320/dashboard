@@ -1,0 +1,150 @@
+/* Meals admin tab */
+
+.meals-page { padding-bottom: 40px; }
+
+/* Config card ──────────────────────────────────────────────────────────────── */
+.meals-config-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-top: 8px;
+}
+
+.meals-config-info { flex: 1; }
+
+.meals-config-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.meals-config-sub {
+  font-size: 0.82rem;
+  color: var(--text-muted, #6b7280);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.meals-config-edit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.meals-count-input {
+  width: 80px;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Error banner ─────────────────────────────────────────────────────────────── */
+.meals-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #b91c1c;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+/* Table ────────────────────────────────────────────────────────────────────── */
+.meals-table-wrap {
+  margin-top: 8px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 10px;
+  overflow: auto;
+  background: var(--surface, #fff);
+}
+
+.meals-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.meals-table thead th {
+  background: var(--surface-alt, #f9fafb);
+  border-bottom: 1px solid var(--border, #e5e7eb);
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.meals-user-col { min-width: 220px; }
+.meals-meal-col { text-align: center !important; min-width: 96px; }
+
+.meals-col-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.meals-col-count {
+  font-size: 0.7rem;
+  color: var(--text-muted, #9ca3af);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.meals-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle, #f3f4f6);
+}
+
+.meals-table tbody tr:hover {
+  background: var(--surface-hover, #fafafa);
+}
+
+.meals-user-cell { line-height: 1.3; }
+.meals-user-name { font-weight: 600; color: var(--text, #111827); }
+.meals-user-handle {
+  font-size: 0.75rem;
+  color: var(--text-muted, #9ca3af);
+}
+
+.meals-cell { text-align: center; }
+
+.meals-empty {
+  padding: 32px 14px !important;
+  text-align: center;
+  color: var(--text-muted, #9ca3af);
+  font-style: italic;
+}
+
+/* Claim chip button ────────────────────────────────────────────────────────── */
+.meal-chip {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: transparent;
+  color: var(--text-muted, #9ca3af);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.meal-chip:hover {
+  border-color: var(--accent, #6366f1);
+  color: var(--accent, #6366f1);
+}
+.meal-chip.claimed {
+  background: var(--success-bg, #d1fae5);
+  border-color: var(--success, #10b981);
+  color: var(--success-text, #065f46);
+}
+.meal-chip.claimed:hover {
+  background: var(--danger-bg, #fee2e2);
+  border-color: var(--danger, #dc2626);
+  color: var(--danger-text, #991b1b);
+}

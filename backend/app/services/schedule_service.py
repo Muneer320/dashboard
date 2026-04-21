@@ -1,6 +1,7 @@
 """
 Schedule service — event-specific and global schedule reads/writes.
-Also handles announcements (stored on the same global table row).
+Also handles announcements (stored on the same global table row) and the
+festival-wide ``meals_count`` (how many meals are being served overall).
 
 Supabase-backed: all operations go through PostgREST.
 """
@@ -8,11 +9,12 @@ Supabase-backed: all operations go through PostgREST.
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
 from supabase import AsyncClient
 
 from app.db.supabase_client import first_row, rows
+from app.models.global_schedule import DEFAULT_MEALS_COUNT
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -25,11 +27,16 @@ def _row_to_dict(row: dict) -> dict:
         "date": iso_date,
         "schedule": row.get("schedule") or [],
         "announcements": row.get("announcements") or [],
+        "meals_count": int(row.get("meals_count") or DEFAULT_MEALS_COUNT),
     }
 
 
 async def _get_or_create_row(supabase: AsyncClient, day: date) -> dict:
-    """Fetch the row for `day` or create a fresh empty one."""
+    """Fetch the row for `day` or create a fresh empty one.
+
+    New rows inherit the current festival-wide ``meals_count`` so the scanner
+    doesn't fall back to the model default on a day that hasn't been seeded.
+    """
     day_iso = day.isoformat()
     resp = await (
         supabase.table("global")
@@ -42,6 +49,9 @@ async def _get_or_create_row(supabase: AsyncClient, day: date) -> dict:
     if row is not None:
         return row
 
+    # Inherit the current meals_count from any existing row.
+    current_count = await get_meals_count(supabase)
+
     # Create a new row. Client-generated UUID so we don't have to rely on the
     # insert response shape.
     new_row = {
@@ -49,6 +59,7 @@ async def _get_or_create_row(supabase: AsyncClient, day: date) -> dict:
         "date": day_iso,
         "schedule": [],
         "announcements": [],
+        "meals_count": current_count,
     }
     insert_resp = await (
         supabase.table("global")
@@ -57,6 +68,65 @@ async def _get_or_create_row(supabase: AsyncClient, day: date) -> dict:
     )
     echoed = first_row(insert_resp)
     return echoed if echoed is not None else new_row
+
+
+# ── Meals config (festival-wide) ──────────────────────────────────────────────
+
+async def get_meals_count(supabase: AsyncClient) -> int:
+    """
+    Return the current festival-wide meals_count.
+
+    Strategy: read the most-recent global row and use its meals_count. If no
+    rows exist yet, fall back to the dataclass default (3). This keeps a
+    single source of truth even though the column lives on per-date rows.
+    """
+    resp = await (
+        supabase.table("global")
+        .select("meals_count")
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
+        return DEFAULT_MEALS_COUNT
+    return int(row.get("meals_count") or DEFAULT_MEALS_COUNT)
+
+
+async def set_meals_count(supabase: AsyncClient, count: int) -> int:
+    """
+    Set the festival-wide meals_count.
+
+    Writes to every existing global row so all days stay in sync. If there
+    are no rows yet, seeds one for today so the value is persisted.
+    """
+    if count < 1 or count > 20:
+        raise ValueError("meals_count must be between 1 and 20")
+
+    resp = await supabase.table("global").select("id").execute()
+    existing = rows(resp)
+
+    if not existing:
+        today = datetime.now(timezone.utc).date()
+        new_row = {
+            "id": str(uuid.uuid4()),
+            "date": today.isoformat(),
+            "schedule": [],
+            "announcements": [],
+            "meals_count": count,
+        }
+        await supabase.table("global").insert(new_row).execute()
+        return count
+
+    # Bulk update — one PATCH per row (PostgREST has no "update all" without a filter).
+    for r in existing:
+        await (
+            supabase.table("global")
+            .update({"meals_count": count})
+            .eq("id", r["id"])
+            .execute()
+        )
+    return count
 
 
 # ── Event schedule ─────────────────────────────────────────────────────────────

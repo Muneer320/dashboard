@@ -50,6 +50,7 @@ export function AuthProvider({ children }) {
       scanner:     ['admin', 'Scanner', 'eventManager'],
       myEvents:    ['admin', 'eventManager'],
       contactInfo: ['admin'],
+      meals:          ['admin'],
       scanEntry:      ['admin', 'Scanner'],
       scanAttendance: ['admin', 'eventManager'],
       scanFood:       ['admin', 'Scanner'],
