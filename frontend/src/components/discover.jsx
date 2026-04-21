@@ -2,7 +2,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, PosterPlaceholder } from './shared';
-import { events as eventsApi, schedule as scheduleApi } from '../lib/api';
+import { events as eventsApi, schedule as scheduleApi, users } from '../lib/api';
 
 // Deterministic tone picker so cards don't reshuffle colours on every render.
 const TONES = ['violet', 'teal', 'amber'];
@@ -13,32 +13,156 @@ function toneFor(id) {
   return TONES[h % TONES.length];
 }
 
+// ── Shared Event Card ─────────────────────────────────────────────────────────
+
+function EventCard({ ev, index, navigate, isMobile, showStatus }) {
+  const tone = toneFor(ev.id);
+  const venue = Array.isArray(ev.venue) && ev.venue.length ? ev.venue[0] : '';
+  const teamsCount = ev.participants_count ?? 0;
+  const status = showStatus ? ev.user_status : null;
+
+  const statusLabel = status?.status
+    ? status.status.charAt(0).toUpperCase() + status.status.slice(1)
+    : null;
+
+  const statusColor = {
+    active: 'var(--teal)',
+    completed: 'var(--amber)',
+    eliminated: '#D97777',
+  }[status?.status] ?? 'var(--ink-mute)';
+
+  return (
+    <div
+      key={ev.id}
+      className="glass"
+      style={{ padding: 0, overflow: 'hidden', transition: 'all .3s', cursor: 'pointer' }}
+      onClick={() => navigate(`/event-detail/${ev.id}`)}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(127,119,221,0.45)'; e.currentTarget.style.boxShadow = '0 0 30px rgba(127,119,221,0.15)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.boxShadow = 'none'; }}
+    >
+      <div style={{ position: 'relative' }}>
+        <PosterPlaceholder title={(ev.name || '').toUpperCase()} sub="700 × 400" w="100%" h={isMobile ? 140 : 180} tone={tone} />
+        {statusLabel && (
+          <div style={{
+            position: 'absolute', top: 10, right: 10,
+            padding: '3px 10px', borderRadius: 999,
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.05em',
+            background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)',
+            color: statusColor, border: `1px solid ${statusColor}`,
+            textTransform: 'uppercase',
+          }}>
+            {statusLabel}
+          </div>
+        )}
+      </div>
+      <div style={{ padding: isMobile ? 16 : 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span className={`chip ${tone}`} style={{ padding: '2px 8px', fontSize: 9 }}>
+            {venue ? venue.toUpperCase() : 'EVENT'}
+          </span>
+          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
+            {String(index + 1).padStart(2, '0')}
+          </span>
+        </div>
+        <div className="display" style={{ fontSize: 20, marginTop: 12, letterSpacing: '-0.01em' }}>{ev.name}</div>
+        <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-dim)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {ev.description || 'No description provided.'}
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
+            {teamsCount} REGISTERED
+          </span>
+          {status?.phase != null && (
+            <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--violet)' }}>
+              PHASE {status.phase}
+            </span>
+          )}
+        </div>
+        <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <a
+            className="btn sm"
+            onClick={(e) => { e.stopPropagation(); navigate(`/event-detail/${ev.id}`); }}
+          >Details</a>
+          <a
+            className="btn sm primary"
+            href={`https://unstop.com/search?q=${encodeURIComponent(ev.name || '')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+          >Unstop ↗</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Explore Page ──────────────────────────────────────────────────────────────
+
 export function Explore() {
   const isMobile = useMobile();
   const navigate = useNavigate();
 
-  const [events, setEvents] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
+  const [tab, setTab] = React.useState('my'); // 'my' | 'all'
+  const [allEvents, setAllEvents] = React.useState([]);
+  const [myEvents, setMyEvents] = React.useState([]);
+  const [loadingAll, setLoadingAll] = React.useState(false);
+  const [loadingMy, setLoadingMy] = React.useState(true);
   const [error, setError] = React.useState('');
 
+  // Fetch my events on mount (default tab)
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    eventsApi.list()
-      .then((list) => { if (!cancelled) setEvents(list ?? []); })
-      .catch((e) => { if (!cancelled) setError(e?.message || 'Failed to load events.'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    setLoadingMy(true);
+    users.myEvents()
+      .then((list) => { if (!cancelled) setMyEvents(list ?? []); })
+      .catch((e) => { if (!cancelled) setError(e?.message || 'Failed to load your events.'); })
+      .finally(() => { if (!cancelled) setLoadingMy(false); });
     return () => { cancelled = true; };
   }, []);
+
+  // Fetch all events lazily when tab switches (or on mount if we want to pre-load)
+  React.useEffect(() => {
+    if (allEvents.length > 0) return; // already fetched
+    let cancelled = false;
+    setLoadingAll(true);
+    eventsApi.list()
+      .then((list) => { if (!cancelled) setAllEvents(list ?? []); })
+      .catch((e) => { if (!cancelled && !error) setError(e?.message || 'Failed to load events.'); })
+      .finally(() => { if (!cancelled) setLoadingAll(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeEvents = tab === 'my' ? myEvents : allEvents;
+  const isLoading = tab === 'my' ? loadingMy : loadingAll;
+
+  const tabLabel = tab === 'my'
+    ? `§ MY EVENTS · ${isLoading ? '—' : String(activeEvents.length).padStart(2, '0')}`
+    : `§ ALL EVENTS · ${isLoading ? '—' : String(activeEvents.length).padStart(2, '0')}`;
 
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="explore" />
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
-        <div className="eyebrow">§ ALL EVENTS · {loading ? '—' : String(events.length).padStart(2, '0')}</div>
+        <div className="eyebrow">{tabLabel}</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>Pick your fights.</h1>
         <div style={{ marginTop: 10, color: 'var(--ink-dim)', fontSize: 14, maxWidth: 540 }}>
-          Registrations happen on Unstop. Click through to any event to see rules, prize money, and sign up your team.
+          {tab === 'my'
+            ? 'Events you\'re registered for. Track your progress and submissions here.'
+            : 'Browse all events. Click through to see rules, prize money, and sign up your team.'}
+        </div>
+
+        {/* Tab switcher — same pill-toggle style as Leaderboard */}
+        <div style={{ marginTop: 24, display: 'flex', gap: 6, padding: 4, borderRadius: 999, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', width: 'fit-content' }}>
+          {[['my', 'My Events'], ['all', 'All Events']].map(([k, l]) => (
+            <div key={k} onClick={() => setTab(k)} style={{
+              padding: '8px 18px', borderRadius: 999, cursor: 'pointer',
+              fontSize: 12.5, fontWeight: 500,
+              background: tab === k ? 'rgba(127,119,221,0.2)' : 'transparent',
+              color: tab === k ? 'var(--ink)' : 'var(--ink-dim)',
+              border: tab === k ? '1px solid rgba(127,119,221,0.5)' : '1px solid transparent',
+              transition: 'all .2s',
+            }}>{l}</div>
+          ))}
         </div>
 
         {error && (
@@ -47,10 +171,22 @@ export function Explore() {
           </div>
         )}
 
-        {loading ? (
+        {isLoading ? (
           <div style={{ marginTop: 32, color: 'var(--ink-mute)', fontSize: 13, fontFamily: 'var(--f-mono)' }}>LOADING EVENTS…</div>
-        ) : events.length === 0 ? (
-          <div style={{ marginTop: 32, color: 'var(--ink-mute)', fontSize: 13 }}>No events scheduled yet. Check back soon.</div>
+        ) : activeEvents.length === 0 ? (
+          <div style={{ marginTop: 48, textAlign: 'center' }}>
+            <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>{tab === 'my' ? '🎯' : '📭'}</div>
+            <div style={{ color: 'var(--ink-dim)', fontSize: 15, fontWeight: 500 }}>
+              {tab === 'my' ? 'You haven\'t registered for any events yet.' : 'No events scheduled yet.'}
+            </div>
+            {tab === 'my' && (
+              <div
+                onClick={() => setTab('all')}
+                className="btn sm primary"
+                style={{ marginTop: 16, display: 'inline-block', cursor: 'pointer' }}
+              >Browse All Events →</div>
+            )}
+          </div>
         ) : (
           <div style={{
             marginTop: 32,
@@ -58,55 +194,16 @@ export function Explore() {
             gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
             gap: 16,
           }}>
-            {events.map((ev, i) => {
-              const tone = toneFor(ev.id);
-              const venue = Array.isArray(ev.venue) && ev.venue.length ? ev.venue[0] : '';
-              const teamsCount = ev.participants_count ?? 0;
-              return (
-                <div
-                  key={ev.id}
-                  className="glass"
-                  style={{ padding: 0, overflow: 'hidden', transition: 'all .3s', cursor: 'pointer' }}
-                  onClick={() => navigate(`/event-detail/${ev.id}`)}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(127,119,221,0.45)'; e.currentTarget.style.boxShadow = '0 0 30px rgba(127,119,221,0.15)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.boxShadow = 'none'; }}
-                >
-                  <div style={{ position: 'relative' }}>
-                    <PosterPlaceholder title={(ev.name || '').toUpperCase()} sub="700 × 400" w="100%" h={isMobile ? 140 : 180} tone={tone} />
-                  </div>
-                  <div style={{ padding: isMobile ? 16 : 20 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span className={`chip ${tone}`} style={{ padding: '2px 8px', fontSize: 9 }}>
-                        {venue ? venue.toUpperCase() : 'EVENT'}
-                      </span>
-                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
-                        {String(i + 1).padStart(2, '0')}
-                      </span>
-                    </div>
-                    <div className="display" style={{ fontSize: 20, marginTop: 12, letterSpacing: '-0.01em' }}>{ev.name}</div>
-                    <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-dim)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {ev.description || 'No description provided.'}
-                    </div>
-                    <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
-                      {teamsCount} REGISTERED
-                    </div>
-                    <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <a
-                        className="btn sm"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/event-detail/${ev.id}`); }}
-                      >Details</a>
-                      <a
-                        className="btn sm primary"
-                        href={`https://unstop.com/search?q=${encodeURIComponent(ev.name || '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                      >Unstop ↗</a>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {activeEvents.map((ev, i) => (
+              <EventCard
+                key={ev.id}
+                ev={ev}
+                index={i}
+                navigate={navigate}
+                isMobile={isMobile}
+                showStatus={tab === 'my'}
+              />
+            ))}
           </div>
         )}
       </div>

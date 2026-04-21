@@ -402,13 +402,33 @@ export function EventDetail() {
   );
 
   // Build rounds from event.rounds object or event schedule
+  const now = Date.now();
   const rounds = evSched.length > 0
-    ? evSched.map((s, i) => ({
-        n: s.title, t: fmtTime(s.start_time), state: 'next', desc: `${s.venue}`,
-      }))
-    : Object.entries(event.rounds ?? {}).map(([key, val]) => ({
-        n: key, t: val?.time ?? '', state: val?.state ?? 'next', desc: val?.description ?? '',
-      }));
+    ? evSched.map((s, i) => {
+        const start = s.start_time ? new Date(s.start_time).getTime() : 0;
+        const end = s.end_time ? new Date(s.end_time).getTime() : start + 3600000;
+        const isLive = start && end ? now >= start && now <= end : false;
+        const isPast = end ? now > end : false;
+        return {
+          n: s.title, t: fmtTime(s.start_time), state: isLive ? 'live' : isPast ? 'done' : 'next', desc: `${s.venue}`
+        };
+      })
+    : Object.entries(event.rounds ?? {}).map(([key, val]) => {
+        const start = val?.start_time ? new Date(val.start_time).getTime() : 0;
+        const end = val?.end_time ? new Date(val.end_time).getTime() : 0;
+        let isLive = val?.is_active === true;
+        let isPast = val?.is_locked === true;
+        if (start && end) {
+          isLive = now >= start && now <= end;
+          isPast = now > end;
+        }
+        return {
+          n: val?.title || key,
+          t: val?.start_time ? fmtTime(val.start_time) : (val?.time ?? ''),
+          state: isLive ? 'live' : isPast ? 'done' : (val?.state ?? 'next'),
+          desc: val?.description ?? ''
+        };
+      });
 
   const venue = Array.isArray(event.venue) ? event.venue.join(' · ') : (event.venue || '');
 
@@ -501,24 +521,46 @@ export function EventDetail() {
                     <div style={{ marginTop: 4, fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>You can resubmit to update your links</div>
                   </div>
                 ) : null}
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: userEntry?.submitted ? 16 : 0 }}>
-                  <input
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)', color: 'var(--ink)', fontSize: 13, boxSizing: 'border-box' }}
-                    placeholder="GitHub / Repository link"
-                    value={submitForm.repo}
-                    onChange={e => setSubmitForm(f => ({ ...f, repo: e.target.value }))}
-                  />
-                  <input
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)', color: 'var(--ink)', fontSize: 13, boxSizing: 'border-box' }}
-                    placeholder="Deployed URL (optional)"
-                    value={submitForm.deploy}
-                    onChange={e => setSubmitForm(f => ({ ...f, deploy: e.target.value }))}
-                  />
-                  {submitMsg && <div style={{ fontSize: 12, color: submitMsg.startsWith('Error') ? 'var(--danger, #e55)' : 'var(--teal)', fontFamily: 'var(--f-mono)' }}>{submitMsg}</div>}
-                  <button type="submit" className="btn sm primary" disabled={submitting || (!submitForm.repo && !submitForm.deploy)}>
-                    {submitting ? 'Submitting…' : userEntry?.submitted ? 'Resubmit ↺' : 'Submit ⤴'}
-                  </button>
-                </form>
+                {(() => {
+                  const isRegistered = !!userEntry;
+                  const currentRound = rounds[selectedRound];
+                  const canSubmit = isRegistered && currentRound?.state === 'live';
+                  
+                  return (
+                    <>
+                      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: userEntry?.submitted ? 16 : 0, opacity: canSubmit ? 1 : 0.5 }}>
+                        <input
+                          style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)', color: 'var(--ink)', fontSize: 13, boxSizing: 'border-box' }}
+                          placeholder="GitHub / Repository link"
+                          value={submitForm.repo}
+                          onChange={e => setSubmitForm(f => ({ ...f, repo: e.target.value }))}
+                          disabled={!canSubmit}
+                        />
+                        <input
+                          style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--glass-border)', background: 'rgba(255,255,255,0.05)', color: 'var(--ink)', fontSize: 13, boxSizing: 'border-box' }}
+                          placeholder="Deployed URL (optional)"
+                          value={submitForm.deploy}
+                          onChange={e => setSubmitForm(f => ({ ...f, deploy: e.target.value }))}
+                          disabled={!canSubmit}
+                        />
+                        {submitMsg && <div style={{ fontSize: 12, color: submitMsg.startsWith('Error') ? 'var(--danger, #e55)' : 'var(--teal)', fontFamily: 'var(--f-mono)' }}>{submitMsg}</div>}
+                        <button type="submit" className="btn sm primary" disabled={submitting || (!submitForm.repo && !submitForm.deploy) || !canSubmit}>
+                          {submitting ? 'Submitting…' : userEntry?.submitted ? 'Resubmit ↺' : 'Submit ⤴'}
+                        </button>
+                      </form>
+                      {!isRegistered && (
+                        <div style={{ marginTop: 14, fontSize: 12, color: 'var(--amber, #f5a623)', textAlign: 'center', backgroundColor: 'rgba(245, 166, 35, 0.1)', padding: '8px', borderRadius: 6 }}>
+                          You must be registered for this event to submit.
+                        </div>
+                      )}
+                      {isRegistered && currentRound?.state !== 'live' && (
+                        <div style={{ marginTop: 14, fontSize: 12, color: 'var(--amber, #f5a623)', textAlign: 'center', backgroundColor: 'rgba(245, 166, 35, 0.1)', padding: '8px', borderRadius: 6 }}>
+                          Submissions are only allowed during the active phase timeframe.
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>

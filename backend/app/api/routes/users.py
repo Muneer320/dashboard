@@ -7,7 +7,8 @@ from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.models.user import User
 from app.schemas.meals import MealSlot
-from app.schemas.user import UserEventsResponse, UserProfileUpdate, UserResponse
+from app.schemas.user import MyEventResponse, UserEventsResponse, UserProfileUpdate, UserResponse
+from app.services.event_service import list_events
 from app.services.qr_service import scan_food
 from app.services.user_service import (
     get_user_by_id,
@@ -30,6 +31,36 @@ def _build_user_response(user: User) -> UserResponse:
         is_profile_complete=user.is_profile_complete,
         cents=user.cents,
     )
+
+
+@router.get("/me/my-events", response_model=list[MyEventResponse])
+async def get_my_events(
+    supabase: AsyncClient = Depends(get_supabase),
+    current_user: User = Depends(get_current_user),
+) -> list[MyEventResponse]:
+    """Return full event details for every event the calling user is registered for."""
+    user_events = current_user.events or {}
+    if not user_events:
+        return []
+
+    # Fetch all events and filter to those the user is part of
+    all_events = await list_events(supabase)
+    event_map = {str(ev.id): ev for ev in all_events}
+
+    results = []
+    for event_id, user_status in user_events.items():
+        ev = event_map.get(event_id)
+        if ev is None:
+            continue
+        results.append(MyEventResponse(
+            id=str(ev.id),
+            name=ev.name,
+            description=ev.description or "",
+            venue=ev.venue or [],
+            participants_count=len(ev.participants or {}),
+            user_status=user_status if isinstance(user_status, dict) else {},
+        ))
+    return results
 
 
 @router.get("/{user_id}", response_model=UserResponse)

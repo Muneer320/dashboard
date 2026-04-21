@@ -22,3 +22,13 @@ class UserResponse(BaseModel):
 class UserEventsResponse(BaseModel):
     user_id: str
     events: dict
+
+
+class MyEventResponse(BaseModel):
+    """Full event details merged with the user's per-event status."""
+    id: str
+    name: str
+    description: str
+    venue: list[str]
+    participants_count: int
+    user_status: dict  # {isAttending, phase, status, score, ...}

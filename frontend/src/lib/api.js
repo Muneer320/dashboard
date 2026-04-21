@@ -90,6 +90,7 @@ export const users = {
   patch:  (id, body) => patch(`/users/${id}`, body),
   events: (id) => get(`/users/${id}/events`),
   meals:  (id) => get(`/users/${id}/meals`),
+  myEvents: () => get('/users/me/my-events'),
 };
 
 // ─── Events ───────────────────────────────────────────────────────────────────
