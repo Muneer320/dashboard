@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useUserAuth } from './lib/UserAuthContext';
+import { token } from './lib/api';
 import Landing from './components/landing';
 import { Credentials, Login } from './components/auth';
 import { Dashboard, EventDetail } from './components/dashboard';
@@ -16,9 +17,14 @@ function RequireAuth({ children }) {
   return user ? children : <Navigate to="/login" replace />;
 }
 
-/** Prevents logged-in users from seeing login page again. */
+/** Prevents logged-in users from seeing login page again. Redirects to respective dashboards. */
 function GuestOnly({ children }) {
   const { user, ready } = useUserAuth();
+  
+  if (token.getAdmin()) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+
   if (!ready) return null;
   return !user ? children : <Navigate to="/dashboard" replace />;
 }
@@ -31,7 +37,7 @@ export default function App() {
         <Route path="/admin/*"       element={<AdminApp />} />
 
         {/* Public */}
-        <Route path="/"              element={<Landing />} />
+        <Route path="/"              element={<GuestOnly><Landing /></GuestOnly>} />
         <Route path="/login"         element={<GuestOnly><Login /></GuestOnly>} />
         <Route path="/credentials"   element={<Credentials />} />
 
