@@ -27,6 +27,9 @@ class Event(Base):
     rounds: Mapped[dict] = mapped_column(JSONB, default=dict)
     participants: Mapped[dict] = mapped_column(JSONB, default=dict)
 
+    # Array of schedule items: [{title, start_time, end_time, venue}]
+    schedule: Mapped[list] = mapped_column(JSONB, default=list)
+
     rules: Mapped[str] = mapped_column(Text, default="")
     max_participants: Mapped[int] = mapped_column(Integer, default=500)
     registration_deadline: Mapped[datetime | None] = mapped_column(

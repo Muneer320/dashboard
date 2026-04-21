@@ -1,9 +1,11 @@
 // Ascent — Explore Events, Schedule, Leaderboard
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, PosterPlaceholder } from './shared';
 
-export function Explore({ onNav }) {
+export function Explore() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const cats = ['All', 'Coding', 'Hardware', 'Design', 'Business', 'Quiz', 'Creative'];
   const [cat, setCat] = React.useState('All');
   const events = [
@@ -20,7 +22,7 @@ export function Explore({ onNav }) {
   const filtered = cat === 'All' ? events : events.filter(e => e.c === cat);
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="explore" onNav={onNav} />
+      <NavBar variant="app" active="explore" />
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ ALL EVENTS · 24</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>Pick your fights.</h1>
@@ -47,7 +49,7 @@ export function Explore({ onNav }) {
         }}>
           {filtered.map((ev, i) => (
             <div key={ev.n} className="glass" style={{ padding: 0, overflow: 'hidden', transition: 'all .3s', cursor: 'pointer' }}
-              onClick={() => onNav('event-detail')}
+              onClick={() => navigate('/event-detail')}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(127,119,221,0.45)'; e.currentTarget.style.boxShadow = '0 0 30px rgba(127,119,221,0.15)'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.boxShadow = 'none'; }}
             >
@@ -62,7 +64,7 @@ export function Explore({ onNav }) {
                 <div className="display" style={{ fontSize: 20, marginTop: 12, letterSpacing: '-0.01em' }}>{ev.n}</div>
                 <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-dim)', lineHeight: 1.5 }}>{ev.d}</div>
                 <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <a className="btn sm" onClick={(e) => { e.stopPropagation(); onNav('event-detail'); }}>Details</a>
+                  <a className="btn sm" onClick={(e) => { e.stopPropagation(); navigate('/event-detail'); }}>Details</a>
                   <a
                     className="btn sm primary"
                     href={`https://unstop.com/search?q=${encodeURIComponent(ev.n)}`}
@@ -80,8 +82,9 @@ export function Explore({ onNav }) {
   );
 }
 
-export function Schedule({ onNav }) {
+export function Schedule() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const [day, setDay] = React.useState('Day 1');
   const [venue, setVenue] = React.useState('All');
   const venues = ['All', 'Block C', 'Robotics Lab', 'Auditorium', 'Studio B', 'Main Stage'];
@@ -99,7 +102,7 @@ export function Schedule({ onNav }) {
   const filtered = venue === 'All' ? slots : slots.filter(s => s.v === venue);
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="schedule" onNav={onNav} />
+      <NavBar variant="app" active="schedule" />
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ LIVE SCHEDULE</div>
         <h1 className="display" style={{ fontSize: isMobile ? 36 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>Every slot. Every stage.</h1>
@@ -187,8 +190,9 @@ export function Schedule({ onNav }) {
   );
 }
 
-export function Leaderboard({ onNav }) {
+export function Leaderboard() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const [tab, setTab] = React.useState('college');
   const colleges = [
     { r: 1, n: 'IIIT Bangalore', p: 1840, d: 'up' },
@@ -211,7 +215,7 @@ export function Leaderboard({ onNav }) {
   ];
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="leaderboard" onNav={onNav} />
+      <NavBar variant="app" active="leaderboard" />
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ STANDINGS · LIVE</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>The climb.</h1>

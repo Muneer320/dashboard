@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_scanner_or_above
 from app.db.session import get_db_session
+from app.models.admin import Admin
 from app.models.user import User
 from app.schemas.event import EventParticipantsResponse, EventRegisterResponse, EventResponse
+from app.schemas.team import MyTeamResponse
 from app.services.event_service import get_event, get_event_participants_payload, list_events, register_for_event
+from app.services.team_service import get_my_team
 
 router = APIRouter()
 
@@ -61,12 +64,22 @@ async def register_event(
 async def get_event_participants(
     event_id: str,
     session: AsyncSession = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    _: Admin = Depends(get_scanner_or_above),  # scanner, eventManager, or admin only
 ) -> EventParticipantsResponse:
-    if current_user.role.value not in {"admin", "scanner"}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail="Admin or scanner role required")
-
     event = await get_event(session, event_id)
     payload = get_event_participants_payload(event)
     return EventParticipantsResponse(**payload)
+
+
+@router.get("/{event_id}/my-team", response_model=MyTeamResponse | None)
+async def my_team(
+    event_id: str,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> MyTeamResponse | None:
+    """Fetch the calling user's team details for the specified event."""
+    data = await get_my_team(session, current_user, event_id)
+    if data is None:
+        return None
+    return MyTeamResponse(**data)
+

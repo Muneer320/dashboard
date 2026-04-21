@@ -1,12 +1,14 @@
 // Ascent — Dashboard + Event Detail
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, QRCode, PosterPlaceholder } from './shared';
 
-export function Dashboard({ onNav }) {
+export function Dashboard() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={16} dimAmount={0.78}>
-      <NavBar variant="app" active="dashboard" onNav={onNav} />
+      <NavBar variant="app" active="dashboard" />
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         {/* Welcome header */}
         <div className="fade-up" style={{
@@ -27,7 +29,7 @@ export function Dashboard({ onNav }) {
           </div>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <a className="chip teal"><span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)' }}/> All systems go</a>
-            <a onClick={() => onNav('report')} className="btn ghost sm">Report issue</a>
+            <a onClick={() => navigate('/report')} className="btn ghost sm">Report issue</a>
           </div>
         </div>
 
@@ -44,7 +46,7 @@ export function Dashboard({ onNav }) {
             <div className="glass" style={{ padding: isMobile ? 18 : 26 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div className="eyebrow">§ REGISTERED EVENTS</div>
-                <a onClick={() => onNav('explore')} style={{ fontSize: 11, color: 'var(--violet)', cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>BROWSE →</a>
+                <a onClick={() => navigate('/explore')} style={{ fontSize: 11, color: 'var(--violet)', cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>BROWSE →</a>
               </div>
               <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {[
@@ -52,7 +54,7 @@ export function Dashboard({ onNav }) {
                   { name: 'Circuit Rush', cat: 'HARDWARE', venue: 'Robotics Lab', status: 'Tomorrow · 14:00', tone: 'teal' },
                   { name: 'Design Jam', cat: 'DESIGN', venue: 'Studio B', status: 'Tomorrow · 10:00', tone: 'amber' },
                 ].map((ev, i) => (
-                  <div key={i} onClick={() => onNav('event-detail')} style={{
+                  <div key={i} onClick={() => navigate('/event-detail')} style={{
                     display: 'grid',
                     gridTemplateColumns: isMobile ? '44px 1fr' : '52px 1fr auto',
                     alignItems: 'center', gap: 12,
@@ -94,7 +96,7 @@ export function Dashboard({ onNav }) {
             <div className="glass" style={{ padding: isMobile ? 18 : 26 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div className="eyebrow">§ TODAY'S TIMELINE</div>
-                <a onClick={() => onNav('schedule')} style={{ fontSize: 11, color: 'var(--violet)', cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>FULL →</a>
+                <a onClick={() => navigate('/schedule')} style={{ fontSize: 11, color: 'var(--violet)', cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>FULL →</a>
               </div>
               <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column' }}>
                 {[
@@ -176,7 +178,7 @@ export function Dashboard({ onNav }) {
             <div className="glass" style={{ padding: isMobile ? 18 : 26 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div className="eyebrow">§ ANNOUNCEMENTS</div>
-                <a onClick={() => onNav('announcements')} style={{ fontSize: 11, color: 'var(--violet)', cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>ALL →</a>
+                <a onClick={() => navigate('/announcements')} style={{ fontSize: 11, color: 'var(--violet)', cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>ALL →</a>
               </div>
               <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {[
@@ -204,12 +206,12 @@ export function Dashboard({ onNav }) {
 
             {/* Mini actions */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <div onClick={() => onNav('leaderboard')} className="glass" style={{ padding: 18, cursor: 'pointer' }}>
+              <div onClick={() => navigate('/leaderboard')} className="glass" style={{ padding: 18, cursor: 'pointer' }}>
                 <div className="eyebrow" style={{ color: 'var(--teal)' }}>YOUR RANK</div>
                 <div className="display" style={{ fontSize: 32, marginTop: 8 }}>#47</div>
                 <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 4, fontFamily: 'var(--f-mono)' }}>↑ 12 SINCE YESTERDAY</div>
               </div>
-              <div onClick={() => onNav('mirage')} className="glass" style={{ padding: 18, cursor: 'pointer' }}>
+              <div onClick={() => navigate('/mirage')} className="glass" style={{ padding: 18, cursor: 'pointer' }}>
                 <div className="eyebrow" style={{ color: 'var(--violet)' }}>MIRAGE</div>
                 <div className="display" style={{ fontSize: 32, marginTop: 8 }}>248</div>
                 <div style={{ fontSize: 10, color: 'var(--ink-mute)', marginTop: 4, fontFamily: 'var(--f-mono)' }}>NEW PHOTOS TODAY</div>
@@ -225,8 +227,9 @@ export function Dashboard({ onNav }) {
 // ─────────────────────────────────────────────────────────────
 // Event Detail
 // ─────────────────────────────────────────────────────────────
-export function EventDetail({ onNav }) {
+export function EventDetail() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const [selectedRound, setSelectedRound] = React.useState(1);
   const rounds = [
     { n: 'Kickoff', t: '10:00', state: 'done', desc: 'Opening ceremony and theme reveal.' },
@@ -239,9 +242,9 @@ export function EventDetail({ onNav }) {
 
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="explore" onNav={onNav} />
+      <NavBar variant="app" active="explore" />
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: isMobile ? '20px 16px 60px' : '32px 28px 80px' }}>
-        <a onClick={() => onNav('dashboard')} style={{ color: 'var(--ink-mute)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>← DASHBOARD</a>
+        <a onClick={() => navigate('/dashboard')} style={{ color: 'var(--ink-mute)', fontSize: 12, cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>← DASHBOARD</a>
 
         <div style={{
           marginTop: 20,
@@ -437,7 +440,7 @@ export function EventDetail({ onNav }) {
                 ))}
               </div>
             </div>
-            <a onClick={() => onNav('rating')} className="btn sm ghost">Rate this event →</a>
+            <a onClick={() => navigate('/rating')} className="btn sm ghost">Rate this event →</a>
           </div>
         </div>
       </div>

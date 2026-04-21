@@ -20,3 +20,4 @@ The design medium is **HTML/CSS/JS** — these are prototypes, not production co
 
 - `ascent/README.md` — this file
 - `ascent/project/` — the `Ascent` project files (HTML prototypes, assets, components)
+

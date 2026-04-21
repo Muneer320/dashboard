@@ -1,0 +1,166 @@
+import React, { useState } from 'react'
+import { useAuth } from '../../context/AuthContext'
+import { useData } from '../../context/DataContext'
+import ConfirmModal from '../ConfirmModal'
+import './Participants.css'
+
+export default function Participants() {
+  const { user, isAdmin } = useAuth()
+  const { events, participants, updateParticipantStatus } = useData()
+
+  const [selectedEvent, setSelectedEvent] = useState('all')
+  const [searchQuery, setSearchQuery]     = useState('')
+  const [confirmState, setConfirmState]   = useState(null) // { participantId, newStatus, name }
+
+  // For event manager: only show their events
+  const visibleEvents = isAdmin
+    ? events
+    : events.filter(ev => user?.events?.includes(ev.name))
+
+  const allOption = isAdmin ? 'all' : null
+
+  // Participants filtered by event access + selected event + search
+  const filtered = participants.filter(p => {
+    const accessOk = isAdmin
+      ? true
+      : user?.events?.includes(p.event)
+
+    const eventOk = selectedEvent === 'all'
+      ? true
+      : p.event === selectedEvent
+
+    const searchOk = searchQuery.trim() === ''
+      ? true
+      : p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.email.toLowerCase().includes(searchQuery.toLowerCase())
+
+    return accessOk && eventOk && searchOk
+  })
+
+  function handleStatusToggle(p) {
+    const newStatus = p.status === 'participating' ? 'restricted' : 'participating'
+    setConfirmState({ participantId: p.id, newStatus, name: p.name })
+  }
+
+  function confirmChange() {
+    if (confirmState) {
+      updateParticipantStatus(confirmState.participantId, confirmState.newStatus)
+      setConfirmState(null)
+    }
+  }
+
+  return (
+    <div className="participants-page fade-in">
+      {/* Filters */}
+      <div className="filters-row">
+        <div className="event-tabs">
+          {allOption && (
+            <button
+              className={`event-tab${selectedEvent === 'all' ? ' active' : ''}`}
+              onClick={() => setSelectedEvent('all')}
+            >
+              All Events
+            </button>
+          )}
+          {visibleEvents.map(ev => (
+            <button
+              key={ev.id}
+              className={`event-tab${selectedEvent === ev.name ? ' active' : ''}`}
+              onClick={() => setSelectedEvent(ev.name)}
+            >
+              {ev.name}
+              <span className="tab-count">
+                {participants.filter(p => p.event === ev.name && (isAdmin || user?.events?.includes(p.event))).length}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="search-wrap">
+          <svg className="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            className="input-field search-input"
+            type="text"
+            placeholder="Search by name or email..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            id="participants-search"
+          />
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        {filtered.length === 0 ? (
+          <div className="empty-state">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            <p>No participants found.</p>
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Event</th>
+                <th>Team</th>
+                <th>Attended</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p, idx) => (
+                <tr key={p.id}>
+                  <td style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{idx + 1}</td>
+                  <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{p.name}</td>
+                  <td style={{ fontSize: '0.8rem' }}>{p.email}</td>
+                  <td><span className="badge badge-accent">{p.event}</span></td>
+                  <td style={{ fontSize: '0.82rem' }}>{p.teamName || '—'}</td>
+                  <td>
+                    <span className={`badge ${p.attended ? 'badge-success' : 'badge-warning'}`}>
+                      {p.attended ? 'Yes' : 'No'}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`badge ${p.status === 'participating' ? 'badge-success' : 'badge-danger'}`}>
+                      {p.status === 'participating' ? 'Participating' : 'Restricted'}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      id={`status-toggle-${p.id}`}
+                      className={`btn btn-sm ${p.status === 'participating' ? 'btn-danger' : 'btn-success'}`}
+                      onClick={() => handleStatusToggle(p)}
+                    >
+                      {p.status === 'participating' ? 'Restrict' : 'Restore'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Confirm modal */}
+      {confirmState && (
+        <ConfirmModal
+          title="Change Participant Status"
+          message={
+            confirmState.newStatus === 'restricted'
+              ? `Are you sure you want to restrict ${confirmState.name}? They will lose access to the event.`
+              : `Restore ${confirmState.name} back to participating status?`
+          }
+          confirmLabel={confirmState.newStatus === 'restricted' ? 'Restrict' : 'Restore'}
+          isDanger={confirmState.newStatus === 'restricted'}
+          onConfirm={confirmChange}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
+    </div>
+  )
+}

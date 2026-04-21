@@ -6,7 +6,6 @@ class UnstopUserItem(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     name: str = Field(min_length=1, max_length=255)
     details: dict = Field(default_factory=dict)
-    access_level: str = Field(default="ROUND1")
     is_profile_complete: bool = False
 
 

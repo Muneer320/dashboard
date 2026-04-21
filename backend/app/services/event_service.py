@@ -61,11 +61,9 @@ async def register_for_event(session: AsyncSession, user: User, event: Event) ->
         "phase": 1,
         "status": "active",             # active | completed | eliminated
         "restricted": False,            # set True to ban from further participation
-        "submission": False,
-        "submissionType": None,         # "url" | "file"
-        "submissionURL": None,
-        "submissionFile": None,
-        "submissionTime": None,
+        # submission: null = not submitted; object = submitted
+        # Shape: { repoLink: str, deployLink: str, submittedAt: iso | null }
+        "submission": None,
         "teamId": None,                 # assigned when the user joins a team for this event
         "score": 0,
         "rank": None,

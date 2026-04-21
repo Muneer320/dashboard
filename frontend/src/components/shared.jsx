@@ -1,5 +1,6 @@
 // Ascent — Shared UI components
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 // ─────────────────────────────────────────────────────────────
 // Responsive hook
@@ -55,14 +56,24 @@ export function AscentLogo({ size = 22, withMark = true }) {
 // ─────────────────────────────────────────────────────────────
 // Sticky Navbar used across all app-internal pages
 // ─────────────────────────────────────────────────────────────
-export function NavBar({ active, onNav, variant = 'app' }) {
+export function NavBar({ active, variant = 'app' }) {
   const isMobile = useMobile();
   const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
   const appItems = ['Dashboard', 'Schedule', 'Explore', 'Leaderboard', 'Mirage', 'Announcements'];
   const publicItems = ['Overview', 'Events', 'Sponsors', 'FAQ'];
   const items = variant === 'app' ? appItems : publicItems;
 
-  const navClick = (key) => { onNav && onNav(key); setMenuOpen(false); };
+  const navClick = (key) => {
+    const routes = {
+      dashboard: '/dashboard', schedule: '/schedule', explore: '/explore',
+      leaderboard: '/leaderboard', mirage: '/mirage', announcements: '/announcements',
+      landing: '/', overview: '/', events: '/explore', sponsors: '/', faq: '/',
+      login: '/login', credentials: '/credentials', 'event-detail': '/event-detail',
+    };
+    navigate(routes[key] ?? `/${key}`);
+    setMenuOpen(false);
+  };
 
   return (
     <>

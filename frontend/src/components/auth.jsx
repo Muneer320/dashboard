@@ -1,19 +1,21 @@
 // Ascent — Auth pages: Login + Get Credentials
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMobile, PageBackground, AscentLogo } from './shared';
 
-export function Login({ onNav }) {
+export function Login() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const [email, setEmail] = React.useState('');
   const [pw, setPw] = React.useState('');
   const AUTH_BG = 'uploads/auth_scene.png';
   return (
     <PageBackground bgImage={AUTH_BG} blurAmount={14} dimAmount={0.65}>
       <div style={{ padding: isMobile ? '16px 20px' : '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div onClick={() => onNav('landing')} style={{ cursor: 'pointer' }}>
+        <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <AscentLogo size={18} />
         </div>
-        <a onClick={() => onNav('credentials')} style={{ color: 'var(--ink-dim)', fontSize: isMobile ? 10 : 12, cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>
+        <a onClick={() => navigate('/credentials')} style={{ color: 'var(--ink-dim)', fontSize: isMobile ? 10 : 12, cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>
           {isMobile ? 'GET CREDS →' : 'NEED CREDENTIALS? →'}
         </a>
       </div>
@@ -43,7 +45,7 @@ export function Login({ onNav }) {
               <input className="input" type="password" placeholder="••••••••••" value={pw} onChange={e => setPw(e.target.value)} />
             </div>
 
-            <button onClick={() => onNav('dashboard')} className="btn primary" style={{ width: '100%', marginTop: 26, padding: '14px', fontSize: 13 }}>
+            <button onClick={() => navigate('/dashboard')} className="btn primary" style={{ width: '100%', marginTop: 26, padding: '14px', fontSize: 13 }}>
               Enter Ascent →
             </button>
 
@@ -70,8 +72,9 @@ export function Login({ onNav }) {
   );
 }
 
-export function Credentials({ onNav }) {
+export function Credentials() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const [submitted, setSubmitted] = React.useState(false);
   const [form, setForm] = React.useState({ name: '', college: '', email: '', phone: '', events: [] });
   const eventOpts = ['Hack Night', 'Circuit Rush', 'Pitch./Dev', 'Code Clash', 'Design Jam', 'Robo Wars', 'Mirage Walk', 'Quantum Quiz'];
@@ -84,7 +87,7 @@ export function Credentials({ onNav }) {
     return (
       <PageBackground bgImage={AUTH_BG} blurAmount={14} dimAmount={0.65}>
         <div style={{ padding: isMobile ? '16px 20px' : '22px 28px' }}>
-          <div onClick={() => onNav('landing')} style={{ cursor: 'pointer', width: 'fit-content' }}>
+          <div onClick={() => navigate('/')} style={{ cursor: 'pointer', width: 'fit-content' }}>
             <AscentLogo size={18} />
           </div>
         </div>
@@ -108,7 +111,7 @@ export function Credentials({ onNav }) {
               land in your inbox within 24 hours. Keep an eye on <span style={{ color: 'var(--ink)' }}>{form.email || 'your email'}</span>.
             </div>
             <div style={{ marginTop: 30, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <a onClick={() => onNav('landing')} className="btn sm">← Back home</a>
+              <a onClick={() => navigate('/')} className="btn sm">← Back home</a>
               <a onClick={() => setSubmitted(false)} className="btn ghost sm">Submit another</a>
             </div>
             <div style={{ marginTop: 32, padding: 16, borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
@@ -123,10 +126,10 @@ export function Credentials({ onNav }) {
   return (
     <PageBackground bgImage={AUTH_BG} blurAmount={14} dimAmount={0.65}>
       <div style={{ padding: isMobile ? '16px 20px' : '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div onClick={() => onNav('landing')} style={{ cursor: 'pointer' }}>
+        <div onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <AscentLogo size={18} />
         </div>
-        <a onClick={() => onNav('login')} style={{ color: 'var(--ink-dim)', fontSize: isMobile ? 10 : 12, cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>
+        <a onClick={() => navigate('/login')} style={{ color: 'var(--ink-dim)', fontSize: isMobile ? 10 : 12, cursor: 'pointer', fontFamily: 'var(--f-mono)', letterSpacing: '0.1em' }}>
           {isMobile ? 'LOGIN →' : 'ALREADY HAVE ACCESS? →'}
         </a>
       </div>

@@ -1,9 +1,11 @@
 // Ascent — Mirage gallery, Announcements, Lost & Found
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, ImgPlaceholder } from './shared';
 
-export function Mirage({ onNav }) {
+export function Mirage() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const cats = ['All', 'Hack Night', 'Circuit Rush', 'Keynote', 'Opening', 'Campus'];
   const [cat, setCat] = React.useState('All');
   const [lightbox, setLightbox] = React.useState(null);
@@ -18,7 +20,7 @@ export function Mirage({ onNav }) {
 
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="mirage" onNav={onNav} />
+      <NavBar variant="app" active="mirage" />
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: 12 }}>
           <div>
@@ -78,8 +80,9 @@ export function Mirage({ onNav }) {
   );
 }
 
-export function Announcements({ onNav }) {
+export function Announcements() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const posts = [
     { pin: true, t: 'HACK NIGHT BRIEF OUT', when: '2 min ago', body: 'Theme: Resilience. Deliverables live on the team portal. Judges visit at 14:00, 18:00, 22:00 and 02:00. Please be ready with a 60-second intro.' },
     { pin: true, t: 'LUNCH DELAYED TO 13:00', when: '14 min ago', body: "Kitchen is behind by ~30 minutes. Food QR still active. We'll ping again the moment counters open." },
@@ -90,7 +93,7 @@ export function Announcements({ onNav }) {
   ];
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="announcements" onNav={onNav} />
+      <NavBar variant="app" active="announcements" />
       <div style={{ maxWidth: 880, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ ORGANIZER BROADCAST</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>Notice board.</h1>
@@ -122,8 +125,9 @@ export function Announcements({ onNav }) {
   );
 }
 
-export function LostFound({ onNav }) {
+export function LostFound() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const [tab, setTab] = React.useState('lost');
   const items = {
     lost: [
@@ -140,7 +144,7 @@ export function LostFound({ onNav }) {
   };
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="" onNav={onNav} />
+      <NavBar variant="app" active="" />
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ LOST &amp; FOUND</div>
         <h1 className="display" style={{ fontSize: isMobile ? 36 : 56, marginTop: 14, letterSpacing: '-0.02em' }}>Something missing?</h1>

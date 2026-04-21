@@ -1,0 +1,122 @@
+.myevents-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.events-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Event block */
+.event-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.event-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.event-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.event-block-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.event-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.event-mini-stats {
+  display: flex;
+  gap: 20px;
+}
+.mini-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.mini-val   { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); }
+.mini-label { font-size: 0.68rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Submissions table */
+.submissions-table {}
+
+.submission-row {
+  transition: background 0.15s;
+}
+.submission-row.clickable {
+  cursor: pointer;
+}
+.submission-row.clickable:hover td {
+  background: var(--bg-hover);
+}
+.submission-row.expanded td {
+  background: var(--bg-elevated);
+}
+
+.expand-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+}
+.expand-arrow.open {
+  transform: rotate(180deg);
+  color: var(--accent-light);
+}
+
+/* Submission detail */
+.submission-detail-row td {
+  background: var(--bg-elevated) !important;
+  border-bottom: 1px solid var(--border);
+  padding-top: 0 !important;
+}
+.submission-links {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0 14px;
+}
+.submission-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--accent-light);
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 500;
+  transition: all 0.18s;
+}
+.submission-link:hover:not(.disabled-link) {
+  background: var(--accent-dim);
+  border-color: var(--border-accent);
+}
+.submission-link.disabled-link {
+  color: var(--text-muted);
+  cursor: default;
+  pointer-events: none;
+}

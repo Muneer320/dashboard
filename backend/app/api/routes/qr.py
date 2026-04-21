@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_scanner_or_above
 from app.db.session import get_db_session
+from app.models.admin import Admin
 from app.models.user import User
 from app.schemas.qr import QRScanRequest, QRScanResponse
 from app.services.event_service import get_event
@@ -16,13 +17,8 @@ router = APIRouter()
 async def scan_qr(
     payload: QRScanRequest,
     session: AsyncSession = Depends(get_db_session),
-    scanner: User = Depends(get_current_user),
+    _: Admin = Depends(get_scanner_or_above),  # scanner, eventManager, or admin only
 ) -> QRScanResponse:
-    allowed_roles = {"scanner", "admin", "superAdmin", "eventManage", "EM"}
-    if scanner.role.value not in allowed_roles:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Scanner role required")
-
     target_user = await get_user_by_id(session, payload.user_id)
 
     if payload.mode == "collegeEntry":

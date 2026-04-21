@@ -12,7 +12,8 @@ router = APIRouter()
 
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, session: AsyncSession = Depends(get_db_session)) -> TokenResponse:
-    token = await login_with_credentials(session, payload.username, payload.password)
+    # payload.email is the user's email address, which organisers set as the username
+    token = await login_with_credentials(session, payload.email, payload.password)
     return TokenResponse(access_token=token)
 
 
@@ -25,7 +26,7 @@ async def register(payload: RegisterRequest, session: AsyncSession = Depends(get
         name=payload.name,
         unstop_id=payload.unstop_id,
     )
-    return RegisterResponse(id=str(user.id), username=user.username, name=user.name, role=user.role.value)
+    return RegisterResponse(id=str(user.id), username=user.username, name=user.name)
 
 
 @router.get("/me", response_model=MeResponse)
@@ -34,5 +35,5 @@ async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
         id=str(current_user.id),
         username=current_user.username,
         name=current_user.name,
-        role=current_user.role.value,
+        is_attending=current_user.is_attending,
     )

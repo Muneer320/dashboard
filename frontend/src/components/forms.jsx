@@ -1,9 +1,11 @@
 // Ascent — Rating, Feedback, Report Issue
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground } from './shared';
 
-export function Rating({ onNav }) {
+export function Rating() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const [stars, setStars] = React.useState(0);
   const [hover, setHover] = React.useState(0);
   const events = [
@@ -14,7 +16,7 @@ export function Rating({ onNav }) {
   ];
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="" onNav={onNav} />
+      <NavBar variant="app" active="" />
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ RATE &amp; REVIEW</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 56, marginTop: 14, letterSpacing: '-0.02em' }}>How was it?</h1>
@@ -109,13 +111,14 @@ export function Rating({ onNav }) {
   );
 }
 
-export function Feedback({ onNav }) {
+export function Feedback() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const sliders = ['Organization', 'Food', 'Events', 'Ambiance', 'Communication'];
   const [vals, setVals] = React.useState(Object.fromEntries(sliders.map(s => [s, 7])));
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="" onNav={onNav} />
+      <NavBar variant="app" active="" />
       <div style={{ maxWidth: 820, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ OVERALL FEEDBACK · ANONYMOUS</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 56, marginTop: 14, letterSpacing: '-0.02em' }}>Be honest.</h1>
@@ -166,8 +169,9 @@ export function Feedback({ onNav }) {
   );
 }
 
-export function Report({ onNav }) {
+export function Report() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
   const [cat, setCat] = React.useState('Technical');
   const cats = ['Technical', 'Food', 'Venue', 'Safety', 'Other'];
   const tracked = [
@@ -178,7 +182,7 @@ export function Report({ onNav }) {
   const stateColor = { 'resolved': 'var(--teal)', 'in-progress': 'var(--amber)', 'received': 'var(--violet)' };
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="" onNav={onNav} />
+      <NavBar variant="app" active="" />
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ REPORT AN ISSUE</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 56, marginTop: 14, letterSpacing: '-0.02em' }}>Tell ops.</h1>

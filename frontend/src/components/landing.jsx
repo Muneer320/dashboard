@@ -1,8 +1,10 @@
 // Ascent — Landing Page
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, Countdown, NumberCounter, PosterPlaceholder, Footer } from './shared';
 
-export default function Landing({ onNav }) {
+export default function Landing() {
+  const navigate = useNavigate();
   const isMobile = useMobile();
   const heroRef = React.useRef(null);
   const [mouse, setMouse] = React.useState({ x: 0.5, y: 0.5 });
@@ -25,7 +27,7 @@ export default function Landing({ onNav }) {
 
   return (
     <PageBackground>
-      <NavBar variant="public" active="overview" onNav={onNav} />
+      <NavBar variant="public" active="overview" />
 
       {/* ─────────────── HERO ─────────────── */}
       <section
@@ -139,11 +141,11 @@ export default function Landing({ onNav }) {
           marginTop: 36, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center',
           position: 'relative', zIndex: 2,
         }}>
-          <a onClick={() => onNav('credentials')} className="btn primary" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
+          <a onClick={() => navigate('/credentials')} className="btn primary" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
             Get Credentials
             <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, opacity: 0.7 }}>→</span>
           </a>
-          <a onClick={() => onNav('login')} className="btn" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
+          <a onClick={() => navigate('/login')} className="btn" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
             Login
           </a>
         </div>
@@ -289,7 +291,7 @@ export default function Landing({ onNav }) {
                 This year's headliners.
               </h2>
             </div>
-            <a onClick={() => onNav('explore')} className="btn sm">See all 24 events →</a>
+            <a onClick={() => navigate('/explore')} className="btn sm">See all 24 events →</a>
           </div>
           <div style={{
             display: 'grid',

@@ -1,29 +1,44 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_admin_only, get_current_user
 from app.db.session import get_db_session
+from app.models.admin import Admin
 from app.models.user import User
-from app.schemas.user import UserAccessResponse, UserEventsResponse, UserProfileUpdate, UserResponse
-from app.services.user_service import get_user_access_payload, get_user_by_id, get_user_events_payload, update_user_profile
+from app.schemas.meals import MealSlot
+from app.schemas.user import UserEventsResponse, UserProfileUpdate, UserResponse
+from app.services.user_service import get_user_by_id, get_user_events_payload, update_user_profile
+from app.services.qr_service import scan_food
 
 router = APIRouter()
 
 
-@router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: str, session: AsyncSession = Depends(get_db_session), _: User = Depends(get_current_user)) -> UserResponse:
-    user = await get_user_by_id(session, user_id)
+def _build_user_response(user: User) -> UserResponse:
     return UserResponse(
         id=str(user.id),
         username=user.username,
         name=user.name,
+        is_attending=user.is_attending,
         details=user.details or {},
         events=user.events or {},
         food=user.food or {},
-        access_level=user.access_level.value,
-        role=user.role.value,
         is_profile_complete=user.is_profile_complete,
+        cents=user.cents,
     )
+
+
+@router.get("/{user_id}", response_model=UserResponse)
+async def get_user(
+    user_id: str,
+    session: AsyncSession = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+) -> UserResponse:
+    # Users can only fetch their own profile; admins (via Admin JWT) can fetch anyone
+    if str(current_user.id) != user_id:
+        user = await get_user_by_id(session, user_id)
+    else:
+        user = current_user
+    return _build_user_response(user)
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
@@ -33,23 +48,14 @@ async def patch_user(
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
-    user = await get_user_by_id(session, user_id)
-
-    if str(current_user.id) != str(user.id) and current_user.role.value != "admin":
+    if str(current_user.id) != user_id:
+        # Non-matching ID falls back to updating the calling user's own profile
         user = current_user
+    else:
+        user = await get_user_by_id(session, user_id)
 
     updated = await update_user_profile(session, user, payload.model_dump(exclude_unset=True))
-    return UserResponse(
-        id=str(updated.id),
-        username=updated.username,
-        name=updated.name,
-        details=updated.details or {},
-        events=updated.events or {},
-        food=updated.food or {},
-        access_level=updated.access_level.value,
-        role=updated.role.value,
-        is_profile_complete=updated.is_profile_complete,
-    )
+    return _build_user_response(updated)
 
 
 @router.get("/{user_id}/events", response_model=UserEventsResponse)
@@ -58,23 +64,77 @@ async def get_user_events(
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ) -> UserEventsResponse:
-    user = await get_user_by_id(session, user_id)
-    if str(current_user.id) != str(user.id) and current_user.role.value != "admin":
+    if str(current_user.id) != user_id:
         user = current_user
+    else:
+        user = await get_user_by_id(session, user_id)
 
     payload = get_user_events_payload(user)
     return UserEventsResponse(**payload)
 
 
-@router.get("/{user_id}/access", response_model=UserAccessResponse)
-async def get_user_access(
+# ── Meals ──────────────────────────────────────────────────────────────────────
+
+_MEAL_LABELS: dict[str, str] = {
+    "meal1": "Breakfast",
+    "meal2": "Lunch",
+    "meal3": "Dinner",
+}
+
+
+@router.get("/{user_id}/meals", response_model=list[MealSlot])
+async def get_user_meals(
     user_id: str,
     session: AsyncSession = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
-) -> UserAccessResponse:
-    user = await get_user_by_id(session, user_id)
-    if str(current_user.id) != str(user.id) and current_user.role.value != "admin":
-        user = current_user
+) -> list[MealSlot]:
+    """
+    Return the three meal slots and their collection status for a user.
+    Users may only read their own meals.
+    """
+    if str(current_user.id) != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own meal status",
+        )
+    food = current_user.food or {"meal1": False, "meal2": False, "meal3": False}
+    return [
+        MealSlot(slot=slot, label=label, collected=bool(food.get(slot, False)))
+        for slot, label in _MEAL_LABELS.items()
+    ]
 
-    payload = get_user_access_payload(user)
-    return UserAccessResponse(**payload)
+
+class MealMarkRequest:
+    """Thin namespace; body validated inline."""
+    pass
+
+
+from pydantic import BaseModel as _BM
+
+class _MealMarkBody(_BM):
+    meal: str   # "meal1" | "meal2" | "meal3"
+
+
+@router.post("/{user_id}/meals/mark", response_model=list[MealSlot])
+async def admin_mark_meal(
+    user_id: str,
+    body: _MealMarkBody,
+    session: AsyncSession = Depends(get_db_session),
+    _: Admin = Depends(get_admin_only),
+) -> list[MealSlot]:
+    """
+    Admin-only: manually mark a meal slot as collected for a user.
+    Useful when the QR scanner is unavailable.
+    """
+    if body.meal not in _MEAL_LABELS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid meal slot '{body.meal}'. Must be one of: {list(_MEAL_LABELS)}",
+        )
+    target = await get_user_by_id(session, user_id)
+    msg = await scan_food(session, target, body.meal)
+    food = target.food or {"meal1": False, "meal2": False, "meal3": False}
+    return [
+        MealSlot(slot=slot, label=label, collected=bool(food.get(slot, False)))
+        for slot, label in _MEAL_LABELS.items()
+    ]
