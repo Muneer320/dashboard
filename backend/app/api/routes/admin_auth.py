@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_admin
 from app.db.session import get_db_session
 from app.models.admin import Admin
-from app.schemas.auth import LoginRequest, TokenResponse
+from app.schemas.auth import TokenResponse
 from app.services.admin_auth_service import admin_login
 
 router = APIRouter()
@@ -19,9 +19,14 @@ class AdminMeResponse(BaseModel):
     mail: str
 
 
+class AdminLoginRequest(BaseModel):
+    """Admin panel login — uses username (not email) to authenticate."""
+    username: str
+    password: str
+
 @router.post("/login", response_model=TokenResponse)
 async def admin_login_endpoint(
-    payload: LoginRequest,
+    payload: AdminLoginRequest,
     session: AsyncSession = Depends(get_db_session),
 ) -> TokenResponse:
     """Login for admin, eventManager, and scanner accounts."""

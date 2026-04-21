@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     admin, admin_auth, admin_panel, announcements, auth, credentials,
-    events, health, qr, ratings, schedule, submissions, users,
+    events, feedback, health, qr, ratings, schedule, submissions, users,
 )
 
 api_router = APIRouter()
@@ -21,3 +21,4 @@ api_router.include_router(admin_panel.router, prefix="/admin-panel", tags=["admi
 api_router.include_router(schedule.router, prefix="/schedule", tags=["schedule"])
 api_router.include_router(credentials.router, prefix="/credentials-requests", tags=["credentials"])
 api_router.include_router(announcements.router, prefix="/announcements", tags=["announcements"])
+api_router.include_router(feedback.router, prefix="/feedback", tags=["feedback"])

@@ -11,7 +11,8 @@ import ContactInfo from './tabs/ContactInfo'
 import './Dashboard.css'
 
 export default function Dashboard() {
-  const { canAccess } = useAuth()
+  const { canAccess, user } = useAuth()
+  const defaultTab = user?.role === 'Scanner' ? '/admin/dashboard/scanner' : '/admin/dashboard/overview'
 
   return (
     <div className="app-shell">
@@ -20,13 +21,13 @@ export default function Dashboard() {
         <Topbar />
         <main className="page-area">
           <Routes>
-            <Route path="/" element={<Navigate to="/admin/dashboard/overview" replace />} />
+            <Route path="/" element={<Navigate to={defaultTab} replace />} />
+            <Route path="*" element={<Navigate to={defaultTab} replace />} />
             <Route path="overview"     element={canAccess('overview')     ? <Overview />     : <Forbidden />} />
             <Route path="participants" element={canAccess('participants') ? <Participants />  : <Forbidden />} />
             <Route path="scanner/*"    element={canAccess('scanner')     ? <Scanner />      : <Forbidden />} />
             <Route path="events"       element={canAccess('myEvents')    ? <MyEvents />     : <Forbidden />} />
             <Route path="contact"      element={canAccess('contactInfo') ? <ContactInfo />  : <Forbidden />} />
-            <Route path="*"            element={<Navigate to="/admin/dashboard/overview" replace />} />
           </Routes>
         </main>
       </div>

@@ -1,19 +1,47 @@
 // Ascent — Rating, Feedback, Report Issue
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground } from './shared';
+import { events as eventsApi, feedback as feedbackApi } from '../lib/api';
+
+// Slider label → backend JSON key mapping. Must match the FeedbackScores schema
+// in backend/app/schemas/feedback.py.
+const FEEDBACK_SLIDERS = [
+  ['Organization',  'organization'],
+  ['Food',          'food'],
+  ['Events',        'events'],
+  ['Ambiance',      'ambiance'],
+  ['Communication', 'communication'],
+];
 
 export function Rating() {
   const isMobile = useMobile();
   const navigate = useNavigate();
-  const [stars, setStars] = React.useState(0);
-  const [hover, setHover] = React.useState(0);
-  const events = [
-    { n: 'Hack Night', avg: 4.8, count: 342, mine: 5, reviewed: true },
-    { n: 'Design Jam', avg: 4.6, count: 198, mine: 4, reviewed: true },
-    { n: 'Circuit Rush', avg: 4.3, count: 214, mine: 0, reviewed: false, active: true },
-    { n: 'Code Clash', avg: 4.5, count: 287, mine: 0, reviewed: false },
-  ];
+  const [searchParams] = useSearchParams();
+  const eventId = searchParams.get('event_id'); // passed from EventDetail rate button
+
+  const [stars, setStars]     = React.useState(0);
+  const [hover, setHover]     = React.useState(0);
+  const [feedback, setFeedback] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [success, setSuccess] = React.useState(false);
+  const [error, setError]     = React.useState('');
+
+  async function handleSubmit() {
+    if (!eventId) { setError('No event selected. Go back and click Rate from an event page.'); return; }
+    if (!stars)   { setError('Please pick a star rating first.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      await eventsApi.rating(eventId, { value: stars, feedback: feedback.trim() || null });
+      setSuccess(true);
+    } catch (e) {
+      setError(e.message || 'Submission failed.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="" />
@@ -26,85 +54,60 @@ export function Rating() {
 
         {/* Active rating card */}
         <div className="glass-strong fade-up" style={{ marginTop: 32, padding: isMobile ? 20 : 32 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 16 }}>
-            <div>
-              <span className="chip teal">JUST CONCLUDED</span>
-              <div className="display" style={{ fontSize: isMobile ? 26 : 34, marginTop: 12, letterSpacing: '-0.02em' }}>Circuit Rush</div>
+          {success ? (
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <div style={{ fontSize: 40 }}>✓</div>
+              <div className="display" style={{ fontSize: 28, marginTop: 12 }}>Thanks for the feedback!</div>
+              <div style={{ marginTop: 10, color: 'var(--ink-dim)', fontSize: 14 }}>Your rating has been saved.</div>
+              <button onClick={() => navigate(-1)} className="btn sm" style={{ marginTop: 20 }}>← Go back</button>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>AGGREGATE</div>
-              <div className="display" style={{ fontSize: 24 }}>★ 4.3</div>
-              <div style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>214 REVIEWS</div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 24, display: 'flex', gap: isMobile ? 6 : 8, flexWrap: 'wrap' }}>
-            {[1,2,3,4,5].map(i => {
-              const lit = (hover || stars) >= i;
-              return (
-                <div key={i} onClick={() => setStars(i)} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)} style={{
-                  width: isMobile ? 44 : 48, height: isMobile ? 44 : 48, display: 'grid', placeItems: 'center',
-                  borderRadius: 10,
-                  border: lit ? '1px solid rgba(127,119,221,0.5)' : '1px solid var(--glass-border)',
-                  background: lit ? 'rgba(127,119,221,0.15)' : 'rgba(255,255,255,0.02)',
-                  color: lit ? 'var(--violet)' : 'var(--ink-mute)',
-                  fontSize: isMobile ? 20 : 22, cursor: 'pointer',
-                  transition: 'all .15s',
-                }}>★</div>
-              );
-            })}
-          </div>
-
-          <textarea className="input" rows={3} style={{ marginTop: 20 }} placeholder="Anything specific? (optional)" />
-
-          <div style={{ marginTop: 20, display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 12 }}>
-            <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>Reviews are public. Tag your team if you want.</div>
-            <button className="btn primary" style={{ width: isMobile ? '100%' : 'auto' }}>Submit review →</button>
-          </div>
-        </div>
-
-        {/* Other events */}
-        <div style={{ marginTop: 36 }}>
-          <div className="eyebrow">§ OTHER EVENTS YOU ATTENDED</div>
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {events.map((e, i) => (
-              <div key={i} className="glass" style={{ padding: isMobile ? 14 : 18 }}>
-                {isMobile ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontFamily: 'var(--f-display)', fontSize: 15, fontWeight: 600 }}>{e.n}</div>
-                      <a className="btn sm">{e.reviewed ? 'Edit' : 'Rate →'}</a>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', gap: 2 }}>
-                        {[1,2,3,4,5].map(j => <span key={j} style={{ color: j <= e.mine ? 'var(--violet)' : 'var(--ink-faint)', fontSize: 14 }}>★</span>)}
-                      </div>
-                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: e.reviewed ? 'var(--teal)' : 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-                        {e.reviewed ? '✓ REVIEWED' : 'PENDING'}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>AGG ★ {e.avg} · {e.count} REVIEWS</div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 16 }}>
+                <div>
+                  <span className="chip teal">{eventId ? 'SELECTED EVENT' : 'NO EVENT SELECTED'}</span>
+                  <div className="display" style={{ fontSize: isMobile ? 26 : 34, marginTop: 12, letterSpacing: '-0.02em' }}>
+                    {eventId ? `Event ID: ${eventId.slice(0,8)}…` : 'Pick an event'}
                   </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto 140px', alignItems: 'center', gap: 20 }}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, fontWeight: 600 }}>{e.n}</div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>
-                        AGG ★ {e.avg} · {e.count} REVIEWS
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 2 }}>
-                      {[1,2,3,4,5].map(j => <span key={j} style={{ color: j <= e.mine ? 'var(--violet)' : 'var(--ink-faint)' }}>★</span>)}
-                    </div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: e.reviewed ? 'var(--teal)' : 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-                      {e.reviewed ? '✓ REVIEWED' : 'PENDING'}
-                    </div>
-                    <a className="btn sm" style={{ justifySelf: 'end' }}>{e.reviewed ? 'Edit' : 'Rate →'}</a>
-                  </div>
-                )}
+                </div>
               </div>
-            ))}
-          </div>
+
+              <div style={{ marginTop: 24, display: 'flex', gap: isMobile ? 6 : 8, flexWrap: 'wrap' }}>
+                {[1,2,3,4,5].map(i => {
+                  const lit = (hover || stars) >= i;
+                  return (
+                    <div key={i} onClick={() => setStars(i)} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)} style={{
+                      width: isMobile ? 44 : 48, height: isMobile ? 44 : 48, display: 'grid', placeItems: 'center',
+                      borderRadius: 10,
+                      border: lit ? '1px solid rgba(127,119,221,0.5)' : '1px solid var(--glass-border)',
+                      background: lit ? 'rgba(127,119,221,0.15)' : 'rgba(255,255,255,0.02)',
+                      color: lit ? 'var(--violet)' : 'var(--ink-mute)',
+                      fontSize: isMobile ? 20 : 22, cursor: 'pointer', transition: 'all .15s',
+                    }}>★</div>
+                  );
+                })}
+              </div>
+
+              <textarea
+                className="input" rows={3} style={{ marginTop: 20 }}
+                placeholder="Anything specific? (optional)"
+                value={feedback} onChange={e => setFeedback(e.target.value)}
+              />
+
+              {error && (
+                <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ marginTop: 20, display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 12 }}>
+                <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>Reviews are public.</div>
+                <button onClick={handleSubmit} disabled={loading || !stars} className="btn primary" style={{ width: isMobile ? '100%' : 'auto' }}>
+                  {loading ? 'Submitting…' : 'Submit review →'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </PageBackground>
@@ -114,8 +117,33 @@ export function Rating() {
 export function Feedback() {
   const isMobile = useMobile();
   const navigate = useNavigate();
-  const sliders = ['Organization', 'Food', 'Events', 'Ambiance', 'Communication'];
-  const [vals, setVals] = React.useState(Object.fromEntries(sliders.map(s => [s, 7])));
+
+  const [vals, setVals] = React.useState(
+    Object.fromEntries(FEEDBACK_SLIDERS.map(([, key]) => [key, 7]))
+  );
+  const [fix,       setFix]       = React.useState('');
+  const [highlight, setHighlight] = React.useState('');
+  const [loading,   setLoading]   = React.useState(false);
+  const [success,   setSuccess]   = React.useState(false);
+  const [error,     setError]     = React.useState('');
+
+  async function handleSubmit() {
+    setError('');
+    setLoading(true);
+    try {
+      await feedbackApi.submit({
+        scores: vals,
+        fix:       fix.trim()       || null,
+        highlight: highlight.trim() || null,
+      });
+      setSuccess(true);
+    } catch (e) {
+      setError(e?.message || 'Submission failed.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="" />
@@ -127,42 +155,78 @@ export function Feedback() {
         </div>
 
         <div className="glass-strong fade-up" style={{ marginTop: 32, padding: isMobile ? 20 : 34 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-            {sliders.map(s => (
-              <div key={s}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <label className="label" style={{ margin: 0 }}>{s}</label>
-                  <div className="display" style={{ fontSize: 24, color: 'var(--violet)' }}>{vals[s]}<span style={{ color: 'var(--ink-mute)', fontSize: 14 }}>/10</span></div>
-                </div>
-                <div style={{ position: 'relative', height: 8 }}>
-                  <div style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'rgba(255,255,255,0.06)' }}/>
-                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${vals[s]*10}%`, borderRadius: 999, background: 'linear-gradient(90deg, var(--teal), var(--violet))', boxShadow: '0 0 12px rgba(127,119,221,0.5)' }}/>
-                  <input type="range" min="0" max="10" value={vals[s]} onChange={e => setVals(v => ({...v, [s]: +e.target.value}))} style={{
-                    position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer',
-                  }}/>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-                  <span>POOR</span><span>EXCELLENT</span>
-                </div>
+          {success ? (
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <div style={{ fontSize: 40 }}>✓</div>
+              <div className="display" style={{ fontSize: 28, marginTop: 12 }}>Thanks — we're listening.</div>
+              <div style={{ marginTop: 10, color: 'var(--ink-dim)', fontSize: 14 }}>
+                Your feedback is in. Submitted anonymously — no user id attached.
               </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 30 }}>
-            <label className="label">One thing we should fix next year</label>
-            <textarea className="input" rows={3} placeholder="Be specific. Be kind. Be honest." />
-          </div>
-          <div style={{ marginTop: 18 }}>
-            <label className="label">One thing we nailed</label>
-            <textarea className="input" rows={3} placeholder="What made the weekend for you?" />
-          </div>
-
-          <div style={{ marginTop: 26, display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 16, paddingTop: 20, borderTop: '1px solid var(--glass-border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)', flexShrink: 0 }}/> ANONYMOUS · NOT LINKED TO YOU
+              <button onClick={() => navigate(-1)} className="btn sm" style={{ marginTop: 20 }}>← Go back</button>
             </div>
-            <button className="btn primary" style={{ width: isMobile ? '100%' : 'auto' }}>Submit feedback →</button>
-          </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+                {FEEDBACK_SLIDERS.map(([label, key]) => (
+                  <div key={key}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <label className="label" style={{ margin: 0 }}>{label}</label>
+                      <div className="display" style={{ fontSize: 24, color: 'var(--violet)' }}>
+                        {vals[key]}<span style={{ color: 'var(--ink-mute)', fontSize: 14 }}>/10</span>
+                      </div>
+                    </div>
+                    <div style={{ position: 'relative', height: 8 }}>
+                      <div style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'rgba(255,255,255,0.06)' }}/>
+                      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${vals[key]*10}%`, borderRadius: 999, background: 'linear-gradient(90deg, var(--teal), var(--violet))', boxShadow: '0 0 12px rgba(127,119,221,0.5)' }}/>
+                      <input
+                        type="range" min="0" max="10" value={vals[key]}
+                        onChange={e => setVals(v => ({ ...v, [key]: +e.target.value }))}
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
+                      <span>POOR</span><span>EXCELLENT</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: 30 }}>
+                <label className="label">One thing we should fix next year</label>
+                <textarea
+                  className="input" rows={3}
+                  placeholder="Be specific. Be kind. Be honest."
+                  value={fix} onChange={e => setFix(e.target.value)} maxLength={5000}
+                />
+              </div>
+              <div style={{ marginTop: 18 }}>
+                <label className="label">One thing we nailed</label>
+                <textarea
+                  className="input" rows={3}
+                  placeholder="What made the weekend for you?"
+                  value={highlight} onChange={e => setHighlight(e.target.value)} maxLength={5000}
+                />
+              </div>
+
+              {error && (
+                <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ marginTop: 26, display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 16, paddingTop: 20, borderTop: '1px solid var(--glass-border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)', flexShrink: 0 }}/> ANONYMOUS · NOT LINKED TO YOU
+                </div>
+                <button
+                  onClick={handleSubmit} disabled={loading}
+                  className="btn primary" style={{ width: isMobile ? '100%' : 'auto' }}
+                >
+                  {loading ? 'Submitting…' : 'Submit feedback →'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </PageBackground>

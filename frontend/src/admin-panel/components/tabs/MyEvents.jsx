@@ -9,7 +9,7 @@ export default function MyEvents() {
 
   const visibleEvents = isAdmin
     ? events
-    : events.filter(ev => user?.events?.includes(ev.name))
+    : events.filter(ev => user?.events?.includes(ev.id))
 
   return (
     <div className="myevents-page fade-in">
@@ -37,7 +37,7 @@ export default function MyEvents() {
 }
 
 function EventBlock({ event, participants }) {
-  const evParticipants = participants.filter(p => p.event === event.name)
+  const evParticipants = participants.filter(p => p.eventId === event.id)
   const [expandedId, setExpandedId] = useState(null)
 
   function toggleExpand(id) {
@@ -52,8 +52,8 @@ function EventBlock({ event, participants }) {
           <h3 className="event-block-title">{event.name}</h3>
           <div className="event-chips">
             <span className="badge badge-accent">{event.category}</span>
-            <span className="badge badge-info">{new Date(event.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{event.venue}</span>
+            <span className="badge badge-info">{event.date ? new Date(event.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{Array.isArray(event.venue) ? event.venue.join(', ') : event.venue}</span>
           </div>
         </div>
         <div className="event-mini-stats">
@@ -66,7 +66,7 @@ function EventBlock({ event, participants }) {
             <span className="mini-label">Submitted</span>
           </div>
           <div className="mini-stat">
-            <span className="mini-val" style={{ color: 'var(--success)' }}>{evParticipants.filter(p => p.attended).length}</span>
+            <span className="mini-val" style={{ color: 'var(--success)' }}>{evParticipants.filter(p => p.isAttending).length}</span>
             <span className="mini-label">Attended</span>
           </div>
         </div>
@@ -106,8 +106,8 @@ function EventBlock({ event, participants }) {
                   <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{p.name}</td>
                   <td style={{ fontSize: '0.82rem' }}>{p.teamName || '—'}</td>
                   <td>
-                    <span className={`badge ${p.status === 'participating' ? 'badge-success' : 'badge-danger'}`}>
-                      {p.status === 'participating' ? 'Active' : 'Restricted'}
+                    <span className={`badge ${p.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
+                      {p.status === 'active' ? 'Active' : 'Restricted'}
                     </span>
                   </td>
                   <td>
@@ -116,46 +116,46 @@ function EventBlock({ event, participants }) {
                     </span>
                   </td>
                   <td>
-                    <span className={`badge ${p.attended ? 'badge-success' : 'badge-warning'}`}>
-                      {p.attended ? 'Yes' : 'No'}
+                    <span className={`badge ${p.isAttending ? 'badge-success' : 'badge-warning'}`}>
+                      {p.isAttending ? 'Yes' : 'No'}
                     </span>
                   </td>
                 </tr>
 
                 {/* Expanded submission links */}
-                {expandedId === p.id && p.submission && (
+                {expandedId === p.id && (p.submissionURL || p.submissionFile) && (
                   <tr className="submission-detail-row fade-in">
                     <td />
                     <td colSpan={5}>
                       <div className="submission-links">
                         <a
-                          href={p.submission.deployed || '#'}
+                          href={p.submissionURL || '#'}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`submission-link${!p.submission.deployed ? ' disabled-link' : ''}`}
+                          className={`submission-link${!p.submissionURL ? ' disabled-link' : ''}`}
                           id={`deployed-link-${p.id}`}
-                          onClick={e => !p.submission.deployed && e.preventDefault()}
+                          onClick={e => !p.submissionURL && e.preventDefault()}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
                             <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                           </svg>
                           Deployment Link
-                          {!p.submission.deployed && <span style={{ fontSize: '0.7rem', opacity: 0.5 }}> (not provided)</span>}
+                          {!p.submissionURL && <span style={{ fontSize: '0.7rem', opacity: 0.5 }}> (not provided)</span>}
                         </a>
                         <a
-                          href={p.submission.repo || '#'}
+                          href={p.submissionFile || '#'}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className={`submission-link${!p.submission.repo ? ' disabled-link' : ''}`}
+                          className={`submission-link${!p.submissionFile ? ' disabled-link' : ''}`}
                           id={`repo-link-${p.id}`}
-                          onClick={e => !p.submission.repo && e.preventDefault()}
+                          onClick={e => !p.submissionFile && e.preventDefault()}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/>
                           </svg>
-                          Repository Link
-                          {!p.submission.repo && <span style={{ fontSize: '0.7rem', opacity: 0.5 }}> (not provided)</span>}
+                          Repository / File
+                          {!p.submissionFile && <span style={{ fontSize: '0.7rem', opacity: 0.5 }}> (not provided)</span>}
                         </a>
                       </div>
                     </td>

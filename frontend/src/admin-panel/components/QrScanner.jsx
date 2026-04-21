@@ -27,7 +27,7 @@ export default function QrScanner({ participants, onScan, alreadyField, actionLa
         pt =>
           pt.id.toLowerCase() === q ||
           pt.name.toLowerCase() === q ||
-          pt.email.toLowerCase() === q
+          pt.username?.toLowerCase() === q
       )
 
       if (!p) {
@@ -138,7 +138,7 @@ export default function QrScanner({ participants, onScan, alreadyField, actionLa
           <div>
             <p className="result-msg">{result.msg}</p>
             {result.participant && (
-              <p className="result-sub">{result.participant.event} · {result.participant.teamName}</p>
+              <p className="result-sub">{result.participant.eventName} · {result.participant.teamId || 'No team'}</p>
             )}
           </div>
         </div>
@@ -149,7 +149,7 @@ export default function QrScanner({ participants, onScan, alreadyField, actionLa
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        Demo IDs: p1, p2 … p15 · Or use participant names/emails
+        Enter participant ID or name to scan manually
       </div>
     </div>
   )

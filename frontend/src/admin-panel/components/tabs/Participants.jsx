@@ -15,7 +15,7 @@ export default function Participants() {
   // For event manager: only show their events
   const visibleEvents = isAdmin
     ? events
-    : events.filter(ev => user?.events?.includes(ev.name))
+    : events.filter(ev => user?.events?.includes(ev.id))
 
   const allOption = isAdmin ? 'all' : null
 
@@ -23,28 +23,28 @@ export default function Participants() {
   const filtered = participants.filter(p => {
     const accessOk = isAdmin
       ? true
-      : user?.events?.includes(p.event)
+      : user?.events?.includes(p.eventId)
 
     const eventOk = selectedEvent === 'all'
       ? true
-      : p.event === selectedEvent
+      : p.eventId === selectedEvent
 
     const searchOk = searchQuery.trim() === ''
       ? true
       : p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.email.toLowerCase().includes(searchQuery.toLowerCase())
+        p.username.toLowerCase().includes(searchQuery.toLowerCase())
 
     return accessOk && eventOk && searchOk
   })
 
   function handleStatusToggle(p) {
-    const newStatus = p.status === 'participating' ? 'restricted' : 'participating'
-    setConfirmState({ participantId: p.id, newStatus, name: p.name })
+    const newStatus = p.status === 'active' ? 'restricted' : 'active'
+    setConfirmState({ participantId: p.id, eventId: p.eventId, newStatus, name: p.name })
   }
 
   function confirmChange() {
     if (confirmState) {
-      updateParticipantStatus(confirmState.participantId, confirmState.newStatus)
+      updateParticipantStatus(confirmState.participantId, confirmState.newStatus, confirmState.eventId)
       setConfirmState(null)
     }
   }
@@ -65,12 +65,12 @@ export default function Participants() {
           {visibleEvents.map(ev => (
             <button
               key={ev.id}
-              className={`event-tab${selectedEvent === ev.name ? ' active' : ''}`}
-              onClick={() => setSelectedEvent(ev.name)}
+              className={`event-tab${selectedEvent === ev.id ? ' active' : ''}`}
+              onClick={() => setSelectedEvent(ev.id)}
             >
               {ev.name}
               <span className="tab-count">
-                {participants.filter(p => p.event === ev.name && (isAdmin || user?.events?.includes(p.event))).length}
+                {participants.filter(p => p.eventId === ev.id && (isAdmin || user?.events?.includes(p.eventId))).length}
               </span>
             </button>
           ))}
@@ -117,26 +117,26 @@ export default function Participants() {
                 <tr key={p.id}>
                   <td style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{idx + 1}</td>
                   <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{p.name}</td>
-                  <td style={{ fontSize: '0.8rem' }}>{p.email}</td>
-                  <td><span className="badge badge-accent">{p.event}</span></td>
-                  <td style={{ fontSize: '0.82rem' }}>{p.teamName || '—'}</td>
+                  <td style={{ fontSize: '0.8rem' }}>{p.username}</td>
+                  <td><span className="badge badge-accent">{p.eventName}</span></td>
+                  <td style={{ fontSize: '0.82rem' }}>{p.teamId || '—'}</td>
                   <td>
-                    <span className={`badge ${p.attended ? 'badge-success' : 'badge-warning'}`}>
-                      {p.attended ? 'Yes' : 'No'}
+                    <span className={`badge ${p.isAttending ? 'badge-success' : 'badge-warning'}`}>
+                      {p.isAttending ? 'Yes' : 'No'}
                     </span>
                   </td>
                   <td>
-                    <span className={`badge ${p.status === 'participating' ? 'badge-success' : 'badge-danger'}`}>
-                      {p.status === 'participating' ? 'Participating' : 'Restricted'}
+                    <span className={`badge ${p.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
+                      {p.status === 'active' ? 'Participating' : 'Restricted'}
                     </span>
                   </td>
                   <td>
                     <button
                       id={`status-toggle-${p.id}`}
-                      className={`btn btn-sm ${p.status === 'participating' ? 'btn-danger' : 'btn-success'}`}
+                      className={`btn btn-sm ${p.status === 'active' ? 'btn-danger' : 'btn-success'}`}
                       onClick={() => handleStatusToggle(p)}
                     >
-                      {p.status === 'participating' ? 'Restrict' : 'Restore'}
+                      {p.status === 'active' ? 'Restrict' : 'Restore'}
                     </button>
                   </td>
                 </tr>

@@ -2,13 +2,26 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMobile, PageBackground, AscentLogo } from './shared';
+import { useUserAuth } from '../lib/UserAuthContext';
+import { credentials as credApi } from '../lib/api';
 
 export function Login() {
   const isMobile = useMobile();
   const navigate = useNavigate();
-  const [email, setEmail] = React.useState('');
-  const [pw, setPw] = React.useState('');
+  const { login, error, setError } = useUserAuth();
+  const [email, setEmail]   = React.useState('');
+  const [pw, setPw]         = React.useState('');
+  const [loading, setLoading] = React.useState(false);
   const AUTH_BG = 'uploads/auth_scene.png';
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setLoading(true);
+    const ok = await login(email.trim(), pw);
+    setLoading(false);
+    if (ok) navigate('/dashboard');
+  }
+
   return (
     <PageBackground bgImage={AUTH_BG} blurAmount={14} dimAmount={0.65}>
       <div style={{ padding: isMobile ? '16px 20px' : '22px 28px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -20,7 +33,7 @@ export function Login() {
         </a>
       </div>
       <div style={{ display: 'grid', placeItems: 'center', padding: isMobile ? '40px 20px 80px' : '60px 24px 120px', minHeight: 560 }}>
-        <div className="fade-up glass-strong" style={{
+        <form onSubmit={handleSubmit} className="fade-up glass-strong" style={{
           width: '100%', maxWidth: 440, padding: isMobile ? 24 : 36,
           position: 'relative', overflow: 'hidden',
         }}>
@@ -35,25 +48,42 @@ export function Login() {
 
             <div style={{ marginTop: 30 }}>
               <label className="label">Email</label>
-              <input className="input" type="email" placeholder="archived-efc0ee75d9@example.invalid" value={email} onChange={e => setEmail(e.target.value)} />
+              <input
+                className="input" type="email" placeholder="archived-efc0ee75d9@example.invalid"
+                value={email} onChange={e => { setError(''); setEmail(e.target.value); }}
+                required autoComplete="email"
+              />
             </div>
             <div style={{ marginTop: 18 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <label className="label">Password</label>
-                <a style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.12em', cursor: 'pointer' }}>FORGOT?</a>
               </div>
-              <input className="input" type="password" placeholder="••••••••••" value={pw} onChange={e => setPw(e.target.value)} />
+              <input
+                className="input" type="password" placeholder="••••••••••"
+                value={pw} onChange={e => { setError(''); setPw(e.target.value); }}
+                required autoComplete="current-password"
+              />
             </div>
 
-            <button onClick={() => navigate('/dashboard')} className="btn primary" style={{ width: '100%', marginTop: 26, padding: '14px', fontSize: 13 }}>
-              Enter Ascent →
+            {error && (
+              <div style={{ marginTop: 14, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn primary"
+              style={{ width: '100%', marginTop: 26, padding: '14px', fontSize: 13 }}
+            >
+              {loading ? 'Signing in…' : 'Enter Ascent →'}
             </button>
 
             <div style={{
               marginTop: 26, padding: 14,
               border: '1px dashed var(--glass-border)',
-              borderRadius: 10,
-              display: 'flex', gap: 12, alignItems: 'flex-start',
+              borderRadius: 10, display: 'flex', gap: 12, alignItems: 'flex-start',
             }}>
               <div style={{ width: 8, height: 8, borderRadius: '50%', marginTop: 5, background: 'var(--teal)', boxShadow: '0 0 8px var(--teal)', flexShrink: 0 }}/>
               <div style={{ fontSize: 12, color: 'var(--ink-dim)', lineHeight: 1.5 }}>
@@ -66,7 +96,7 @@ export function Login() {
               SECURED · TLS 1.3 · SSO-READY
             </div>
           </div>
-        </div>
+        </form>
       </div>
     </PageBackground>
   );
@@ -76,13 +106,39 @@ export function Credentials() {
   const isMobile = useMobile();
   const navigate = useNavigate();
   const [submitted, setSubmitted] = React.useState(false);
-  const [form, setForm] = React.useState({ name: '', college: '', email: '', phone: '', events: [] });
+  const [loading, setLoading]     = React.useState(false);
+  const [error, setError]         = React.useState('');
+  const [ticketId, setTicketId]   = React.useState('');
+  const [form, setForm] = React.useState({ name: '', college: '', email: '', phone: '', events: [], notes: '' });
   const eventOpts = ['Hack Night', 'Circuit Rush', 'Pitch./Dev', 'Code Clash', 'Design Jam', 'Robo Wars', 'Mirage Walk', 'Quantum Quiz'];
   const toggleEvent = (e) => setForm(f => ({
     ...f, events: f.events.includes(e) ? f.events.filter(x => x !== e) : [...f.events, e]
   }));
 
   const AUTH_BG = 'uploads/auth_scene.png';
+
+  async function handleSubmit() {
+    if (!form.name || !form.email) { setError('Name and email are required.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      await credApi.request({
+        name:              form.name,
+        college:           form.college,
+        email:             form.email,
+        phone:             form.phone,
+        events_of_interest: form.events,   // backend field name
+        note:              form.notes || null,
+      });
+      setTicketId(`ASC-${Math.floor(Math.random()*900000+100000)}`);
+      setSubmitted(true);
+    } catch (e) {
+      setError(e.message || 'Submission failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (submitted) {
     return (
       <PageBackground bgImage={AUTH_BG} blurAmount={14} dimAmount={0.65}>
@@ -93,29 +149,23 @@ export function Credentials() {
         </div>
         <div style={{ display: 'grid', placeItems: 'center', padding: isMobile ? '40px 20px' : '60px 24px', minHeight: 560 }}>
           <div className="fade-up glass-strong" style={{ width: '100%', maxWidth: 520, padding: isMobile ? 28 : 48, textAlign: 'center' }}>
-            <div style={{
-              width: 72, height: 72, borderRadius: '50%', margin: '0 auto',
-              background: 'radial-gradient(closest-side, rgba(29,158,117,0.35), transparent 70%)',
-              display: 'grid', placeItems: 'center',
-            }}>
+            <div style={{ width: 72, height: 72, borderRadius: '50%', margin: '0 auto', background: 'radial-gradient(closest-side, rgba(29,158,117,0.35), transparent 70%)', display: 'grid', placeItems: 'center' }}>
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
                 <path d="M4 12l5 5L20 6" stroke="#1D9E75" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
             <div className="eyebrow" style={{ marginTop: 24, color: 'var(--teal)' }}>REQUEST RECEIVED</div>
-            <div className="display" style={{ fontSize: 32, marginTop: 14, letterSpacing: '-0.02em' }}>
-              You're on the list.
-            </div>
+            <div className="display" style={{ fontSize: 32, marginTop: 14, letterSpacing: '-0.02em' }}>You're on the list.</div>
             <div style={{ marginTop: 16, color: 'var(--ink-dim)', fontSize: 14, lineHeight: 1.6 }}>
               Your request is now with the Ascent organizers. Once verified, your credentials will
-              land in your inbox within 24 hours. Keep an eye on <span style={{ color: 'var(--ink)' }}>{form.email || 'your email'}</span>.
+              land in your inbox within 24 hours. Keep an eye on <span style={{ color: 'var(--ink)' }}>{form.email}</span>.
             </div>
             <div style={{ marginTop: 30, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
               <a onClick={() => navigate('/')} className="btn sm">← Back home</a>
-              <a onClick={() => setSubmitted(false)} className="btn ghost sm">Submit another</a>
+              <a onClick={() => { setSubmitted(false); setForm({ name: '', college: '', email: '', phone: '', events: [], notes: '' }); }} className="btn ghost sm">Submit another</a>
             </div>
             <div style={{ marginTop: 32, padding: 16, borderRadius: 10, background: 'rgba(255,255,255,0.02)', border: '1px solid var(--glass-border)', fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-              TICKET #ASC-{Math.floor(Math.random()*900000+100000)} · STATUS: PENDING_VERIFY
+              TICKET #{ticketId} · STATUS: PENDING_VERIFY
             </div>
           </div>
         </div>
@@ -155,7 +205,7 @@ export function Credentials() {
             </div>
             <div>
               <label className="label">Email</label>
-              <input className="input" placeholder="archived-efc0ee75d9@example.invalid" value={form.email} onChange={e => setForm({...form, email: e.target.value})}/>
+              <input className="input" type="email" placeholder="archived-efc0ee75d9@example.invalid" value={form.email} onChange={e => setForm({...form, email: e.target.value})}/>
             </div>
             <div>
               <label className="label">Phone</label>
@@ -183,26 +233,24 @@ export function Credentials() {
 
           <div style={{ marginTop: 28 }}>
             <label className="label">Anything else we should know? (optional)</label>
-            <textarea className="input" rows={3} placeholder="Hostel required, team size, dietary preferences, etc." />
+            <textarea className="input" rows={3} placeholder="Hostel required, team size, dietary preferences, etc." value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} />
           </div>
 
-          <div style={{
-            marginTop: 28,
-            display: 'flex',
-            flexDirection: isMobile ? 'column' : 'row',
-            alignItems: isMobile ? 'flex-start' : 'center',
-            justifyContent: 'space-between',
-            gap: isMobile ? 16 : 0,
-            paddingTop: 24, borderTop: '1px solid var(--glass-border)',
-          }}>
+          {error && (
+            <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ marginTop: 28, display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between', gap: isMobile ? 16 : 0, paddingTop: 24, borderTop: '1px solid var(--glass-border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ width: 14, height: 14, border: '1px solid var(--glass-border-strong)', borderRadius: 3, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                 <div style={{ width: 8, height: 8, background: 'var(--violet)', borderRadius: 1 }}/>
               </div>
               <span style={{ color: 'var(--ink-dim)', fontSize: 12 }}>I agree to the code of conduct and data policy.</span>
             </div>
-            <button onClick={() => setSubmitted(true)} className="btn primary" style={{ padding: '14px 26px', width: isMobile ? '100%' : 'auto' }}>
-              Request credentials →
+            <button onClick={handleSubmit} disabled={loading} className="btn primary" style={{ padding: '14px 26px', width: isMobile ? '100%' : 'auto' }}>
+              {loading ? 'Submitting…' : 'Request credentials →'}
             </button>
           </div>
         </div>

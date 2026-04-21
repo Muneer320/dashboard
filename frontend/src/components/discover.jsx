@@ -2,104 +2,186 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, PosterPlaceholder } from './shared';
+import { events as eventsApi, schedule as scheduleApi } from '../lib/api';
+
+// Deterministic tone picker so cards don't reshuffle colours on every render.
+const TONES = ['violet', 'teal', 'amber'];
+function toneFor(id) {
+  const s = String(id ?? '');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return TONES[h % TONES.length];
+}
 
 export function Explore() {
   const isMobile = useMobile();
   const navigate = useNavigate();
-  const cats = ['All', 'Coding', 'Hardware', 'Design', 'Business', 'Quiz', 'Creative'];
-  const [cat, setCat] = React.useState('All');
-  const events = [
-    { n: 'Hack Night', c: 'Coding', d: '24-hour flagship hackathon. Theme drops at kickoff.', tone: 'violet' },
-    { n: 'Circuit Rush', c: 'Hardware', d: 'Solder under pressure. First working circuit wins.', tone: 'teal' },
-    { n: 'Pitch./Dev', c: 'Business', d: 'Pitch a startup, build the MVP in 12 hours.', tone: 'amber' },
-    { n: 'Code Clash', c: 'Coding', d: 'Competitive programming, head-to-head brackets.', tone: 'violet' },
-    { n: 'Design Jam', c: 'Design', d: 'Brief, wireframe, hi-fi. All in one night.', tone: 'amber' },
-    { n: 'Robo Wars', c: 'Hardware', d: 'Your bot vs theirs. Last one standing.', tone: 'teal' },
-    { n: 'Quantum Quiz', c: 'Quiz', d: 'Six rounds. No calculators. No mercy.', tone: 'violet' },
-    { n: 'Mirage Walk', c: 'Creative', d: 'Photography trail across the campus.', tone: 'teal' },
-    { n: 'Render Race', c: 'Design', d: 'Blender, 90 minutes, one prompt.', tone: 'amber' },
-  ];
-  const filtered = cat === 'All' ? events : events.filter(e => e.c === cat);
+
+  const [events, setEvents] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    eventsApi.list()
+      .then((list) => { if (!cancelled) setEvents(list ?? []); })
+      .catch((e) => { if (!cancelled) setError(e?.message || 'Failed to load events.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="explore" />
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
-        <div className="eyebrow">§ ALL EVENTS · 24</div>
+        <div className="eyebrow">§ ALL EVENTS · {loading ? '—' : String(events.length).padStart(2, '0')}</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>Pick your fights.</h1>
         <div style={{ marginTop: 10, color: 'var(--ink-dim)', fontSize: 14, maxWidth: 540 }}>
           Registrations happen on Unstop. Click through to any event to see rules, prize money, and sign up your team.
         </div>
 
-        <div style={{ marginTop: 28, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {cats.map(c => (
-            <div key={c} onClick={() => setCat(c)} className="chip" style={{
-              cursor: 'pointer', padding: '8px 14px', fontSize: 11,
-              background: cat === c ? 'rgba(127,119,221,0.18)' : undefined,
-              borderColor: cat === c ? 'rgba(127,119,221,0.55)' : undefined,
-              color: cat === c ? '#F1EFE8' : undefined,
-            }}>{c}</div>
-          ))}
-        </div>
+        {error && (
+          <div style={{ marginTop: 24, padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
+            {error}
+          </div>
+        )}
 
-        <div style={{
-          marginTop: 32,
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
-          gap: 16,
-        }}>
-          {filtered.map((ev, i) => (
-            <div key={ev.n} className="glass" style={{ padding: 0, overflow: 'hidden', transition: 'all .3s', cursor: 'pointer' }}
-              onClick={() => navigate('/event-detail')}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(127,119,221,0.45)'; e.currentTarget.style.boxShadow = '0 0 30px rgba(127,119,221,0.15)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.boxShadow = 'none'; }}
-            >
-              <div style={{ position: 'relative' }}>
-                <PosterPlaceholder title={ev.n.toUpperCase()} sub="700 × 400" w="100%" h={isMobile ? 140 : 180} tone={ev.tone} />
-              </div>
-              <div style={{ padding: isMobile ? 16 : 20 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className={`chip ${ev.tone}`} style={{ padding: '2px 8px', fontSize: 9 }}>{ev.c.toUpperCase()}</span>
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>0{i+1}</span>
+        {loading ? (
+          <div style={{ marginTop: 32, color: 'var(--ink-mute)', fontSize: 13, fontFamily: 'var(--f-mono)' }}>LOADING EVENTS…</div>
+        ) : events.length === 0 ? (
+          <div style={{ marginTop: 32, color: 'var(--ink-mute)', fontSize: 13 }}>No events scheduled yet. Check back soon.</div>
+        ) : (
+          <div style={{
+            marginTop: 32,
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+            gap: 16,
+          }}>
+            {events.map((ev, i) => {
+              const tone = toneFor(ev.id);
+              const venue = Array.isArray(ev.venue) && ev.venue.length ? ev.venue[0] : '';
+              const teamsCount = ev.participants_count ?? 0;
+              return (
+                <div
+                  key={ev.id}
+                  className="glass"
+                  style={{ padding: 0, overflow: 'hidden', transition: 'all .3s', cursor: 'pointer' }}
+                  onClick={() => navigate(`/event-detail/${ev.id}`)}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(127,119,221,0.45)'; e.currentTarget.style.boxShadow = '0 0 30px rgba(127,119,221,0.15)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.boxShadow = 'none'; }}
+                >
+                  <div style={{ position: 'relative' }}>
+                    <PosterPlaceholder title={(ev.name || '').toUpperCase()} sub="700 × 400" w="100%" h={isMobile ? 140 : 180} tone={tone} />
+                  </div>
+                  <div style={{ padding: isMobile ? 16 : 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span className={`chip ${tone}`} style={{ padding: '2px 8px', fontSize: 9 }}>
+                        {venue ? venue.toUpperCase() : 'EVENT'}
+                      </span>
+                      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                    </div>
+                    <div className="display" style={{ fontSize: 20, marginTop: 12, letterSpacing: '-0.01em' }}>{ev.name}</div>
+                    <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-dim)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {ev.description || 'No description provided.'}
+                    </div>
+                    <div style={{ marginTop: 10, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
+                      {teamsCount} REGISTERED
+                    </div>
+                    <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <a
+                        className="btn sm"
+                        onClick={(e) => { e.stopPropagation(); navigate(`/event-detail/${ev.id}`); }}
+                      >Details</a>
+                      <a
+                        className="btn sm primary"
+                        href={`https://unstop.com/search?q=${encodeURIComponent(ev.name || '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                      >Unstop ↗</a>
+                    </div>
+                  </div>
                 </div>
-                <div className="display" style={{ fontSize: 20, marginTop: 12, letterSpacing: '-0.01em' }}>{ev.n}</div>
-                <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-dim)', lineHeight: 1.5 }}>{ev.d}</div>
-                <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <a className="btn sm" onClick={(e) => { e.stopPropagation(); navigate('/event-detail'); }}>Details</a>
-                  <a
-                    className="btn sm primary"
-                    href={`https://unstop.com/search?q=${encodeURIComponent(ev.n)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                  >Unstop ↗</a>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </PageBackground>
   );
 }
 
+// Format "2026-05-16T10:00:00+05:30" → "10:00"
+function fmtHHMM(iso) {
+  if (!iso) return '';
+  try {
+    return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch { return ''; }
+}
+
+// Format "2026-05-16" → "MAY 16"
+function fmtDayLabel(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(`${iso}T00:00:00`);
+    return d.toLocaleDateString('en-IN', { month: 'short', day: '2-digit' }).toUpperCase();
+  } catch { return iso.toUpperCase(); }
+}
+
+const DAY_TONES = ['violet', 'teal', 'amber'];
+
 export function Schedule() {
   const isMobile = useMobile();
-  const navigate = useNavigate();
-  const [day, setDay] = React.useState('Day 1');
+
+  const [days, setDays] = React.useState([]); // GlobalScheduleItem[] — each has {id, date, schedule, announcements}
+  const [activeDate, setActiveDate] = React.useState(null);
   const [venue, setVenue] = React.useState('All');
-  const venues = ['All', 'Block C', 'Robotics Lab', 'Auditorium', 'Studio B', 'Main Stage'];
-  const slots = [
-    { t: '09:00', e: 'Opening Ceremony', v: 'Auditorium', tone: 'amber', reg: true },
-    { t: '10:00', e: 'Hack Night · Kickoff', v: 'Block C', tone: 'violet', reg: true },
-    { t: '11:30', e: 'Circuit Rush · Heat 1', v: 'Robotics Lab', tone: 'teal', reg: false },
-    { t: '12:30', e: 'Keynote · Dr. Ishan Mehra', v: 'Auditorium', tone: 'amber', reg: true },
-    { t: '14:00', e: 'Code Clash · Qualifiers', v: 'Block C', tone: 'violet', reg: false },
-    { t: '16:00', e: 'Design Jam · Intro', v: 'Studio B', tone: 'amber', reg: true },
-    { t: '18:00', e: 'Pitch./Dev · Round 1', v: 'Auditorium', tone: 'amber', reg: false },
-    { t: '20:00', e: 'Quantum Quiz · Prelims', v: 'Main Stage', tone: 'violet', reg: false },
-    { t: '22:00', e: 'Hack Night · Checkpoint', v: 'Block C', tone: 'violet', reg: true },
-  ];
-  const filtered = venue === 'All' ? slots : slots.filter(s => s.v === venue);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    scheduleApi.global()
+      .then((list) => {
+        if (cancelled) return;
+        const sorted = [...(list ?? [])].sort((a, b) => a.date.localeCompare(b.date));
+        setDays(sorted);
+        // Prefer today if present, else first day
+        const today = new Date().toISOString().slice(0, 10);
+        const todayDay = sorted.find(d => d.date === today);
+        setActiveDate(todayDay ? todayDay.date : (sorted[0]?.date ?? null));
+      })
+      .catch((e) => { if (!cancelled) setError(e?.message || 'Failed to load schedule.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeDay = days.find(d => d.date === activeDate);
+  const slots = Array.isArray(activeDay?.schedule) ? activeDay.schedule : [];
+
+  // Derive venue chips from the visible day, plus "All"
+  const venues = React.useMemo(() => {
+    const set = new Set();
+    slots.forEach(s => { if (s.venue) set.add(s.venue); });
+    return ['All', ...Array.from(set)];
+  }, [slots]);
+
+  // If the active day changes and the current venue filter isn't present, reset.
+  React.useEffect(() => {
+    if (venue !== 'All' && !venues.includes(venue)) setVenue('All');
+  }, [venues]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filtered = venue === 'All' ? slots : slots.filter(s => s.venue === venue);
+
+  // Sort slots by start_time
+  const sortedSlots = [...filtered].sort((a, b) =>
+    String(a.start_time || '').localeCompare(String(b.start_time || ''))
+  );
+
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="schedule" />
@@ -107,83 +189,92 @@ export function Schedule() {
         <div className="eyebrow">§ LIVE SCHEDULE</div>
         <h1 className="display" style={{ fontSize: isMobile ? 36 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>Every slot. Every stage.</h1>
 
+        {error && (
+          <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
+            {error}
+          </div>
+        )}
+
         <div style={{ marginTop: 28, display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 16, alignItems: isMobile ? 'flex-start' : 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 999, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)' }}>
-            {['Day 1', 'Day 2'].map(d => (
-              <div key={d} onClick={() => setDay(d)} style={{
+          <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 999, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', flexWrap: 'wrap' }}>
+            {days.length === 0 && !loading ? (
+              <div style={{ padding: '8px 18px', fontSize: 12.5, color: 'var(--ink-mute)' }}>No days scheduled yet.</div>
+            ) : days.map((d, i) => (
+              <div key={d.date} onClick={() => setActiveDate(d.date)} style={{
                 padding: '8px 18px', borderRadius: 999, cursor: 'pointer',
                 fontSize: 12.5, fontWeight: 500,
-                background: day === d ? 'rgba(127,119,221,0.2)' : 'transparent',
-                color: day === d ? 'var(--ink)' : 'var(--ink-dim)',
-                border: day === d ? '1px solid rgba(127,119,221,0.5)' : '1px solid transparent',
-              }}>{d} <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, opacity: 0.6, marginLeft: 4 }}>{d === 'Day 1' ? 'MAY 16' : 'MAY 17'}</span></div>
+                background: activeDate === d.date ? 'rgba(127,119,221,0.2)' : 'transparent',
+                color: activeDate === d.date ? 'var(--ink)' : 'var(--ink-dim)',
+                border: activeDate === d.date ? '1px solid rgba(127,119,221,0.5)' : '1px solid transparent',
+              }}>
+                Day {i + 1}
+                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, opacity: 0.6, marginLeft: 6 }}>
+                  {fmtDayLabel(d.date)}
+                </span>
+              </div>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {venues.map(v => (
-              <div key={v} onClick={() => setVenue(v)} className="chip" style={{
-                cursor: 'pointer', padding: '6px 12px', fontSize: 10,
-                background: venue === v ? 'rgba(127,119,221,0.18)' : undefined,
-                borderColor: venue === v ? 'rgba(127,119,221,0.55)' : undefined,
-                color: venue === v ? '#F1EFE8' : undefined,
-              }}>{v}</div>
-            ))}
-          </div>
+          {venues.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {venues.map(v => (
+                <div key={v} onClick={() => setVenue(v)} className="chip" style={{
+                  cursor: 'pointer', padding: '6px 12px', fontSize: 10,
+                  background: venue === v ? 'rgba(127,119,221,0.18)' : undefined,
+                  borderColor: venue === v ? 'rgba(127,119,221,0.55)' : undefined,
+                  color: venue === v ? '#F1EFE8' : undefined,
+                }}>{v}</div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="glass" style={{ marginTop: 28, padding: 0, overflow: 'hidden' }}>
-          {filtered.map((s, i) => (
-            <div key={i} style={{
-              display: isMobile ? 'flex' : 'grid',
-              flexDirection: isMobile ? 'column' : undefined,
-              gridTemplateColumns: isMobile ? undefined : '100px 1fr 160px 130px',
-              gap: isMobile ? 6 : 16,
-              padding: isMobile ? '16px' : '18px 24px',
-              borderTop: i === 0 ? 'none' : '1px solid var(--glass-border)',
-              cursor: 'pointer',
-              transition: 'background .2s',
-            }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              {isMobile ? (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 16, color: 'var(--ink)', letterSpacing: '-0.02em' }}>{s.t}</div>
-                    <span className={`chip ${s.tone}`} style={{ padding: '2px 8px', fontSize: 9 }}>{s.v}</span>
-                  </div>
-                  <div style={{ fontFamily: 'var(--f-display)', fontSize: 15, fontWeight: 600 }}>{s.e}</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>{day.toUpperCase()}</div>
-                    {s.reg ? (
-                      <span className="chip violet" style={{ padding: '2px 8px', fontSize: 9 }}>REGISTERED</span>
-                    ) : (
-                      <a className="btn sm" style={{ padding: '5px 10px', fontSize: 10 }}
-                        href={`https://unstop.com/search?q=${encodeURIComponent(s.e)}`}
-                        target="_blank" rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}>Register ↗</a>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 20, color: 'var(--ink)', letterSpacing: '-0.02em' }}>{s.t}</div>
-                  <div>
-                    <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, fontWeight: 600 }}>{s.e}</div>
-                    <div style={{ marginTop: 4, fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>{day.toUpperCase()} · {s.v}</div>
-                  </div>
-                  <span className={`chip ${s.tone}`} style={{ padding: '3px 10px', fontSize: 9.5 }}>{s.v}</span>
-                  {s.reg ? (
-                    <span className="chip violet" style={{ padding: '3px 10px', fontSize: 9.5 }}>REGISTERED</span>
-                  ) : (
-                    <a className="btn sm" style={{ padding: '6px 12px', fontSize: 11 }}
-                      href={`https://unstop.com/search?q=${encodeURIComponent(s.e)}`}
-                      target="_blank" rel="noopener noreferrer">Register ↗</a>
-                  )}
-                </>
-              )}
+          {loading ? (
+            <div style={{ padding: 28, textAlign: 'center', color: 'var(--ink-mute)', fontSize: 13, fontFamily: 'var(--f-mono)' }}>LOADING…</div>
+          ) : sortedSlots.length === 0 ? (
+            <div style={{ padding: 28, textAlign: 'center', color: 'var(--ink-mute)', fontSize: 13 }}>
+              {days.length === 0 ? 'Schedule hasn\'t been published yet.' : 'Nothing scheduled for this day.'}
             </div>
-          ))}
+          ) : sortedSlots.map((s, i) => {
+            const tone = DAY_TONES[i % DAY_TONES.length];
+            const timeLabel = fmtHHMM(s.start_time) + (s.end_time ? `–${fmtHHMM(s.end_time)}` : '');
+            return (
+              <div key={`${s.title}-${s.start_time}-${i}`} style={{
+                display: isMobile ? 'flex' : 'grid',
+                flexDirection: isMobile ? 'column' : undefined,
+                gridTemplateColumns: isMobile ? undefined : '140px 1fr 160px',
+                gap: isMobile ? 6 : 16,
+                padding: isMobile ? '16px' : '18px 24px',
+                borderTop: i === 0 ? 'none' : '1px solid var(--glass-border)',
+                transition: 'background .2s',
+              }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              >
+                {isMobile ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 16, color: 'var(--ink)', letterSpacing: '-0.02em' }}>{fmtHHMM(s.start_time)}</div>
+                      {s.venue && <span className={`chip ${tone}`} style={{ padding: '2px 8px', fontSize: 9 }}>{s.venue}</span>}
+                    </div>
+                    <div style={{ fontFamily: 'var(--f-display)', fontSize: 15, fontWeight: 600 }}>{s.title}</div>
+                    <div style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>{fmtDayLabel(activeDate)} · {timeLabel}</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 18, color: 'var(--ink)', letterSpacing: '-0.02em' }}>{timeLabel}</div>
+                    <div>
+                      <div style={{ fontFamily: 'var(--f-display)', fontSize: 18, fontWeight: 600 }}>{s.title}</div>
+                      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>{fmtDayLabel(activeDate)}{s.venue ? ` · ${s.venue}` : ''}</div>
+                    </div>
+                    {s.venue ? (
+                      <span className={`chip ${tone}`} style={{ padding: '3px 10px', fontSize: 9.5 }}>{s.venue}</span>
+                    ) : <span />}
+                  </>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </PageBackground>
