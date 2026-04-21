@@ -18,6 +18,7 @@ RATE_LIMIT_DISABLED_STATE_NAME = "disable_rate_limit_checks"
 PUBLIC_PATHS = {
     "/api/v1/health",
     "/api/v1/auth/login",
+    "/api/v1/auth/admin/login",
     "/api/v1/auth/register",
     "/api/v1/openapi.json",
     "/docs",
