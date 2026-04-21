@@ -1,0 +1,120 @@
+name: ec2-deploy
+
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate required deployment configuration
+        shell: bash
+        env:
+          EC2_HOST: ${{ vars.EC2_HOST }}
+          EC2_PORT: ${{ vars.EC2_PORT }}
+          EC2_USER: ${{ vars.EC2_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
+        run: |
+          required=(
+            EC2_HOST
+            EC2_USER
+            DEPLOY_PATH
+            EC2_SSH_PRIVATE_KEY
+            BACKEND_ENV_FILE
+          )
+
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required GitHub Actions configuration: ${name}"
+              exit 1
+            fi
+          done
+
+          if [ -z "${EC2_PORT}" ]; then
+            echo "EC2_PORT=22" >> "${GITHUB_ENV}"
+          else
+            echo "EC2_PORT=${EC2_PORT}" >> "${GITHUB_ENV}"
+          fi
+
+      - name: Install SSH key
+        shell: bash
+        env:
+          EC2_HOST: ${{ vars.EC2_HOST }}
+          EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${EC2_SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${EC2_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Ensure deploy path exists on EC2
+        shell: bash
+        env:
+          EC2_HOST: ${{ vars.EC2_HOST }}
+          EC2_PORT: ${{ env.EC2_PORT }}
+          EC2_USER: ${{ vars.EC2_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -p "${EC2_PORT}" "${EC2_USER}@${EC2_HOST}" "mkdir -p '${DEPLOY_PATH}'"
+
+      - name: Sync repository to EC2
+        shell: bash
+        env:
+          EC2_HOST: ${{ vars.EC2_HOST }}
+          EC2_PORT: ${{ env.EC2_PORT }}
+          EC2_USER: ${{ vars.EC2_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude '.env' \
+            --exclude 'backend/.env' \
+            --exclude 'frontend/.env' \
+            --exclude 'backend/.venv/' \
+            --exclude 'frontend/node_modules/' \
+            -e "ssh -p ${EC2_PORT}" \
+            ./ "${EC2_USER}@${EC2_HOST}:${DEPLOY_PATH}/"
+
+      - name: Upload runtime env files to EC2
+        shell: bash
+        env:
+          EC2_HOST: ${{ vars.EC2_HOST }}
+          EC2_PORT: ${{ env.EC2_PORT }}
+          EC2_USER: ${{ vars.EC2_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
+        run: |
+          mkdir -p .deploy
+          printf '%s' "${BACKEND_ENV_FILE}" > .deploy/backend.env
+          cp .deploy/backend.env .deploy/root.env
+          printf '%s\n' "BACKEND_UPSTREAM=backend:8000" >> .deploy/root.env
+
+          scp -P "${EC2_PORT}" .deploy/root.env "${EC2_USER}@${EC2_HOST}:${DEPLOY_PATH}/.env"
+
+      - name: Deploy on EC2
+        shell: bash
+        env:
+          EC2_HOST: ${{ vars.EC2_HOST }}
+          EC2_PORT: ${{ env.EC2_PORT }}
+          EC2_USER: ${{ vars.EC2_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -p "${EC2_PORT}" "${EC2_USER}@${EC2_HOST}" <<EOF
+            set -eu
+            cd "${DEPLOY_PATH}"
+            docker compose down --remove-orphans || true
+            docker compose up --build -d
+            docker compose ps
+          EOF

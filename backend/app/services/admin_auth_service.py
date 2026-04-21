@@ -20,18 +20,7 @@ async def admin_login(supabase: AsyncClient, username: str, password: str) -> st
     )
     row = first_row(resp)
 
-    print(f"DEBUG: Attempting login for admin: {username}")
-    if row is None:
-        print(f"DEBUG: Admin '{username}' not found in database.")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-        )
-    
-    is_valid = verify_password(password, row["password_hash"])
-    print(f"DEBUG: Password verification for '{username}': {is_valid}")
-    
-    if not is_valid:
+    if row is None or not verify_password(password, row["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid admin credentials",
