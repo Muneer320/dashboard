@@ -83,14 +83,38 @@ export function Mirage() {
 export function Announcements() {
   const isMobile = useMobile();
   const navigate = useNavigate();
-  const posts = [
-    { pin: true, t: 'HACK NIGHT BRIEF OUT', when: '2 min ago', body: 'Theme: Resilience. Deliverables live on the team portal. Judges visit at 14:00, 18:00, 22:00 and 02:00. Please be ready with a 60-second intro.' },
-    { pin: true, t: 'LUNCH DELAYED TO 13:00', when: '14 min ago', body: "Kitchen is behind by ~30 minutes. Food QR still active. We'll ping again the moment counters open." },
-    { pin: false, t: 'Circuit Rush kit pickup', when: '1 hour ago', body: 'Teams registered for Circuit Rush can collect kits from the Block D lobby until 16:00.' },
-    { pin: false, t: 'Mirage · Day 0 photos live', when: '3 hours ago', body: '192 photos from the opening ceremony are now in Mirage. Find yourself, tag friends.' },
-    { pin: false, t: 'Robo Wars bracket posted', when: '5 hours ago', body: 'Double elimination, starts tomorrow 11:00 at Robotics Lab. Check Schedule for your slot.' },
-    { pin: false, t: 'Lost headphones claimed', when: 'Yesterday', body: 'Black over-ear pair found at Block C · 204 was claimed by its owner. Lost & Found is at the registration desk.' },
-  ];
+  const [posts, setPosts]     = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    import('../lib/api').then(({ announcements: annApi }) => {
+      annApi.list(50)
+        .then(data => {
+          // Sort: pinned (category === 'pinned') first, then by time desc
+          const sorted = [...data].sort((a, b) => {
+            const aPin = a.category === 'pinned' ? 1 : 0;
+            const bPin = b.category === 'pinned' ? 1 : 0;
+            if (bPin !== aPin) return bPin - aPin;
+            return new Date(b.time) - new Date(a.time);
+          });
+          setPosts(sorted);
+        })
+        .catch(console.error)
+        .finally(() => setLoading(false));
+    });
+  }, []);
+
+  function relativeTime(isoStr) {
+    if (!isoStr) return '';
+    const diff = Date.now() - new Date(isoStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1)  return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24)  return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  }
+
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="announcements" />
@@ -102,23 +126,31 @@ export function Announcements() {
         </div>
 
         <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {posts.map((p, i) => (
-            <div key={i} className="glass" style={{
-              padding: isMobile ? 16 : 22,
-              borderColor: p.pin ? 'rgba(127,119,221,0.45)' : undefined,
-              background: p.pin ? 'rgba(127,119,221,0.07)' : undefined,
-              position: 'relative',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', flex: 1 }}>
-                  {p.pin && <span className="chip violet" style={{ padding: '2px 8px', fontSize: 9, flexShrink: 0 }}>📌 PINNED</span>}
-                  <span style={{ fontFamily: 'var(--f-display)', fontSize: isMobile ? 15 : 18, fontWeight: 600, letterSpacing: '-0.01em' }}>{p.t}</span>
+          {loading && (
+            <div style={{ color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: 24, textAlign: 'center' }}>Loading…</div>
+          )}
+          {!loading && posts.length === 0 && (
+            <div style={{ color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: 24, textAlign: 'center' }}>No announcements yet.</div>
+          )}
+          {posts.map((p, i) => {
+            const pin = p.category === 'pinned';
+            return (
+              <div key={i} className="glass" style={{
+                padding: isMobile ? 16 : 22,
+                borderColor: pin ? 'rgba(127,119,221,0.45)' : undefined,
+                background: pin ? 'rgba(127,119,221,0.07)' : undefined,
+                position: 'relative',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', flex: 1 }}>
+                    {pin && <span className="chip violet" style={{ padding: '2px 8px', fontSize: 9, flexShrink: 0 }}>📌 PINNED</span>}
+                    <span style={{ fontFamily: 'var(--f-display)', fontSize: isMobile ? 15 : 18, fontWeight: 600, letterSpacing: '-0.01em' }}>{p.announcement}</span>
+                  </div>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', whiteSpace: 'nowrap', flexShrink: 0 }}>{relativeTime(p.time)}</span>
                 </div>
-                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', whiteSpace: 'nowrap', flexShrink: 0 }}>{p.when}</span>
               </div>
-              <div style={{ marginTop: 10, color: 'var(--ink-dim)', fontSize: 13.5, lineHeight: 1.6 }}>{p.body}</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </PageBackground>

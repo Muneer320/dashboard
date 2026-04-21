@@ -1,19 +1,37 @@
 // Ascent — Rating, Feedback, Report Issue
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground } from './shared';
+import { events as eventsApi } from '../lib/api';
 
 export function Rating() {
   const isMobile = useMobile();
   const navigate = useNavigate();
-  const [stars, setStars] = React.useState(0);
-  const [hover, setHover] = React.useState(0);
-  const events = [
-    { n: 'Hack Night', avg: 4.8, count: 342, mine: 5, reviewed: true },
-    { n: 'Design Jam', avg: 4.6, count: 198, mine: 4, reviewed: true },
-    { n: 'Circuit Rush', avg: 4.3, count: 214, mine: 0, reviewed: false, active: true },
-    { n: 'Code Clash', avg: 4.5, count: 287, mine: 0, reviewed: false },
-  ];
+  const [searchParams] = useSearchParams();
+  const eventId = searchParams.get('event_id'); // passed from EventDetail rate button
+
+  const [stars, setStars]     = React.useState(0);
+  const [hover, setHover]     = React.useState(0);
+  const [feedback, setFeedback] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [success, setSuccess] = React.useState(false);
+  const [error, setError]     = React.useState('');
+
+  async function handleSubmit() {
+    if (!eventId) { setError('No event selected. Go back and click Rate from an event page.'); return; }
+    if (!stars)   { setError('Please pick a star rating first.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      await eventsApi.rating(eventId, { value: stars, feedback: feedback.trim() || null });
+      setSuccess(true);
+    } catch (e) {
+      setError(e.message || 'Submission failed.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="" />
@@ -26,85 +44,60 @@ export function Rating() {
 
         {/* Active rating card */}
         <div className="glass-strong fade-up" style={{ marginTop: 32, padding: isMobile ? 20 : 32 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 16 }}>
-            <div>
-              <span className="chip teal">JUST CONCLUDED</span>
-              <div className="display" style={{ fontSize: isMobile ? 26 : 34, marginTop: 12, letterSpacing: '-0.02em' }}>Circuit Rush</div>
+          {success ? (
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <div style={{ fontSize: 40 }}>✓</div>
+              <div className="display" style={{ fontSize: 28, marginTop: 12 }}>Thanks for the feedback!</div>
+              <div style={{ marginTop: 10, color: 'var(--ink-dim)', fontSize: 14 }}>Your rating has been saved.</div>
+              <button onClick={() => navigate(-1)} className="btn sm" style={{ marginTop: 20 }}>← Go back</button>
             </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>AGGREGATE</div>
-              <div className="display" style={{ fontSize: 24 }}>★ 4.3</div>
-              <div style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>214 REVIEWS</div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 24, display: 'flex', gap: isMobile ? 6 : 8, flexWrap: 'wrap' }}>
-            {[1,2,3,4,5].map(i => {
-              const lit = (hover || stars) >= i;
-              return (
-                <div key={i} onClick={() => setStars(i)} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)} style={{
-                  width: isMobile ? 44 : 48, height: isMobile ? 44 : 48, display: 'grid', placeItems: 'center',
-                  borderRadius: 10,
-                  border: lit ? '1px solid rgba(127,119,221,0.5)' : '1px solid var(--glass-border)',
-                  background: lit ? 'rgba(127,119,221,0.15)' : 'rgba(255,255,255,0.02)',
-                  color: lit ? 'var(--violet)' : 'var(--ink-mute)',
-                  fontSize: isMobile ? 20 : 22, cursor: 'pointer',
-                  transition: 'all .15s',
-                }}>★</div>
-              );
-            })}
-          </div>
-
-          <textarea className="input" rows={3} style={{ marginTop: 20 }} placeholder="Anything specific? (optional)" />
-
-          <div style={{ marginTop: 20, display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 12 }}>
-            <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>Reviews are public. Tag your team if you want.</div>
-            <button className="btn primary" style={{ width: isMobile ? '100%' : 'auto' }}>Submit review →</button>
-          </div>
-        </div>
-
-        {/* Other events */}
-        <div style={{ marginTop: 36 }}>
-          <div className="eyebrow">§ OTHER EVENTS YOU ATTENDED</div>
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {events.map((e, i) => (
-              <div key={i} className="glass" style={{ padding: isMobile ? 14 : 18 }}>
-                {isMobile ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ fontFamily: 'var(--f-display)', fontSize: 15, fontWeight: 600 }}>{e.n}</div>
-                      <a className="btn sm">{e.reviewed ? 'Edit' : 'Rate →'}</a>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', gap: 2 }}>
-                        {[1,2,3,4,5].map(j => <span key={j} style={{ color: j <= e.mine ? 'var(--violet)' : 'var(--ink-faint)', fontSize: 14 }}>★</span>)}
-                      </div>
-                      <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: e.reviewed ? 'var(--teal)' : 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-                        {e.reviewed ? '✓ REVIEWED' : 'PENDING'}
-                      </div>
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>AGG ★ {e.avg} · {e.count} REVIEWS</div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 16 }}>
+                <div>
+                  <span className="chip teal">{eventId ? 'SELECTED EVENT' : 'NO EVENT SELECTED'}</span>
+                  <div className="display" style={{ fontSize: isMobile ? 26 : 34, marginTop: 12, letterSpacing: '-0.02em' }}>
+                    {eventId ? `Event ID: ${eventId.slice(0,8)}…` : 'Pick an event'}
                   </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto 140px', alignItems: 'center', gap: 20 }}>
-                    <div>
-                      <div style={{ fontFamily: 'var(--f-display)', fontSize: 16, fontWeight: 600 }}>{e.n}</div>
-                      <div style={{ fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', marginTop: 2 }}>
-                        AGG ★ {e.avg} · {e.count} REVIEWS
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 2 }}>
-                      {[1,2,3,4,5].map(j => <span key={j} style={{ color: j <= e.mine ? 'var(--violet)' : 'var(--ink-faint)' }}>★</span>)}
-                    </div>
-                    <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: e.reviewed ? 'var(--teal)' : 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-                      {e.reviewed ? '✓ REVIEWED' : 'PENDING'}
-                    </div>
-                    <a className="btn sm" style={{ justifySelf: 'end' }}>{e.reviewed ? 'Edit' : 'Rate →'}</a>
-                  </div>
-                )}
+                </div>
               </div>
-            ))}
-          </div>
+
+              <div style={{ marginTop: 24, display: 'flex', gap: isMobile ? 6 : 8, flexWrap: 'wrap' }}>
+                {[1,2,3,4,5].map(i => {
+                  const lit = (hover || stars) >= i;
+                  return (
+                    <div key={i} onClick={() => setStars(i)} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(0)} style={{
+                      width: isMobile ? 44 : 48, height: isMobile ? 44 : 48, display: 'grid', placeItems: 'center',
+                      borderRadius: 10,
+                      border: lit ? '1px solid rgba(127,119,221,0.5)' : '1px solid var(--glass-border)',
+                      background: lit ? 'rgba(127,119,221,0.15)' : 'rgba(255,255,255,0.02)',
+                      color: lit ? 'var(--violet)' : 'var(--ink-mute)',
+                      fontSize: isMobile ? 20 : 22, cursor: 'pointer', transition: 'all .15s',
+                    }}>★</div>
+                  );
+                })}
+              </div>
+
+              <textarea
+                className="input" rows={3} style={{ marginTop: 20 }}
+                placeholder="Anything specific? (optional)"
+                value={feedback} onChange={e => setFeedback(e.target.value)}
+              />
+
+              {error && (
+                <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ marginTop: 20, display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 12 }}>
+                <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>Reviews are public.</div>
+                <button onClick={handleSubmit} disabled={loading || !stars} className="btn primary" style={{ width: isMobile ? '100%' : 'auto' }}>
+                  {loading ? 'Submitting…' : 'Submit review →'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </PageBackground>
