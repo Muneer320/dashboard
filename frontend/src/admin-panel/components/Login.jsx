@@ -18,8 +18,7 @@ export default function Login() {
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
-    await new Promise(r => setTimeout(r, 500)) // slight delay for UX
-    const ok = login(form.username, form.password)
+    const ok = await login(form.username, form.password)
     setLoading(false)
     if (ok) navigate('/admin/dashboard')
   }
@@ -135,9 +134,7 @@ export default function Login() {
           </button>
         </form>
 
-        <p className="login-hint">
-          Demo: <code>admin</code> / <code>admin@ascent</code>
-        </p>
+
       </div>
     </div>
   )

@@ -1,60 +1,66 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { adminAuth as adminAuthApi, token } from '../../lib/api'
 
 const AuthContext = createContext(null)
 
-const RAW_USERS = JSON.parse(import.meta.env.VITE_USERS || '[]')
-
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const stored = sessionStorage.getItem('ascent_user')
-    return stored ? JSON.parse(stored) : null
-  })
+  const [user, setUser]   = useState(null)   // { uid, username, name, role, events }
+  const [ready, setReady] = useState(false)  // true once we've checked stored token
   const [error, setError] = useState('')
 
-  function login(username, password) {
+  // On mount: hydrate session from stored admin token
+  useEffect(() => {
+    const stored = token.getAdmin()
+    if (!stored) { setReady(true); return }
+    adminAuthApi.me()
+      .then(setUser)
+      .catch(() => token.clearAdmin())  // invalid / expired
+      .finally(() => setReady(true))
+  }, [])
+
+  const login = useCallback(async (username, password) => {
     setError('')
-    const found = RAW_USERS.find(
-      u => u.username === username.trim() && u.password === password
-    )
-    if (!found) {
-      setError('Invalid username or password.')
+    try {
+      const res = await adminAuthApi.login({ username, password })
+      token.setAdmin(res.access_token)
+      const me = await adminAuthApi.me()
+      setUser(me)
+      return true
+    } catch (e) {
+      setError(e.message || 'Invalid credentials')
       return false
     }
-    const userData = { ...found }
-    delete userData.password
-    setUser(userData)
-    sessionStorage.setItem('ascent_user', JSON.stringify(userData))
-    return true
-  }
+  }, [])
 
-  function logout() {
+  const logout = useCallback(() => {
+    token.clearAdmin()
     setUser(null)
-    sessionStorage.removeItem('ascent_user')
-  }
+  }, [])
 
-  // Role helpers
+  // ── Role helpers (unchanged — role strings from backend match) ──────────────
   const isAdmin   = user?.role === 'admin'
-  const isScanner = user?.role === 'scanner'
-  const isEM      = user?.role === 'event_manager'
+  const isScanner = user?.role === 'Scanner'
+  const isEM      = user?.role === 'eventManager'
 
   function canAccess(feature) {
     if (!user) return false
     const matrix = {
-      overview:    ['admin', 'event_manager'],
-      participants:['admin', 'event_manager'],
-      scanner:     ['admin', 'scanner', 'event_manager'],
-      myEvents:    ['admin', 'event_manager'],
+      overview:    ['admin', 'eventManager'],
+      participants:['admin', 'eventManager'],
+      scanner:     ['admin', 'Scanner', 'eventManager'],
+      myEvents:    ['admin', 'eventManager'],
       contactInfo: ['admin'],
-      // scanner sub-tabs
-      scanEntry:      ['admin', 'scanner'],
-      scanAttendance: ['admin', 'event_manager'],
-      scanFood:       ['admin', 'scanner'],
+      scanEntry:      ['admin', 'Scanner'],
+      scanAttendance: ['admin', 'eventManager'],
+      scanFood:       ['admin', 'Scanner'],
     }
     return (matrix[feature] || []).includes(user.role)
   }
 
+  if (!ready) return null  // wait for token check — prevents flash of login page
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, error, setError, isAdmin, isScanner, isEM, canAccess }}>
+    <AuthContext.Provider value={{ user, error, setError, login, logout, isAdmin, isScanner, isEM, canAccess }}>
       {children}
     </AuthContext.Provider>
   )

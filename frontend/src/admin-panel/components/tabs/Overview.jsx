@@ -16,19 +16,7 @@ function StatCard({ icon, label, value, sub, colorClass }) {
 }
 
 export default function Overview() {
-  const { stats, events, participants } = useData()
-
-  // Per-event stats
-  const eventStats = events.map(ev => {
-    const evParticipants = participants.filter(p => p.event === ev.name)
-    return {
-      ...ev,
-      registered: evParticipants.length,
-      attended:   evParticipants.filter(p => p.attended).length,
-      submitted:  evParticipants.filter(p => p.submitted).length,
-      restricted: evParticipants.filter(p => p.status === 'restricted').length,
-    }
-  })
+  const { stats, events } = useData()   // events are EventStatsItem[] — counts already computed
 
   return (
     <div className="overview-page fade-in">
@@ -101,11 +89,11 @@ export default function Overview() {
             </tr>
           </thead>
           <tbody>
-            {eventStats.map(ev => (
+            {events.map(ev => (
               <tr key={ev.id}>
                 <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{ev.name}</td>
                 <td><span className="badge badge-accent">{ev.category}</span></td>
-                <td>{new Date(ev.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</td>
+                <td>{ev.date ? new Date(ev.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</td>
                 <td>{ev.registered}</td>
                 <td>
                   <span style={{ color: ev.attended > 0 ? 'var(--success)' : 'var(--text-muted)' }}>

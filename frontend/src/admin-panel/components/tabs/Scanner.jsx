@@ -5,9 +5,9 @@ import QrScanner from '../QrScanner'
 import './Scanner.css'
 
 const SUB_TABS = [
-  { key: 'entry',      label: 'Entry',      access: ['admin', 'scanner'] },
-  { key: 'attendance', label: 'Attendance', access: ['admin', 'event_manager'] },
-  { key: 'food',       label: 'Food',       access: ['admin', 'scanner'] },
+  { key: 'entry',      label: 'Entry',      access: ['admin', 'Scanner'] },
+  { key: 'attendance', label: 'Attendance', access: ['admin', 'eventManager'] },
+  { key: 'food',       label: 'Food',       access: ['admin', 'Scanner'] },
 ]
 
 export default function Scanner() {
@@ -27,27 +27,27 @@ export default function Scanner() {
 
   // Participants in scope for the current tab
   function getScopeParticipants() {
-    if (activeTab === 'attendance' && user?.role === 'event_manager') {
+    if (activeTab === 'attendance' && user?.role === 'eventManager') {
       if (!selectedEvent) return []
-      return participants.filter(p => p.event === selectedEvent)
+      return participants.filter(p => p.eventId === selectedEvent)
     }
     return participants
   }
 
   function handleScan(participant) {
-    if (activeTab === 'entry')      markEntryScanned(participant.id)
-    if (activeTab === 'attendance') markAttended(participant.id)
+    if (activeTab === 'entry')      markEntryScanned(participant.id, participant.eventId)
+    if (activeTab === 'attendance') markAttended(participant.id, participant.eventId)
     if (activeTab === 'food')       markFoodClaimed(participant.id)
   }
 
   function getAlreadyField() {
     if (activeTab === 'entry')      return 'entryScanned'
-    if (activeTab === 'attendance') return 'attended'
+    if (activeTab === 'attendance') return 'isAttending'
     if (activeTab === 'food')       return 'foodClaimed'
   }
 
-  const emEvents = events.filter(ev => user?.events?.includes(ev.name))
-  const isEM = user?.role === 'event_manager'
+  const emEvents = events.filter(ev => user?.events?.includes(ev.id))
+  const isEM = user?.role === 'eventManager'
 
   return (
     <div className="scanner-page fade-in">
