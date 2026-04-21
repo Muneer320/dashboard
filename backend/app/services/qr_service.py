@@ -1,10 +1,14 @@
-from sqlalchemy.ext.asyncio import AsyncSession
+"""Supabase-backed QR scan service (food + entry gates)."""
+
+from __future__ import annotations
+
+from supabase import AsyncClient
 
 from app.models.event import Event
 from app.models.user import User
 
 
-async def scan_food(session: AsyncSession, user: User, meal: str) -> str:
+async def scan_food(supabase: AsyncClient, user: User, meal: str) -> str:
     food = user.food or {"meal1": False, "meal2": False, "meal3": False}
 
     if food.get(meal):
@@ -12,22 +16,34 @@ async def scan_food(session: AsyncSession, user: User, meal: str) -> str:
 
     food[meal] = True
     user.food = food
-    session.add(user)
-    await session.commit()
+
+    await (
+        supabase.table("users")
+        .update({"food": food})
+        .eq("id", str(user.id))
+        .execute()
+    )
     return "Meal marked as consumed"
 
 
-async def scan_college_entry(session: AsyncSession, user: User) -> str:
+async def scan_college_entry(supabase: AsyncClient, user: User) -> str:
     if user.is_attending:
         return "User already attending"
-    
+
     user.is_attending = True
-    session.add(user)
-    await session.commit()
+
+    await (
+        supabase.table("users")
+        .update({"is_attending": True})
+        .eq("id", str(user.id))
+        .execute()
+    )
     return "College entry marked successfully"
 
 
-async def scan_event_entry(session: AsyncSession, user: User, event: Event) -> str:
+async def scan_event_entry(
+    supabase: AsyncClient, user: User, event: Event
+) -> str:
     user_events = user.events or {}
     event_key = str(event.id)
 
@@ -45,6 +61,10 @@ async def scan_event_entry(session: AsyncSession, user: User, event: Event) -> s
     user_events[event_key] = event_entry
     user.events = user_events
 
-    session.add(user)
-    await session.commit()
+    await (
+        supabase.table("users")
+        .update({"events": user_events})
+        .eq("id", str(user.id))
+        .execute()
+    )
     return "Attendance marked successfully"

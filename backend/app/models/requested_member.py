@@ -1,46 +1,41 @@
+"""RequestedMember row dataclass (credentials request)."""
+
+from __future__ import annotations
+
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.db.base import Base
+from app.models._util import coerce_datetime, coerce_uuid
 
 
-class RequestedMember(Base):
-    __tablename__ = "requested_members"
+@dataclass
+class RequestedMember:
+    id: uuid.UUID
+    ticket_id: str
+    name: str
+    college: str
+    email: str
+    phone: str
+    areas_of_interest: list[str] = field(default_factory=list)
+    description: str | None = None
+    status: str = "pending"
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-
-    # Human-readable ticket reference (e.g. "ASC-482910").
-    # Persisted so every call that touches a given record returns the same id.
-    ticket_id: Mapped[str] = mapped_column(
-        String(32), nullable=False, unique=True, index=True
-    )
-
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    college: Mapped[str] = mapped_column(String(255), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    phone: Mapped[str] = mapped_column(String(32), nullable=False)
-
-    # Array of interest areas e.g. ["Web Dev", "AI/ML", "Robotics"]
-    areas_of_interest: Mapped[list[str]] = mapped_column(
-        ARRAY(String(128)), nullable=False, default=list
-    )
-
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    # Review status: pending → approved / rejected
-    status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default="pending", index=True
-    )
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "RequestedMember":
+        return cls(
+            id=coerce_uuid(row["id"]),
+            ticket_id=row["ticket_id"],
+            name=row["name"],
+            college=row["college"],
+            email=row["email"],
+            phone=row["phone"],
+            areas_of_interest=list(row.get("areas_of_interest") or []),
+            description=row.get("description"),
+            status=row.get("status") or "pending",
+            created_at=coerce_datetime(row.get("created_at")),
+            updated_at=coerce_datetime(row.get("updated_at")),
+        )

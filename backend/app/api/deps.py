@@ -1,12 +1,21 @@
+"""
+FastAPI dependencies.
+
+The old SQLAlchemy `get_db_session` has been retired; every route now takes
+a Supabase `AsyncClient` via `get_supabase`. The auth dependencies here
+query the relevant tables through the SDK.
+"""
+
+from __future__ import annotations
+
 import uuid
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.core.security import TokenError, decode_access_token
-from app.db.session import get_db_session
+from app.db.supabase_client import first_row, get_supabase
 from app.models.admin import Admin
 from app.models.user import User
 
@@ -17,7 +26,7 @@ _SCANNER_ROLES = {"Scanner", "eventManager", "admin"}
 
 
 async def get_current_user(
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     token: str = Depends(oauth2_scheme),
 ) -> User:
     try:
@@ -37,17 +46,23 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Invalid token payload") from exc
 
-    result = await session.execute(select(User).where(User.id == user_uuid))
-    user = result.scalar_one_or_none()
-    if user is None:
+    resp = await (
+        supabase.table("users")
+        .select("*")
+        .eq("id", str(user_uuid))
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
-    return user
+    return User.from_row(row)
 
 
 async def get_current_admin(
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     token: str = Depends(oauth2_scheme),
 ) -> Admin:
     """Dependency that requires an admin JWT (issued via POST /auth/admin/login)."""
@@ -72,13 +87,19 @@ async def get_current_admin(
             detail="Invalid token payload",
         ) from exc
 
-    result = await session.execute(select(Admin).where(Admin.uid == admin_uid))
-    admin = result.scalar_one_or_none()
-    if admin is None:
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", admin_uid)
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
 
-    return admin
+    return Admin.from_row(row)
 
 
 async def get_scanner_or_above(

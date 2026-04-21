@@ -1,119 +1,179 @@
 """
 Schedule service — event-specific and global schedule reads/writes.
 Also handles announcements (stored on the same global table row).
+
+Supabase-backed: all operations go through PostgREST.
 """
+
+from __future__ import annotations
+
+import uuid
 from datetime import date
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
-from app.models.event import Event
-from app.models.global_schedule import GlobalSchedule
+from app.db.supabase_client import first_row, rows
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _row_to_dict(row: GlobalSchedule) -> dict:
+def _row_to_dict(row: dict) -> dict:
+    raw_date = row.get("date")
+    iso_date = raw_date if isinstance(raw_date, str) else raw_date.isoformat()
     return {
-        "id": str(row.id),
-        "date": row.date.isoformat(),
-        "schedule": row.schedule or [],
-        "announcements": row.announcements or [],
+        "id": str(row["id"]),
+        "date": iso_date,
+        "schedule": row.get("schedule") or [],
+        "announcements": row.get("announcements") or [],
     }
 
 
-async def _get_or_create_row(session: AsyncSession, day: date) -> GlobalSchedule:
-    result = await session.execute(
-        select(GlobalSchedule).where(GlobalSchedule.date == day)
+async def _get_or_create_row(supabase: AsyncClient, day: date) -> dict:
+    """Fetch the row for `day` or create a fresh empty one."""
+    day_iso = day.isoformat()
+    resp = await (
+        supabase.table("global")
+        .select("*")
+        .eq("date", day_iso)
+        .limit(1)
+        .execute()
     )
-    row = result.scalar_one_or_none()
-    if row is None:
-        row = GlobalSchedule(date=day, schedule=[], announcements=[])
-        session.add(row)
-        await session.flush()  # get the PK without committing
-    return row
+    row = first_row(resp)
+    if row is not None:
+        return row
+
+    # Create a new row. Client-generated UUID so we don't have to rely on the
+    # insert response shape.
+    new_row = {
+        "id": str(uuid.uuid4()),
+        "date": day_iso,
+        "schedule": [],
+        "announcements": [],
+    }
+    insert_resp = await (
+        supabase.table("global")
+        .insert(new_row)
+        .execute()
+    )
+    echoed = first_row(insert_resp)
+    return echoed if echoed is not None else new_row
 
 
 # ── Event schedule ─────────────────────────────────────────────────────────────
 
-async def get_event_schedule(session: AsyncSession, event_id: str) -> dict:
+async def get_event_schedule(
+    supabase: AsyncClient, event_id: str
+) -> dict | None:
     """Return the schedule array for a single event."""
-    result = await session.execute(
-        select(Event).where(Event.id == event_id)
+    resp = await (
+        supabase.table("events")
+        .select("id, name, schedule")
+        .eq("id", event_id)
+        .limit(1)
+        .execute()
     )
-    event = result.scalar_one_or_none()
-    if event is None:
-        return None  # caller raises 404
+    row = first_row(resp)
+    if row is None:
+        return None
 
     return {
-        "event_id": str(event.id),
-        "event_name": event.name,
-        "schedule": event.schedule or [],
+        "event_id": str(row["id"]),
+        "event_name": row["name"],
+        "schedule": row.get("schedule") or [],
     }
 
 
 async def set_event_schedule(
-    session: AsyncSession, event_id: str, items: list[dict]
-) -> dict:
+    supabase: AsyncClient, event_id: str, items: list[dict]
+) -> dict | None:
     """Replace the full schedule array for an event (admin only)."""
-    result = await session.execute(
-        select(Event).where(Event.id == event_id)
+    # Make sure the event exists so callers can 404 consistently.
+    exist = await (
+        supabase.table("events")
+        .select("id, name")
+        .eq("id", event_id)
+        .limit(1)
+        .execute()
     )
-    event = result.scalar_one_or_none()
-    if event is None:
-        return None  # caller raises 404
+    existing = first_row(exist)
+    if existing is None:
+        return None
 
-    event.schedule = items
-    session.add(event)
-    await session.commit()
-    await session.refresh(event)
+    update_resp = await (
+        supabase.table("events")
+        .update({"schedule": items})
+        .eq("id", event_id)
+        .execute()
+    )
+    row = first_row(update_resp) or {**existing, "schedule": items}
     return {
-        "event_id": str(event.id),
-        "event_name": event.name,
-        "schedule": event.schedule,
+        "event_id": str(row["id"]),
+        "event_name": row.get("name") or existing["name"],
+        "schedule": row.get("schedule") or items,
     }
 
 
 # ── Global schedule ────────────────────────────────────────────────────────────
 
-async def list_global_schedule(session: AsyncSession) -> list[dict]:
+async def list_global_schedule(supabase: AsyncClient) -> list[dict]:
     """Return all global rows, ordered by date."""
-    result = await session.execute(
-        select(GlobalSchedule).order_by(GlobalSchedule.date)
+    resp = await (
+        supabase.table("global")
+        .select("*")
+        .order("date")
+        .execute()
     )
-    return [_row_to_dict(r) for r in result.scalars().all()]
+    return [_row_to_dict(r) for r in rows(resp)]
 
 
-async def get_global_schedule_by_date(session: AsyncSession, day: date) -> dict | None:
+async def get_global_schedule_by_date(
+    supabase: AsyncClient, day: date
+) -> dict | None:
     """Return the global schedule (+ announcements) for a specific date."""
-    result = await session.execute(
-        select(GlobalSchedule).where(GlobalSchedule.date == day)
+    resp = await (
+        supabase.table("global")
+        .select("*")
+        .eq("date", day.isoformat())
+        .limit(1)
+        .execute()
     )
-    row = result.scalar_one_or_none()
+    row = first_row(resp)
     return _row_to_dict(row) if row else None
 
 
 async def upsert_global_schedule(
-    session: AsyncSession, day: date, items: list[dict], announcements: list[dict] | None = None
+    supabase: AsyncClient,
+    day: date,
+    items: list[dict],
+    announcements: list[dict] | None = None,
 ) -> dict:
     """Create or replace the global schedule (and optionally announcements) for a date.
-    
+
     Pass announcements=None to leave existing announcements untouched.
     """
-    row = await _get_or_create_row(session, day)
-    row.schedule = items
+    row = await _get_or_create_row(supabase, day)
+    patch: dict = {"schedule": items}
     if announcements is not None:
-        row.announcements = announcements
-    session.add(row)
-    await session.commit()
-    await session.refresh(row)
-    return _row_to_dict(row)
+        patch["announcements"] = announcements
+
+    update_resp = await (
+        supabase.table("global")
+        .update(patch)
+        .eq("id", row["id"])
+        .execute()
+    )
+    updated = first_row(update_resp)
+    if updated is not None:
+        return _row_to_dict(updated)
+    # Fallback: merge our patch into the pre-update row
+    merged = {**row, **patch}
+    return _row_to_dict(merged)
 
 
 # ── Announcements ──────────────────────────────────────────────────────────────
 
 async def list_all_announcements(
-    session: AsyncSession,
+    supabase: AsyncClient,
     limit: int = 50,
     category: str | None = None,
 ) -> list[dict]:
@@ -124,19 +184,24 @@ async def list_all_announcements(
     If ``category`` is provided, only announcements tagged with that category
     are returned. Legacy rows without a category default to ``"general"``.
     """
-    result = await session.execute(
-        select(GlobalSchedule).order_by(GlobalSchedule.date.desc())
+    resp = await (
+        supabase.table("global")
+        .select("date, announcements")
+        .order("date", desc=True)
+        .execute()
     )
-    rows = result.scalars().all()
+    rows_data = rows(resp)
 
     flat: list[dict] = []
-    for row in rows:
-        for item in (row.announcements or []):
+    for row in rows_data:
+        raw_date = row.get("date")
+        iso_date = raw_date if isinstance(raw_date, str) else raw_date.isoformat()
+        for item in (row.get("announcements") or []):
             item_category = item.get("category") or "general"
             if category is not None and item_category != category:
                 continue
             flat.append({
-                "date": row.date.isoformat(),
+                "date": iso_date,
                 "announcement": item.get("announcement", ""),
                 "time": item.get("time", ""),
                 "category": item_category,
@@ -148,7 +213,7 @@ async def list_all_announcements(
 
 
 async def add_announcement(
-    session: AsyncSession,
+    supabase: AsyncClient,
     day: date,
     announcement: str,
     time: str,
@@ -159,15 +224,21 @@ async def add_announcement(
     Creates the row for that date if it doesn't exist yet.
     Returns the full updated row dict.
     """
-    row = await _get_or_create_row(session, day)
-    existing = list(row.announcements or [])
+    row = await _get_or_create_row(supabase, day)
+    existing = list(row.get("announcements") or [])
     existing.append({
         "announcement": announcement,
         "time": time,
         "category": category,
     })
-    row.announcements = existing
-    session.add(row)
-    await session.commit()
-    await session.refresh(row)
-    return _row_to_dict(row)
+
+    update_resp = await (
+        supabase.table("global")
+        .update({"announcements": existing})
+        .eq("id", row["id"])
+        .execute()
+    )
+    updated = first_row(update_resp)
+    if updated is not None:
+        return _row_to_dict(updated)
+    return _row_to_dict({**row, "announcements": existing})

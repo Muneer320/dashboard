@@ -1,19 +1,21 @@
 """
-Credentials-request service.
-Writes to the requested_members table (created in migration 010).
+Credentials-request service. Supabase-backed.
 
 A given email may only hold **one** active request at a time. "Active" means
 status in ('pending', 'approved') — i.e. anything that hasn't been rejected.
-Submitting again while an active request exists returns the existing ticket
-(HTTPException 409 from the route). A rejected email is free to resubmit.
+Submitting again while an active request exists raises
+``DuplicateCredentialsRequest``. A rejected email is free to resubmit.
 """
+
+from __future__ import annotations
+
 import random
 import string
+import uuid
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
-from app.models.requested_member import RequestedMember
+from app.db.supabase_client import first_row
 
 # Statuses that count as "already submitted — don't accept another".
 ACTIVE_STATUSES = ("pending", "approved")
@@ -25,36 +27,44 @@ def _generate_ticket_id() -> str:
     return f"ASC-{digits}"
 
 
-async def _allocate_unique_ticket_id(session: AsyncSession) -> str:
+async def _allocate_unique_ticket_id(supabase: AsyncClient) -> str:
     """
     Generate a ticket_id that isn't already taken. 6 digits = 1M ids, so
-    collisions are extremely rare, but loop defensively so we never persist
-    a duplicate.
+    collisions are extremely rare, but loop defensively so we never try to
+    persist a duplicate.
+
+    Note: without SQL transactions two concurrent requests could both allocate
+    the same free ticket_id. The unique index on the column still guarantees
+    at-most-one wins the insert; callers should surface an error if the
+    follow-up insert raises because of that.
     """
     for _ in range(10):
         candidate = _generate_ticket_id()
-        result = await session.execute(
-            select(RequestedMember.id).where(
-                RequestedMember.ticket_id == candidate
-            )
+        resp = await (
+            supabase.table("requested_members")
+            .select("id")
+            .eq("ticket_id", candidate)
+            .limit(1)
+            .execute()
         )
-        if result.scalar_one_or_none() is None:
+        if first_row(resp) is None:
             return candidate
-    # Extremely unlikely — but don't loop forever.
     raise RuntimeError("could not allocate a unique ticket_id after 10 tries")
 
 
 async def _find_active_request(
-    session: AsyncSession, email: str
-) -> RequestedMember | None:
+    supabase: AsyncClient, email: str
+) -> dict | None:
     """Return any pending/approved request already on file for this email."""
-    result = await session.execute(
-        select(RequestedMember).where(
-            RequestedMember.email == email,
-            RequestedMember.status.in_(ACTIVE_STATUSES),
-        )
+    resp = await (
+        supabase.table("requested_members")
+        .select("*")
+        .eq("email", email)
+        .in_("status", list(ACTIVE_STATUSES))
+        .limit(1)
+        .execute()
     )
-    return result.scalar_one_or_none()
+    return first_row(resp)
 
 
 class DuplicateCredentialsRequest(Exception):
@@ -70,7 +80,7 @@ class DuplicateCredentialsRequest(Exception):
 
 
 async def create_credentials_request(
-    session: AsyncSession,
+    supabase: AsyncClient,
     name: str,
     college: str,
     email: str,
@@ -85,31 +95,35 @@ async def create_credentials_request(
     pending/approved request — the route layer converts that to a 409.
     """
     # 1. Guard: one active request per email.
-    existing = await _find_active_request(session, email)
+    existing = await _find_active_request(supabase, email)
     if existing is not None:
         raise DuplicateCredentialsRequest(
-            ticket_id=existing.ticket_id,
-            status=existing.status,
+            ticket_id=existing["ticket_id"],
+            status=existing["status"],
         )
 
     # 2. Allocate a stable ticket_id up front and store it on the row.
-    ticket_id = await _allocate_unique_ticket_id(session)
+    ticket_id = await _allocate_unique_ticket_id(supabase)
 
-    record = RequestedMember(
-        ticket_id=ticket_id,
-        name=name,
-        college=college,
-        email=email,
-        phone=phone,
-        areas_of_interest=events_of_interest,
-        description=note,
-        status="pending",
+    payload = {
+        "id": str(uuid.uuid4()),
+        "ticket_id": ticket_id,
+        "name": name,
+        "college": college,
+        "email": email,
+        "phone": phone,
+        "areas_of_interest": events_of_interest,
+        "description": note,
+        "status": "pending",
+    }
+    resp = await (
+        supabase.table("requested_members")
+        .insert(payload)
+        .execute()
     )
-    session.add(record)
-    await session.commit()
-    await session.refresh(record)
+    row = first_row(resp) or payload
 
     return {
-        "ticket_id": record.ticket_id,
+        "ticket_id": row["ticket_id"],
         "status": "pending_verify",
     }

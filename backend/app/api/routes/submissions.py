@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.api.deps import get_current_user
-from app.db.session import get_db_session
+from app.db.supabase_client import get_supabase
 from app.models.user import User
 from app.schemas.submission import SubmissionFetchResponse, SubmissionRequest, SubmissionResponse
 from app.services.event_service import get_event
@@ -15,7 +15,7 @@ router = APIRouter()
 async def submit_event(
     event_id: str,
     payload: SubmissionRequest,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> SubmissionResponse:
     """
@@ -35,9 +35,9 @@ async def submit_event(
             detail="Provide at least one of repo_link or deploy_link",
         )
 
-    event = await get_event(session, event_id)
+    event = await get_event(supabase, event_id)
     submitted_at, links = await submit_for_event(
-        session=session,
+        supabase=supabase,
         user=current_user,
         event=event,
         phase=payload.phase,
@@ -57,10 +57,10 @@ async def submit_event(
 async def get_submission(
     event_id: str,
     phase: int,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> SubmissionFetchResponse:
     """Return the current submission for a given event phase, or null if none."""
-    event = await get_event(session, event_id)
+    event = await get_event(supabase, event_id)
     payload = get_submission_for_phase(current_user, event, phase)
     return SubmissionFetchResponse(**payload)

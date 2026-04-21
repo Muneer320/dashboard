@@ -1,40 +1,34 @@
+"""GlobalSchedule row dataclass — table name is ``global``."""
+
+from __future__ import annotations
+
 import uuid
+from dataclasses import dataclass, field
 from datetime import date, datetime
+from typing import Any
 
-from sqlalchemy import Date, DateTime, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.db.base import Base
+from app.models._util import coerce_date, coerce_datetime, coerce_uuid
 
 
-class GlobalSchedule(Base):
-    """
-    One row per event day.
+@dataclass
+class GlobalSchedule:
+    id: uuid.UUID
+    date: date
+    schedule: list = field(default_factory=list)
+    announcements: list = field(default_factory=list)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    Table is named ``global`` in the DB (quoted to avoid the SQL reserved-word
-    clash). Holds the day's public timeline (schedule) and any announcements
-    posted for that day.
-    """
-    __tablename__ = "global"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-
-    # The calendar date this row covers, e.g. 2026-05-10
-    date: Mapped[date] = mapped_column(Date, nullable=False, unique=True, index=True)
-
-    # Array of schedule items: [{title, start_time, end_time, venue}]
-    schedule: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-
-    # Announcements for this day.
-    # Shape: [{ "announcement": str, "time": iso-datetime-str }]
-    announcements: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "GlobalSchedule":
+        row_date = coerce_date(row.get("date"))
+        if row_date is None:
+            raise ValueError(f"global row missing date: {row!r}")
+        return cls(
+            id=coerce_uuid(row["id"]),
+            date=row_date,
+            schedule=list(row.get("schedule") or []),
+            announcements=list(row.get("announcements") or []),
+            created_at=coerce_datetime(row.get("created_at")),
+            updated_at=coerce_datetime(row.get("updated_at")),
+        )

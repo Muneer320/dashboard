@@ -10,14 +10,13 @@ PUT  /schedule/events/{event_id}   → replace event schedule                (ad
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.api.deps import get_admin_only, get_current_user
-from app.db.session import get_db_session
+from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.models.user import User
 from app.schemas.schedule import (
-    AnnouncementItem,
     EventScheduleResponse,
     GlobalScheduleItem,
     GlobalScheduleUpsert,
@@ -38,22 +37,22 @@ router = APIRouter()
 
 @router.get("/global", response_model=list[GlobalScheduleItem])
 async def get_full_global_schedule(
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: User = Depends(get_current_user),
 ) -> list[GlobalScheduleItem]:
     """Return all days in the global schedule, ordered by date."""
-    rows = await list_global_schedule(session)
+    rows = await list_global_schedule(supabase)
     return [GlobalScheduleItem(**r) for r in rows]
 
 
 @router.get("/global/{day}", response_model=GlobalScheduleItem)
 async def get_global_schedule_day(
     day: date,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: User = Depends(get_current_user),
 ) -> GlobalScheduleItem:
     """Return the global schedule for a specific date (YYYY-MM-DD)."""
-    row = await get_global_schedule_by_date(session, day)
+    row = await get_global_schedule_by_date(supabase, day)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -66,13 +65,13 @@ async def get_global_schedule_day(
 async def upsert_global_schedule_day(
     day: date,
     body: GlobalScheduleUpsert,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> GlobalScheduleItem:
     """Create or fully replace the global schedule (and announcements) for a given date. Admin only."""
     items = [item.model_dump() for item in body.schedule]
     ann = [a.model_dump() for a in body.announcements]
-    row = await upsert_global_schedule(session, day, items, announcements=ann)
+    row = await upsert_global_schedule(supabase, day, items, announcements=ann)
     return GlobalScheduleItem(**row)
 
 
@@ -81,11 +80,11 @@ async def upsert_global_schedule_day(
 @router.get("/events/{event_id}", response_model=EventScheduleResponse)
 async def get_event_schedule_route(
     event_id: str,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: User = Depends(get_current_user),
 ) -> EventScheduleResponse:
     """Return the schedule for a specific event."""
-    data = await get_event_schedule(session, event_id)
+    data = await get_event_schedule(supabase, event_id)
     if data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
@@ -97,15 +96,15 @@ async def get_event_schedule_route(
 async def set_event_schedule_route(
     event_id: str,
     body: list[ScheduleItem],
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> EventScheduleResponse:
     """Replace the full schedule for an event. Admin only.
-    
+
     Send an empty array [] to clear the schedule.
     """
     items = [item.model_dump() for item in body]
-    data = await set_event_schedule(session, event_id, items)
+    data = await set_event_schedule(supabase, event_id, items)
     if data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Event not found"
