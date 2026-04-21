@@ -1,13 +1,18 @@
+"""Supabase-backed rate-limit service."""
+
+from __future__ import annotations
+
+import uuid
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
-from app.models.rate_limit import RateLimitEntry
+from app.db.supabase_client import first_row, rows
+from app.models._util import coerce_datetime
 
 
 async def allow_rate_limited_action(
-    session: AsyncSession,
+    supabase: AsyncClient,
     rate_key: str,
     limit: int,
     window_seconds: int,
@@ -15,36 +20,60 @@ async def allow_rate_limited_action(
     now = datetime.now(timezone.utc)
     window = timedelta(seconds=window_seconds)
 
-    result = await session.execute(select(RateLimitEntry).where(RateLimitEntry.rate_key == rate_key))
-    entry = result.scalar_one_or_none()
+    resp = await (
+        supabase.table("rate_limit_entries")
+        .select("*")
+        .eq("rate_key", rate_key)
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
 
-    if entry is None:
-        entry = RateLimitEntry(
-            rate_key=rate_key, request_count=1, window_started_at=now)
-        session.add(entry)
-        await session.commit()
+    if row is None:
+        payload = {
+            "id": str(uuid.uuid4()),
+            "rate_key": rate_key,
+            "request_count": 1,
+            "window_started_at": now.isoformat(),
+        }
+        await supabase.table("rate_limit_entries").insert(payload).execute()
         return True
 
-    if now - entry.window_started_at >= window:
-        entry.request_count = 1
-        entry.window_started_at = now
-        session.add(entry)
-        await session.commit()
+    started_at = coerce_datetime(row.get("window_started_at"))
+    if started_at is None or now - started_at >= window:
+        await (
+            supabase.table("rate_limit_entries")
+            .update({
+                "request_count": 1,
+                "window_started_at": now.isoformat(),
+            })
+            .eq("id", row["id"])
+            .execute()
+        )
         return True
 
-    if entry.request_count >= limit:
+    current = int(row.get("request_count") or 0)
+    if current >= limit:
         return False
 
-    entry.request_count += 1
-    session.add(entry)
-    await session.commit()
+    await (
+        supabase.table("rate_limit_entries")
+        .update({"request_count": current + 1})
+        .eq("id", row["id"])
+        .execute()
+    )
     return True
 
 
-async def cleanup_expired_rate_limits(session: AsyncSession, window_seconds: int) -> int:
+async def cleanup_expired_rate_limits(
+    supabase: AsyncClient, window_seconds: int
+) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
-    result = await session.execute(
-        delete(RateLimitEntry).where(RateLimitEntry.window_started_at < cutoff)
+    resp = await (
+        supabase.table("rate_limit_entries")
+        .delete()
+        .lt("window_started_at", cutoff.isoformat())
+        .execute()
     )
-    await session.commit()
-    return getattr(result, "rowcount", 0) or 0
+    # PostgREST returns the deleted rows; count them.
+    return len(rows(resp))

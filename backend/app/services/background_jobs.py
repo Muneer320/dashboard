@@ -5,47 +5,47 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import select
-
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
-from app.models.event import Event
+from app.db.supabase_client import get_client, rows
 from app.schemas.unstop import UnstopUserItem
 from app.services.rate_limit_service import cleanup_expired_rate_limits
 from app.services.unstop_service import sync_unstop_users
 
 
 async def enforce_event_phase_state() -> None:
+    """Auto-lock event phases whose end_time has passed."""
     now = datetime.now(timezone.utc)
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(select(Event))
-        events = list(result.scalars().all())
-        any_event_mutated = False
+    supabase = await get_client()
 
-        for event in events:
-            event_mutated = False
-            rounds = event.rounds or {}
-            for round_data in rounds.values():
-                end_time = round_data.get("end_time")
-                if not end_time:
-                    continue
-                try:
-                    parsed_end_time = datetime.fromisoformat(end_time)
-                except ValueError:
-                    continue
-                if parsed_end_time.tzinfo is None:
-                    parsed_end_time = parsed_end_time.replace(
-                        tzinfo=timezone.utc)
-                if parsed_end_time <= now and round_data.get("is_active", False):
-                    round_data["is_active"] = False
-                    round_data["is_locked"] = True
-                    event_mutated = True
-            if event_mutated:
-                event.rounds = rounds
-                session.add(event)
-                any_event_mutated = True
-        if any_event_mutated:
-            await session.commit()
+    resp = await supabase.table("events").select("*").execute()
+    events = rows(resp)
+
+    for event_row in events:
+        rounds: dict = event_row.get("rounds") or {}
+        mutated = False
+
+        for round_data in rounds.values():
+            end_time = round_data.get("end_time")
+            if not end_time:
+                continue
+            try:
+                parsed_end_time = datetime.fromisoformat(end_time)
+            except ValueError:
+                continue
+            if parsed_end_time.tzinfo is None:
+                parsed_end_time = parsed_end_time.replace(tzinfo=timezone.utc)
+            if parsed_end_time <= now and round_data.get("is_active", False):
+                round_data["is_active"] = False
+                round_data["is_locked"] = True
+                mutated = True
+
+        if mutated:
+            await (
+                supabase.table("events")
+                .update({"rounds": rounds})
+                .eq("id", event_row["id"])
+                .execute()
+            )
 
 
 async def sync_unstop_from_file_source() -> None:
@@ -58,15 +58,15 @@ async def sync_unstop_from_file_source() -> None:
 
     payload = json.loads(source_path.read_text(encoding="utf-8"))
     users = [UnstopUserItem.model_validate(item) for item in payload]
-    async with AsyncSessionLocal() as session:
-        await sync_unstop_users(session, users)
+    supabase = await get_client()
+    await sync_unstop_users(supabase, users)
 
 
 async def run_background_jobs_once() -> None:
+    supabase = await get_client()
     await enforce_event_phase_state()
     await sync_unstop_from_file_source()
-    async with AsyncSessionLocal() as session:
-        await cleanup_expired_rate_limits(session, settings.QR_RATE_LIMIT_WINDOW_SECONDS)
+    await cleanup_expired_rate_limits(supabase, settings.QR_RATE_LIMIT_WINDOW_SECONDS)
 
 
 async def run_background_jobs_loop() -> None:

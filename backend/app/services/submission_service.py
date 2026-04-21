@@ -1,7 +1,11 @@
+"""Supabase-backed submission service."""
+
+from __future__ import annotations
+
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.models.event import Event
 from app.models.user import User
@@ -10,7 +14,7 @@ from app.services.access_control import validate_event_access
 
 
 async def submit_for_event(
-    session: AsyncSession,
+    supabase: AsyncClient,
     user: User,
     event: Event,
     phase: int,
@@ -24,7 +28,9 @@ async def submit_for_event(
       user.events[event_id]['submission'] = { repoLink, deployLink, submittedAt }
       event.participants[user_id]['submission'][phaseN] = same shape
 
-    Returns (submitted_at, SubmissionLinks) so the route can echo the data back.
+    Writes to two tables; without SQL transactions these are independent calls.
+    We write the user row first so a failure on the event row leaves a
+    recoverable "submitted-on-user, not-on-event" state that admins can inspect.
     """
     if not repo_link.strip() and not deploy_link.strip():
         raise HTTPException(
@@ -64,11 +70,19 @@ async def submit_for_event(
     user.events = user_events
     event.participants = participants
 
-    async with session.begin_nested():
-        session.add(user)
-        session.add(event)
-
-    await session.commit()
+    # Persist: user row then event row.
+    await (
+        supabase.table("users")
+        .update({"events": user_events})
+        .eq("id", user_key)
+        .execute()
+    )
+    await (
+        supabase.table("events")
+        .update({"participants": participants})
+        .eq("id", event_key)
+        .execute()
+    )
 
     links = SubmissionLinks(
         repoLink=submission_obj["repoLink"],

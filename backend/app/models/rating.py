@@ -1,43 +1,33 @@
+"""Rating row dataclass (one row per user/event pair)."""
+
+from __future__ import annotations
+
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, Float, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.db.base import Base
+from app.models._util import coerce_datetime, coerce_uuid
 
 
-class Rating(Base):
-    """
-    User rating for an event.
-    One row per (user_id, event_id) — upserted on submit.
-    """
-    __tablename__ = "ratings"
-    __table_args__ = (
-        UniqueConstraint("user_id", "event_id", name="uq_rating_user_event"),
-    )
+@dataclass
+class Rating:
+    id: uuid.UUID
+    user_id: uuid.UUID
+    event_id: uuid.UUID
+    value: int
+    feedback: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
-    )
-    event_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
-    )
-
-    # Star rating 1-5
-    value: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    # Optional text review
-    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "Rating":
+        return cls(
+            id=coerce_uuid(row["id"]),
+            user_id=coerce_uuid(row["user_id"]),
+            event_id=coerce_uuid(row["event_id"]),
+            value=int(row["value"]),
+            feedback=row.get("feedback"),
+            created_at=coerce_datetime(row.get("created_at")),
+            updated_at=coerce_datetime(row.get("updated_at")),
+        )

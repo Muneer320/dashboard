@@ -11,14 +11,17 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"
     API_V1_PREFIX: str = "/api/v1"
 
-    DATABASE_URL: str = "postgresql+asyncpg://archive:archive-local-only@127.0.0.1:5432/archive_demo"
+    # Legacy DATABASE_URL retained only to avoid .env load errors;
+    # the backend now talks to Supabase exclusively via supabase-py.
+    DATABASE_URL: str | None = None
 
     JWT_SECRET_KEY: str = "change-this-in-env"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
-    SUPABASE_URL: str | None = None
-    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    # Supabase (primary data backend)
+    SUPABASE_URL: str
+    SUPABASE_SERVICE_ROLE_KEY: str
     SUPABASE_STORAGE_BUCKET: str = "submissions"
     SUPABASE_SIGNED_URL_EXPIRES_SECONDS: int = 604800
 

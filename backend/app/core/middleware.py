@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.core.config import settings
-from app.db.session import AsyncSessionLocal
+from app.db.supabase_client import get_client
 from app.services.rate_limit_service import allow_rate_limited_action
 
 
@@ -39,34 +39,58 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
 
         token = self._extract_token(request)
         if token is None:
-            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Not authenticated"})
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": "Not authenticated"},
+            )
 
         try:
-            payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[
-                                 settings.JWT_ALGORITHM])
+            payload = jwt.decode(
+                token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+            )
         except JWTError:
-            return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"detail": "Invalid or expired token"})
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": "Invalid or expired token"},
+            )
 
         role = payload.get("role")
         request.state.token_payload = payload
 
         if path.startswith("/api/v1/admin") and role != "admin":
-            return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": "Admin role required"})
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Admin role required"},
+            )
 
-        if (path.startswith("/api/v1/qr") or path.endswith("/participants")) and role not in {"scanner", "admin", "superAdmin", "eventManage", "EM"}:
-            return JSONResponse(status_code=status.HTTP_403_FORBIDDEN, content={"detail": "Scanner role required"})
+        # Scanner / QR access — role values match AdminRole enum
+        _scanner_roles = {"Scanner", "eventManager", "admin"}
+        if (
+            path.startswith("/api/v1/qr")
+            or path.endswith("/participants")
+        ) and role not in _scanner_roles:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Scanner role required"},
+            )
 
-        if path.startswith("/api/v1/qr") and not getattr(request.app.state, RATE_LIMIT_DISABLED_STATE_NAME, False):
+        # QR rate limiting via Supabase
+        if path.startswith("/api/v1/qr") and not getattr(
+            request.app.state, RATE_LIMIT_DISABLED_STATE_NAME, False
+        ):
             limiter_key = self._rate_limit_key(request, token, path)
-            async with AsyncSessionLocal() as session:
-                allowed = await allow_rate_limited_action(
-                    session=session,
-                    rate_key=limiter_key,
-                    limit=settings.QR_RATE_LIMIT_PER_MINUTE,
-                    window_seconds=settings.QR_RATE_LIMIT_WINDOW_SECONDS,
-                )
+            supabase = await get_client()
+            allowed = await allow_rate_limited_action(
+                supabase=supabase,
+                rate_key=limiter_key,
+                limit=settings.QR_RATE_LIMIT_PER_MINUTE,
+                window_seconds=settings.QR_RATE_LIMIT_WINDOW_SECONDS,
+            )
             if not allowed:
-                return JSONResponse(status_code=status.HTTP_429_TOO_MANY_REQUESTS, content={"detail": "Rate limit exceeded"})
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={"detail": "Rate limit exceeded"},
+                )
 
         return await call_next(request)
 

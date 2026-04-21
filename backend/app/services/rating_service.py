@@ -2,17 +2,18 @@
 Rating service — submit and read per-event ratings.
 Upserts on (user_id, event_id) so a user can update their rating any time.
 """
+
+from __future__ import annotations
+
 import uuid
 
-from fastapi import HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
-from app.models.rating import Rating
+from app.db.supabase_client import first_row, rows
 
 
 async def submit_rating(
-    session: AsyncSession,
+    supabase: AsyncClient,
     user_id: str,
     event_id: str,
     value: int,
@@ -21,77 +22,80 @@ async def submit_rating(
     """
     Create or update a user's rating for an event.
     Returns the saved rating dict.
+
+    Uses PostgREST `upsert` with `on_conflict` targeting the composite
+    unique constraint `(user_id, event_id)`.
     """
-    user_uuid = uuid.UUID(user_id)
-    event_uuid = uuid.UUID(event_id)
+    user_uuid = str(uuid.UUID(user_id))
+    event_uuid = str(uuid.UUID(event_id))
 
-    result = await session.execute(
-        select(Rating).where(
-            Rating.user_id == user_uuid,
-            Rating.event_id == event_uuid,
-        )
+    payload = {
+        "user_id": user_uuid,
+        "event_id": event_uuid,
+        "value": value,
+        "feedback": feedback,
+    }
+
+    resp = await (
+        supabase.table("ratings")
+        .upsert(payload, on_conflict="user_id,event_id")
+        .execute()
     )
-    row = result.scalar_one_or_none()
-
-    if row is None:
-        row = Rating(
-            user_id=user_uuid,
-            event_id=event_uuid,
-            value=value,
-            feedback=feedback,
-        )
-        session.add(row)
-    else:
-        row.value = value
-        row.feedback = feedback
-        session.add(row)
-
-    await session.commit()
-    await session.refresh(row)
+    row = first_row(resp) or payload
     return {
         "event_id": event_id,
-        "value": row.value,
-        "feedback": row.feedback,
+        "value": row.get("value", value),
+        "feedback": row.get("feedback", feedback),
     }
 
 
 async def get_my_rating(
-    session: AsyncSession,
+    supabase: AsyncClient,
     user_id: str,
     event_id: str,
 ) -> dict | None:
     """Return the calling user's rating for an event, or None if not rated."""
-    result = await session.execute(
-        select(Rating).where(
-            Rating.user_id == uuid.UUID(user_id),
-            Rating.event_id == uuid.UUID(event_id),
-        )
+    resp = await (
+        supabase.table("ratings")
+        .select("*")
+        .eq("user_id", str(uuid.UUID(user_id)))
+        .eq("event_id", str(uuid.UUID(event_id)))
+        .limit(1)
+        .execute()
     )
-    row = result.scalar_one_or_none()
+    row = first_row(resp)
     if row is None:
         return None
     return {
         "event_id": event_id,
-        "value": row.value,
-        "feedback": row.feedback,
+        "value": row["value"],
+        "feedback": row.get("feedback"),
     }
 
 
 async def get_rating_summary(
-    session: AsyncSession,
+    supabase: AsyncClient,
     event_id: str,
 ) -> dict:
-    """Return average star rating and total count for an event."""
-    result = await session.execute(
-        select(
-            func.avg(Rating.value).label("avg"),
-            func.count(Rating.id).label("count"),
-        ).where(Rating.event_id == uuid.UUID(event_id))
+    """
+    Return average star rating and total count for an event.
+
+    PostgREST doesn't expose SQL aggregate functions directly to arbitrary
+    clients, so we pull the rating values for this event and aggregate in
+    Python. The number of ratings per event is bounded (one per attending
+    user), so this is cheap in practice.
+    """
+    resp = await (
+        supabase.table("ratings")
+        .select("value")
+        .eq("event_id", str(uuid.UUID(event_id)))
+        .execute()
     )
-    row = result.one()
-    avg_val = float(row.avg) if row.avg is not None else 0.0
+    values = [int(r["value"]) for r in rows(resp) if r.get("value") is not None]
+    count = len(values)
+    avg_val = (sum(values) / count) if count else 0.0
     return {
         "event_id": event_id,
-        "avg": round(avg_val, 2),
-        "count": row.count,
+        "avg": round(float(avg_val), 2),
+        "count": count,
     }

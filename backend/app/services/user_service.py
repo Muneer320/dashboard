@@ -1,39 +1,66 @@
+"""Supabase-backed user service."""
+
+from __future__ import annotations
+
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
+from app.db.supabase_client import first_row
 from app.models.user import User
 
 
-async def get_user_by_id(session: AsyncSession, user_id: str) -> User:
+async def get_user_by_id(supabase: AsyncClient, user_id: str) -> User:
     try:
         user_uuid = uuid.UUID(user_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid user id") from exc
 
-    result = await session.execute(select(User).where(User.id == user_uuid))
-    user = result.scalar_one_or_none()
-    if user is None:
+    resp = await (
+        supabase.table("users")
+        .select("*")
+        .eq("id", str(user_uuid))
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    return user
+    return User.from_row(row)
 
 
-async def update_user_profile(session: AsyncSession, user: User, payload: dict) -> User:
+async def update_user_profile(
+    supabase: AsyncClient, user: User, payload: dict
+) -> User:
+    patch: dict = {}
+
     if payload.get("name") is not None:
+        patch["name"] = payload["name"]
         user.name = payload["name"]
 
     if payload.get("details") is not None:
+        patch["details"] = payload["details"]
         user.details = payload["details"]
 
     if payload.get("is_profile_complete") is not None:
+        patch["is_profile_complete"] = payload["is_profile_complete"]
         user.is_profile_complete = payload["is_profile_complete"]
 
-    await session.commit()
-    await session.refresh(user)
+    if not patch:
+        return user
+
+    resp = await (
+        supabase.table("users")
+        .update(patch)
+        .eq("id", str(user.id))
+        .execute()
+    )
+    row = first_row(resp)
+    if row is not None:
+        return User.from_row(row)
     return user
 
 

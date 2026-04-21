@@ -1,23 +1,31 @@
+"""Rate-limit bucket row dataclass."""
+
+from __future__ import annotations
+
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, Integer, String, func
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.db.base import Base
+from app.models._util import coerce_datetime, coerce_uuid
 
 
-class RateLimitEntry(Base):
-    __tablename__ = "rate_limit_entries"
+@dataclass
+class RateLimitEntry:
+    id: uuid.UUID
+    rate_key: str
+    request_count: int = 0
+    window_started_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    rate_key: Mapped[str] = mapped_column(String(512), unique=True, index=True)
-    request_count: Mapped[int] = mapped_column(Integer, default=0)
-    window_started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now())
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "RateLimitEntry":
+        return cls(
+            id=coerce_uuid(row["id"]),
+            rate_key=row["rate_key"],
+            request_count=int(row.get("request_count") or 0),
+            window_started_at=coerce_datetime(row.get("window_started_at")),
+            created_at=coerce_datetime(row.get("created_at")),
+            updated_at=coerce_datetime(row.get("updated_at")),
+        )

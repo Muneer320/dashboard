@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.api.deps import get_admin_only, get_admin_or_em, get_current_admin, get_scanner_or_above
-from app.db.session import get_db_session
+from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.schemas.admin_panel import (
     EventManagerCreate,
@@ -36,7 +36,7 @@ router = APIRouter()
 
 @router.get("/stats", response_model=StatsResponse)
 async def overview_stats(
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
 ) -> StatsResponse:
     """
@@ -44,13 +44,13 @@ async def overview_stats(
     admin       → aggregated across all events
     eventManager → aggregated across assigned events only
     """
-    data = await get_overview_stats(session, admin)
+    data = await get_overview_stats(supabase, admin)
     return StatsResponse(**data)
 
 
 @router.get("/events/stats", response_model=list[EventStatsItem])
 async def events_stats(
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
 ) -> list[EventStatsItem]:
     """
@@ -58,7 +58,7 @@ async def events_stats(
     admin       → all events
     eventManager → assigned events only
     """
-    rows = await get_events_with_stats(session, admin)
+    rows = await get_events_with_stats(supabase, admin)
     return [EventStatsItem(**r) for r in rows]
 
 
@@ -69,14 +69,14 @@ async def participants_list(
     event_id: str | None = None,
     search: str | None = None,
     status: str | None = None,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
 ) -> list[ParticipantItem]:
     """
     Participants table with optional filters.
     Query params: event_id, search (name/username), status (active|restricted)
     """
-    rows = await get_participants_list(session, admin, event_id, search, status)
+    rows = await get_participants_list(supabase, admin, event_id, search, status)
     return [ParticipantItem(**r) for r in rows]
 
 
@@ -87,7 +87,7 @@ async def participants_list(
 async def restrict_user(
     user_id: str,
     body: RestrictRequest,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_current_admin),
 ) -> RestrictResponse:
     """
@@ -96,7 +96,7 @@ async def restrict_user(
     Body: { event_id, restricted: bool }
     """
     data = await restrict_participant(
-        session, admin, user_id, body.event_id, body.restricted
+        supabase, admin, user_id, body.event_id, body.restricted
     )
     return RestrictResponse(**data)
 
@@ -108,7 +108,7 @@ async def participant_lookup(
     user_id: str | None = None,
     q: str | None = None,
     event_id: str | None = None,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_scanner_or_above),   # Scanner, EM, and admin
 ) -> list[ParticipantItem]:
     """
@@ -116,7 +116,7 @@ async def participant_lookup(
     Returns a list — name searches may surface multiple matches.
     Requires scanner, eventManager, or admin JWT.
     """
-    rows = await lookup_participant(session, admin, user_id, q, event_id)
+    rows = await lookup_participant(supabase, admin, user_id, q, event_id)
     return [ParticipantItem(**r) for r in rows]
 
 
@@ -124,7 +124,7 @@ async def participant_lookup(
 
 @router.get("/my-events", response_model=list[MyEventItem])
 async def my_events(
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
 ) -> list[MyEventItem]:
     """
@@ -132,7 +132,7 @@ async def my_events(
     admin       → all events
     eventManager → assigned events only
     """
-    rows = await get_my_events(session, admin)
+    rows = await get_my_events(supabase, admin)
     return [MyEventItem(**r) for r in rows]
 
 
@@ -140,21 +140,21 @@ async def my_events(
 
 @router.get("/event-managers", response_model=list[EventManagerItem])
 async def event_managers(
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> list[EventManagerItem]:
     """
     All eventManager accounts with contact info and assigned events.
     Admin role only.
     """
-    rows = await get_event_managers(session)
+    rows = await get_event_managers(supabase)
     return [EventManagerItem(**r) for r in rows]
 
 
 @router.post("/event-managers", response_model=EventManagerResponse, status_code=201)
 async def create_em(
     body: EventManagerCreate,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> EventManagerResponse:
     """
@@ -164,7 +164,7 @@ async def create_em(
     Admin role only.
     """
     data = await create_event_manager(
-        session,
+        supabase,
         username=body.username,
         name=body.name,
         password=body.password,
@@ -179,7 +179,7 @@ async def create_em(
 async def update_em(
     uid: int,
     body: EventManagerUpdate,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> EventManagerResponse:
     """
@@ -189,7 +189,7 @@ async def update_em(
     Admin role only.
     """
     data = await update_event_manager(
-        session,
+        supabase,
         uid=uid,
         name=body.name,
         mail=body.mail,
@@ -202,7 +202,7 @@ async def update_em(
 @router.delete("/event-managers/{uid}", response_model=EventManagerResponse)
 async def delete_em(
     uid: int,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> EventManagerResponse:
     """
@@ -212,5 +212,5 @@ async def delete_em(
     Assign a replacement first, then retry.
     Admin role only.
     """
-    data = await delete_event_manager(session, uid)
+    data = await delete_event_manager(supabase, uid)
     return EventManagerResponse(**data)

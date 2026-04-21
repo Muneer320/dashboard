@@ -1,35 +1,59 @@
+"""Supabase-backed event service."""
+
+from __future__ import annotations
+
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
+from app.db.supabase_client import first_row, rows
 from app.models.event import Event
 from app.models.user import User
 
 
-async def list_events(session: AsyncSession) -> list[Event]:
-    result = await session.execute(select(Event).order_by(Event.created_at.desc()))
-    return list(result.scalars().all())
+async def list_events(supabase: AsyncClient) -> list[Event]:
+    resp = await (
+        supabase.table("events")
+        .select("*")
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [Event.from_row(r) for r in rows(resp)]
 
 
-async def get_event(session: AsyncSession, event_id: str) -> Event:
+async def get_event(supabase: AsyncClient, event_id: str) -> Event:
     try:
         event_uuid = uuid.UUID(event_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid event id") from exc
 
-    result = await session.execute(select(Event).where(Event.id == event_uuid))
-    event = result.scalar_one_or_none()
-    if event is None:
+    resp = await (
+        supabase.table("events")
+        .select("*")
+        .eq("id", str(event_uuid))
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
-    return event
+    return Event.from_row(row)
 
 
-async def register_for_event(session: AsyncSession, user: User, event: Event) -> None:
+async def register_for_event(
+    supabase: AsyncClient, user: User, event: Event
+) -> None:
+    """
+    Register `user` for `event`. Writes to TWO tables (events.participants,
+    users.events) — without SQL transactions those two writes are independent.
+    We persist the event row first because that's the one we checked capacity
+    against; if the user row write fails, a stale entry in event.participants
+    is recoverable, the other way around leaks quota.
+    """
     participants = event.participants or {}
     user_events = user.events or {}
     event_key = str(event.id)
@@ -69,14 +93,24 @@ async def register_for_event(session: AsyncSession, user: User, event: Event) ->
         "rank": None,
     }
 
+    # Write the event row first (source of truth for capacity).
+    await (
+        supabase.table("events")
+        .update({"participants": participants})
+        .eq("id", event_key)
+        .execute()
+    )
+
+    # Then the user row.
+    await (
+        supabase.table("users")
+        .update({"events": user_events})
+        .eq("id", user_key)
+        .execute()
+    )
+
     event.participants = participants
     user.events = user_events
-
-    async with session.begin_nested():
-        session.add(event)
-        session.add(user)
-
-    await session.commit()
 
 
 def get_event_participants_payload(event: Event) -> dict:
@@ -89,13 +123,13 @@ def get_event_participants_payload(event: Event) -> dict:
 
 
 async def set_event_phase_state(
-    session: AsyncSession,
+    supabase: AsyncClient,
     event_id: str,
     phase: int,
     is_active: bool | None = None,
     is_locked: bool | None = None,
 ) -> Event:
-    event = await get_event(session, event_id)
+    event = await get_event(supabase, event_id)
     rounds = event.rounds or {}
     phase_key = f"phase{phase}"
     round_data = rounds.get(phase_key)
@@ -109,8 +143,17 @@ async def set_event_phase_state(
         round_data["is_locked"] = is_locked
 
     rounds[phase_key] = round_data
+
+    resp = await (
+        supabase.table("events")
+        .update({"rounds": rounds})
+        .eq("id", str(event.id))
+        .execute()
+    )
+    row = first_row(resp)
+    if row is not None:
+        return Event.from_row(row)
+
+    # Fallback: return the locally-mutated event if the SDK didn't echo the row
     event.rounds = rounds
-    session.add(event)
-    await session.commit()
-    await session.refresh(event)
     return event
