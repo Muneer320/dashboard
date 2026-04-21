@@ -19,6 +19,8 @@ async def admin_login(supabase: AsyncClient, username: str, password: str) -> st
         .execute()
     )
     row = first_row(resp)
+    print("Here")
+    print(row)
 
     if row is None or not verify_password(password, row["password_hash"]):
         raise HTTPException(

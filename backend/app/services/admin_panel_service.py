@@ -12,6 +12,7 @@ Scoping rules
 
 from __future__ import annotations
 
+import re
 import uuid
 
 from fastapi import HTTPException, status
@@ -22,6 +23,10 @@ from app.db.supabase_client import first_row, rows
 from app.models.admin import Admin, AdminRole
 from app.models.event import Event
 from app.models.user import User
+from app.services.schedule_service import get_meals_count, set_meals_count
+
+
+_MEAL_KEY_RE = re.compile(r"^meal(\d+)$")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -657,6 +662,136 @@ async def update_event_manager(
         "message": "Event manager updated successfully",
     }
 
+
+# ── Meals ─────────────────────────────────────────────────────────────────────
+
+def _validate_meal_key(meal_id: str, meals_count: int) -> int:
+    """Return the 1-based index for a valid meal key, or raise 400."""
+    m = _MEAL_KEY_RE.match(meal_id or "")
+    if not m:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid meal key '{meal_id}' — expected 'meal1', 'meal2', …",
+        )
+    idx = int(m.group(1))
+    if idx < 1 or idx > meals_count:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Meal '{meal_id}' is out of range — current meals_count is {meals_count}."
+            ),
+        )
+    return idx
+
+
+async def get_meals_config(supabase: AsyncClient) -> dict:
+    """Return {meals_count: int} — current festival-wide count."""
+    count = await get_meals_count(supabase)
+    return {"meals_count": count}
+
+
+async def update_meals_config(supabase: AsyncClient, count: int) -> dict:
+    """Change the festival-wide meals count (1..20)."""
+    try:
+        new_count = await set_meals_count(supabase, count)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return {"meals_count": new_count}
+
+
+async def list_user_meals(supabase: AsyncClient) -> dict:
+    """
+    Return the current meals_count plus a row per user with their claim
+    status for meal1..mealN. Absent keys on users.food are treated as False.
+    """
+    meals_count = await get_meals_count(supabase)
+    all_users = await _all_users(supabase)
+
+    meal_ids = [f"meal{i}" for i in range(1, meals_count + 1)]
+
+    users_payload: list[dict] = []
+    for user in sorted(all_users, key=lambda u: u.name.lower()):
+        food = user.food or {}
+        claims = [
+            {"meal_id": mid, "claimed": bool(food.get(mid))}
+            for mid in meal_ids
+        ]
+        users_payload.append({
+            "user_id": str(user.id),
+            "name": user.name,
+            "username": user.username,
+            "claims": claims,
+        })
+
+    return {"meals_count": meals_count, "users": users_payload}
+
+
+async def set_user_meal_entry(
+    supabase: AsyncClient,
+    user_id: str,
+    meal_id: str,
+    claimed: bool,
+) -> dict:
+    """
+    Manually add or remove a meal claim for a user.
+
+    ``claimed=True``  → sets user.food[meal_id] = True (adds or overwrites).
+    ``claimed=False`` → removes the meal_id key from user.food entirely so
+    the row doesn't carry stale keys around.
+    """
+    meals_count = await get_meals_count(supabase)
+    _validate_meal_key(meal_id, meals_count)
+
+    user_uuid = _parse_user_uuid(user_id)
+    user_resp = await (
+        supabase.table("users")
+        .select("*")
+        .eq("id", str(user_uuid))
+        .limit(1)
+        .execute()
+    )
+    row = first_row(user_resp)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user = User.from_row(row)
+    food = dict(user.food or {})
+
+    if claimed:
+        if food.get(meal_id):
+            message = "Meal already claimed — no change"
+        else:
+            food[meal_id] = True
+            message = "Meal entry added"
+    else:
+        if meal_id in food:
+            food.pop(meal_id, None)
+            message = "Meal entry removed"
+        else:
+            message = "No existing meal entry — nothing to remove"
+
+    await (
+        supabase.table("users")
+        .update({"food": food})
+        .eq("id", str(user.id))
+        .execute()
+    )
+
+    return {
+        "user_id": str(user.id),
+        "meal_id": meal_id,
+        "claimed": bool(food.get(meal_id, False)),
+        "message": message,
+    }
+
+
+# ── Event manager management ──────────────────────────────────────────────────
 
 async def delete_event_manager(supabase: AsyncClient, uid: int) -> dict:
     """

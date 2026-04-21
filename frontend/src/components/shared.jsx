@@ -1,7 +1,7 @@
 // Ascent — Shared UI components
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-
+import { useUserAuth } from '../lib/UserAuthContext';
 // ─────────────────────────────────────────────────────────────
 // Responsive hook
 // ─────────────────────────────────────────────────────────────
@@ -59,7 +59,17 @@ export function AscentLogo({ size = 22, withMark = true }) {
 export function NavBar({ active, variant = 'app' }) {
   const isMobile = useMobile();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hoverLogout, setHoverLogout] = useState(false);
   const navigate = useNavigate();
+  const { user, logout } = useUserAuth() || {};
+
+  const handleLogout = () => {
+    if (logout) logout();
+    navigate('/');
+  };
+
+  const initials = user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'AR';
+  const displayName = user?.name || 'Aarav Rao';
   const appItems = ['Dashboard', 'Schedule', 'Explore', 'Leaderboard', 'Mirage', 'Announcements'];
   const publicItems = ['Overview', 'Events', 'Sponsors', 'FAQ'];
   const items = variant === 'app' ? appItems : publicItems;
@@ -137,14 +147,38 @@ export function NavBar({ active, variant = 'app' }) {
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {variant === 'app' ? (
-              <div style={{
-                width: 30, height: 30, borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--violet), var(--teal))',
-                display: 'grid', placeItems: 'center',
-                fontFamily: 'var(--f-mono)', fontSize: 11, color: '#fff',
-                border: '1px solid rgba(255,255,255,0.2)',
-                cursor: 'pointer',
-              }} onClick={() => navClick('event-detail')}>AR</div>
+              <div 
+                style={{ position: 'relative' }} 
+                onMouseEnter={() => setHoverLogout(true)}
+                onMouseLeave={() => setHoverLogout(false)}
+              >
+                <div style={{
+                  width: 30, height: 30, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, var(--violet), var(--teal))',
+                  display: 'grid', placeItems: 'center',
+                  fontFamily: 'var(--f-mono)', fontSize: 11, color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  cursor: 'pointer',
+                }} onClick={() => navClick('event-detail')}>{initials}</div>
+                
+                {hoverLogout && (
+                  <div style={{ position: 'absolute', top: '100%', right: 0, paddingTop: 8, zIndex: 50 }}>
+                    <button
+                      onClick={handleLogout}
+                      style={{
+                        background: '#e53e3e', color: '#fff',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        borderRadius: 6, padding: '6px 12px',
+                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                      }}
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <>
                 <a onClick={() => navClick('login')} className="btn ghost sm">Login</a>
@@ -182,14 +216,27 @@ export function NavBar({ active, variant = 'app' }) {
           })}
           <div style={{ marginTop: 28, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {variant === 'app' ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 4px' }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: '50%',
-                  background: 'linear-gradient(135deg, var(--violet), var(--teal))',
-                  display: 'grid', placeItems: 'center',
-                  fontFamily: 'var(--f-mono)', fontSize: 12, color: '#fff',
-                }}>AR</div>
-                <span style={{ color: 'var(--ink-dim)', fontSize: 13, fontFamily: 'var(--f-body)' }}>Aarav Rao</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, var(--violet), var(--teal))',
+                    display: 'grid', placeItems: 'center',
+                    fontFamily: 'var(--f-mono)', fontSize: 12, color: '#fff',
+                  }}>{initials}</div>
+                  <span style={{ color: 'var(--ink-dim)', fontSize: 13, fontFamily: 'var(--f-body)' }}>{displayName}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    background: '#e53e3e', color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    borderRadius: 6, padding: '6px 16px',
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  }}
+                >
+                  Logout
+                </button>
               </div>
             ) : (
               <>

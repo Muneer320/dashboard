@@ -19,7 +19,16 @@ from app.models._util import coerce_datetime, coerce_uuid
 
 
 def _default_food() -> dict:
-    return {"meal1": False, "meal2": False, "meal3": False}
+    """
+    Empty dict by default.
+
+    A meal key is only present after the user has actually been scanned for
+    that meal — `food["meal2"] = True` means meal 2 has been claimed. Absent
+    keys mean "not claimed". This keeps the shape flexible as the admin can
+    raise/lower the festival-wide meals_count without having to migrate
+    existing user rows.
+    """
+    return {}
 
 
 @dataclass

@@ -10,23 +10,31 @@ from app.schemas.admin_panel import (
     EventManagerResponse,
     EventManagerUpdate,
     EventStatsItem,
+    MealEntryResponse,
+    MealsConfigResponse,
+    MealsConfigUpdate,
     MyEventItem,
     ParticipantItem,
     RestrictRequest,
     RestrictResponse,
     StatsResponse,
+    UserMealsResponse,
 )
 from app.services.admin_panel_service import (
     create_event_manager,
     delete_event_manager,
     get_event_managers,
     get_events_with_stats,
+    get_meals_config,
     get_my_events,
     get_overview_stats,
     get_participants_list,
+    list_user_meals,
     lookup_participant,
     restrict_participant,
+    set_user_meal_entry,
     update_event_manager,
+    update_meals_config,
 )
 
 router = APIRouter()
@@ -214,3 +222,83 @@ async def delete_em(
     """
     data = await delete_event_manager(supabase, uid)
     return EventManagerResponse(**data)
+
+
+# ── Meals management ──────────────────────────────────────────────────────────
+
+@router.get("/meals", response_model=MealsConfigResponse)
+async def meals_config(
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MealsConfigResponse:
+    """
+    Current festival-wide meals_count (default 3).
+    Admin role only — this is a global config.
+    """
+    data = await get_meals_config(supabase)
+    return MealsConfigResponse(**data)
+
+
+@router.patch("/meals", response_model=MealsConfigResponse)
+async def update_meals(
+    body: MealsConfigUpdate,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MealsConfigResponse:
+    """
+    Change the festival-wide meals_count (1..20).
+    Admin role only.
+    """
+    data = await update_meals_config(supabase, body.meals_count)
+    return MealsConfigResponse(**data)
+
+
+@router.get("/meals/users", response_model=UserMealsResponse)
+async def user_meals(
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> UserMealsResponse:
+    """
+    Per-user meals claim matrix: meals_count + every user's claimed/unclaimed
+    status for meal1..mealN. Admin role only.
+    """
+    data = await list_user_meals(supabase)
+    return UserMealsResponse(**data)
+
+
+@router.post(
+    "/meals/users/{user_id}/{meal_id}",
+    response_model=MealEntryResponse,
+    status_code=201,
+)
+async def add_user_meal(
+    user_id: str,
+    meal_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MealEntryResponse:
+    """
+    Manually mark a user's meal as claimed (e.g., if QR scan failed).
+    Adds (or overwrites) user.food[meal_id] = True.
+    Admin role only.
+    """
+    data = await set_user_meal_entry(supabase, user_id, meal_id, claimed=True)
+    return MealEntryResponse(**data)
+
+
+@router.delete(
+    "/meals/users/{user_id}/{meal_id}",
+    response_model=MealEntryResponse,
+)
+async def remove_user_meal(
+    user_id: str,
+    meal_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MealEntryResponse:
+    """
+    Remove a user's meal claim entirely (pops the key from users.food).
+    Admin role only.
+    """
+    data = await set_user_meal_entry(supabase, user_id, meal_id, claimed=False)
+    return MealEntryResponse(**data)

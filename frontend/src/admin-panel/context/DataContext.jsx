@@ -19,6 +19,8 @@ export function DataProvider({ children }) {
     submitted:       0,
     eventCount:      0,
   })
+  const [mealsCount, setMealsCountState] = useState(3)        // festival-wide
+  const [userMeals, setUserMeals]         = useState([])      // UserMealsRow[]
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
 
@@ -73,6 +75,23 @@ export function DataProvider({ children }) {
     }
   }, [user?.role])
 
+  const loadMeals = useCallback(async () => {
+    // Admin-only endpoints. Scanner/EM just need the count for their picker,
+    // but meals_count leaks through the /meals config route — we gate to admin
+    // here and let the Scanner fall back to the last-known value or the default.
+    if (user?.role !== 'admin') return
+    try {
+      const [config, perUser] = await Promise.all([
+        adminPanel.mealsConfig(),
+        adminPanel.userMeals(),
+      ])
+      setMealsCountState(config?.meals_count ?? 3)
+      setUserMeals(perUser?.users ?? [])
+    } catch (e) {
+      console.error('Meals fetch failed:', e.message)
+    }
+  }, [user?.role])
+
   const loadAll = useCallback(async () => {
     if (!user) return
     setLoading(true)
@@ -81,9 +100,10 @@ export function DataProvider({ children }) {
       loadParticipants(),
       loadEvents(),
       loadEventManagers(),
+      loadMeals(),
     ])
     setLoading(false)
-  }, [user, loadStats, loadParticipants, loadEvents, loadEventManagers])
+  }, [user, loadStats, loadParticipants, loadEvents, loadEventManagers, loadMeals])
 
   useEffect(() => { loadAll() }, [loadAll])
 
@@ -104,38 +124,77 @@ export function DataProvider({ children }) {
   }, [])
 
   // QR scan actions — POST /qr/scan
-  const _scan = useCallback(async (participantId, scanType, eventId = null) => {
+  const _scan = useCallback(async (participantId, scanType, { event_id = null, meal = null } = {}) => {
     try {
-      return await qr.scan({ user_id: participantId, scan_type: scanType, event_id: eventId })
+      return await qr.scan({ user_id: participantId, scan_type: scanType, event_id, meal })
     } catch (e) {
       console.error(`Scan (${scanType}) failed:`, e.message)
       return null
     }
   }, [])
 
-  const markEntryScanned = useCallback(async (id, eventId) => {
-    const res = await _scan(id, 'entry', eventId)
+  const markEntryScanned = useCallback(async (id) => {
+    // Main-gate / college entry — no event context required.
+    const res = await _scan(id, 'entry')
     if (res) setParticipants(prev => prev.map(p => p.id === id ? { ...p, entryScanned: true } : p))
   }, [_scan])
 
   const markAttended = useCallback(async (id, eventId) => {
-    const res = await _scan(id, 'attendance', eventId)
-    if (res) setParticipants(prev => prev.map(p => p.id === id ? { ...p, isAttending: true } : p))
+    const res = await _scan(id, 'attendance', { event_id: eventId })
+    if (res) {
+      // Event-entry also flips top-level is_attending on the server, so mirror it here.
+      setParticipants(prev => prev.map(p =>
+        p.id === id ? { ...p, isAttending: true, entryScanned: true } : p
+      ))
+    }
   }, [_scan])
 
-  const markFoodClaimed = useCallback(async (id) => {
-    const res = await _scan(id, 'food')
+  const markFoodClaimed = useCallback(async (id, mealId) => {
+    if (!mealId) {
+      console.error('markFoodClaimed: meal is required (e.g. "meal1")')
+      return
+    }
+    const res = await _scan(id, 'food', { meal: mealId })
     if (res) setParticipants(prev => prev.map(p => p.id === id ? { ...p, foodClaimed: true } : p))
   }, [_scan])
+
+  // ── Meals admin mutations ───────────────────────────────────────────────────
+
+  const updateMealsCount = useCallback(async (count) => {
+    const res = await adminPanel.setMealsCount(count)
+    setMealsCountState(res?.meals_count ?? count)
+    await loadMeals()  // re-pull user matrix so column count is in sync
+  }, [loadMeals])
+
+  const addMealEntry = useCallback(async (userId, mealId) => {
+    await adminPanel.addUserMeal(userId, mealId)
+    setUserMeals(prev => prev.map(row =>
+      row.user_id === userId
+        ? { ...row, claims: row.claims.map(c => c.meal_id === mealId ? { ...c, claimed: true } : c) }
+        : row
+    ))
+  }, [])
+
+  const removeMealEntry = useCallback(async (userId, mealId) => {
+    await adminPanel.removeUserMeal(userId, mealId)
+    setUserMeals(prev => prev.map(row =>
+      row.user_id === userId
+        ? { ...row, claims: row.claims.map(c => c.meal_id === mealId ? { ...c, claimed: false } : c) }
+        : row
+    ))
+  }, [])
 
   return (
     <DataContext.Provider value={{
       events, eventManagers, participants, stats,
+      mealsCount, userMeals,
       loading, error,
       reload:               loadAll,
       loadParticipants,
+      loadMeals,
       updateParticipantStatus,
       markAttended, markFoodClaimed, markEntryScanned,
+      updateMealsCount, addMealEntry, removeMealEntry,
     }}>
       {children}
     </DataContext.Provider>

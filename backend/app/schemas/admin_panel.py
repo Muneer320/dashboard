@@ -122,3 +122,43 @@ class EventManagerResponse(BaseModel):
     mail: str
     events: list
     message: str
+
+
+# ── Meals ─────────────────────────────────────────────────────────────────────
+
+class MealsConfigResponse(BaseModel):
+    """Current festival-wide meals count."""
+    meals_count: int
+
+
+class MealsConfigUpdate(BaseModel):
+    """Body for PATCH /admin-panel/meals — change the festival meals count."""
+    meals_count: int
+
+
+class UserMealClaim(BaseModel):
+    """One row in the per-user meals table."""
+    meal_id: str        # e.g. "meal1"
+    claimed: bool
+
+
+class UserMealsRow(BaseModel):
+    """All meal claims for a single user."""
+    user_id: str
+    name: str
+    username: str
+    claims: list[UserMealClaim]
+
+
+class UserMealsResponse(BaseModel):
+    """GET /admin-panel/meals/users — count + per-user claim matrix."""
+    meals_count: int
+    users: list[UserMealsRow]
+
+
+class MealEntryResponse(BaseModel):
+    """Response for manual add/remove of a single meal entry for a user."""
+    user_id: str
+    meal_id: str
+    claimed: bool
+    message: str
