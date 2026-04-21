@@ -2,7 +2,7 @@
 
 These files are intended for the Supabase SQL editor.
 
-Apply them in order after creating your Supabase project and copying the database connection string into `backend/.env`.
+Apply them in order after creating your Supabase project and configuring the Supabase environment values in `backend/.env`.
 
 ## Order
 
@@ -17,7 +17,7 @@ Apply them in order after creating your Supabase project and copying the databas
 ## When to create the Supabase project
 
 Create the Supabase project before applying any migration SQL.
-You need the project connection details first so `DATABASE_URL` can point to the correct database.
+You need the project details first so `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` can be configured correctly.
 
 ## Notes
 

@@ -148,7 +148,6 @@ Settings are loaded from `backend/.env` through Pydantic settings.
 | PROJECT_NAME                        | Ascent Dashboard Backend                                     | FastAPI app title                   | No              |
 | VERSION                             | 0.1.0                                                        | App version shown in OpenAPI        | No              |
 | API_V1_PREFIX                       | /api/v1                                                      | Base API prefix                     | No              |
-| DATABASE_URL                        | postgresql+asyncpg://archive:archive-local-only@127.0.0.1:5432/archive_demo | PostgreSQL connection string        | Yes             |
 | JWT_SECRET_KEY                      | change-this-in-env                                           | JWT signing key                     | Yes             |
 | JWT_ALGORITHM                       | HS256                                                        | JWT algorithm                       | No              |
 | ACCESS_TOKEN_EXPIRE_MINUTES         | 60                                                           | Token lifetime                      | No              |
@@ -189,7 +188,7 @@ Create a local environment file:
 copy .env.example .env
 ```
 
-Populate the required values, especially `DATABASE_URL` and `JWT_SECRET_KEY`.
+Populate the required values, especially `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `JWT_SECRET_KEY`.
 
 ### 3. Run migrations in Supabase
 
@@ -219,7 +218,7 @@ uv run pytest
 
 ### Database
 
-The backend expects a PostgreSQL database compatible with Supabase. At runtime, the database URL is normalized to use the asyncpg driver when needed, so a standard Supabase connection string can be copied into `DATABASE_URL`.
+The backend talks to Supabase directly through the async Supabase client. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` for server-side access.
 
 ### Storage
 
@@ -335,7 +334,6 @@ Before deploying, make sure the following are in place:
 - Supabase project created.
 - Database schema migrations applied.
 - Private submissions bucket created.
-- `DATABASE_URL` set to the Supabase database connection string.
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` configured.
 - `JWT_SECRET_KEY` set to a strong secret.
 - SMTP settings configured only if credential emails are required.
@@ -356,7 +354,7 @@ The backend already implements the major platform slices from the project docume
 
 | Symptom                              | Likely Cause                                    | Fix                                                                  |
 | ------------------------------------ | ----------------------------------------------- | -------------------------------------------------------------------- |
-| App fails to start                   | Missing or invalid `DATABASE_URL`               | Check `.env` and the Supabase connection string                      |
+| App fails to start                   | Missing or invalid Supabase env                 | Check `.env`, especially `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` |
 | Uploads fail                         | Missing Supabase storage config                 | Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and bucket name     |
 | JWT errors                           | Wrong secret or algorithm mismatch              | Regenerate `JWT_SECRET_KEY` and confirm `JWT_ALGORITHM`              |
 | Email does not send                  | SMTP settings missing or invalid                | Configure `SMTP_*` values                                            |

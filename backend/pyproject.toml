@@ -19,7 +19,6 @@ dependencies = [
 
 [project.scripts]
 ascent-api = "app.main:main"
-init-db = "app.db.init_db:run"
 
 [dependency-groups]
 dev = [
