@@ -6,7 +6,7 @@ POST /announcements              → append announcement to a day (admin)
 """
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +27,7 @@ class AnnouncementFeedItem(BaseModel):
     date: str            # "2026-05-10"
     announcement: str
     time: str            # ISO-8601 datetime string
+    category: str        # "general" | "schedule" | "meal" | "alert" | ...
 
 
 class AddAnnouncementBody(BaseModel):
@@ -34,21 +35,26 @@ class AddAnnouncementBody(BaseModel):
     date: str            # "YYYY-MM-DD"
     announcement: str
     time: str            # ISO-8601 datetime string, e.g. "2026-05-10T09:00:00+05:30"
+    category: str = "general"
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[AnnouncementFeedItem])
 async def get_announcements(
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=500),
+    category: str | None = Query(
+        None,
+        description="Filter announcements to this category (e.g. 'general', 'alert').",
+    ),
     session: AsyncSession = Depends(get_db_session),
     _: User = Depends(get_current_user),
 ) -> list[AnnouncementFeedItem]:
     """
-    Return a flat, time-sorted (newest first) list of all announcements across
-    all event days. Paginates via the ``limit`` query param (default 50).
+    Return a flat, time-sorted (newest first) list of announcements across
+    all event days. Filter by ``category`` and paginate via ``limit``.
     """
-    items = await list_all_announcements(session, limit=limit)
+    items = await list_all_announcements(session, limit=limit, category=category)
     return [AnnouncementFeedItem(**i) for i in items]
 
 
@@ -69,5 +75,6 @@ async def post_announcement(
         day=day,
         announcement=body.announcement,
         time=body.time,
+        category=body.category,
     )
     return GlobalScheduleItem(**row)

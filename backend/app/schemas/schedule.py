@@ -13,6 +13,7 @@ class AnnouncementItem(BaseModel):
     """A single announcement attached to a day."""
     announcement: str
     time: str         # ISO-8601 datetime string
+    category: str = "general"   # free-form tag: general | schedule | meal | alert | ...
 
 
 class EventScheduleResponse(BaseModel):

@@ -15,6 +15,12 @@ class RequestedMember(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
 
+    # Human-readable ticket reference (e.g. "ASC-482910").
+    # Persisted so every call that touches a given record returns the same id.
+    ticket_id: Mapped[str] = mapped_column(
+        String(32), nullable=False, unique=True, index=True
+    )
+
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     college: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)

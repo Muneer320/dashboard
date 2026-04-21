@@ -112,10 +112,17 @@ async def upsert_global_schedule(
 
 # ── Announcements ──────────────────────────────────────────────────────────────
 
-async def list_all_announcements(session: AsyncSession, limit: int = 50) -> list[dict]:
+async def list_all_announcements(
+    session: AsyncSession,
+    limit: int = 50,
+    category: str | None = None,
+) -> list[dict]:
     """
     Aggregate announcements from all global days, sorted by time descending.
-    Returns a flat list of { date, announcement, time } dicts.
+    Returns a flat list of { date, announcement, time, category } dicts.
+
+    If ``category`` is provided, only announcements tagged with that category
+    are returned. Legacy rows without a category default to ``"general"``.
     """
     result = await session.execute(
         select(GlobalSchedule).order_by(GlobalSchedule.date.desc())
@@ -125,10 +132,14 @@ async def list_all_announcements(session: AsyncSession, limit: int = 50) -> list
     flat: list[dict] = []
     for row in rows:
         for item in (row.announcements or []):
+            item_category = item.get("category") or "general"
+            if category is not None and item_category != category:
+                continue
             flat.append({
                 "date": row.date.isoformat(),
                 "announcement": item.get("announcement", ""),
                 "time": item.get("time", ""),
+                "category": item_category,
             })
 
     # Sort by time desc (ISO strings sort correctly)
@@ -141,6 +152,7 @@ async def add_announcement(
     day: date,
     announcement: str,
     time: str,
+    category: str = "general",
 ) -> dict:
     """
     Append an announcement to a specific day's row (admin only).
@@ -149,7 +161,11 @@ async def add_announcement(
     """
     row = await _get_or_create_row(session, day)
     existing = list(row.announcements or [])
-    existing.append({"announcement": announcement, "time": time})
+    existing.append({
+        "announcement": announcement,
+        "time": time,
+        "category": category,
+    })
     row.announcements = existing
     session.add(row)
     await session.commit()
