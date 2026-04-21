@@ -1,14 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
+from supabase import AsyncClient
 
 from app.api.deps import get_admin_only, get_current_user
-from app.db.session import get_db_session
+from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.models.user import User
 from app.schemas.meals import MealSlot
 from app.schemas.user import UserEventsResponse, UserProfileUpdate, UserResponse
-from app.services.user_service import get_user_by_id, get_user_events_payload, update_user_profile
 from app.services.qr_service import scan_food
+from app.services.user_service import (
+    get_user_by_id,
+    get_user_events_payload,
+    update_user_profile,
+)
 
 router = APIRouter()
 
@@ -30,12 +35,12 @@ def _build_user_response(user: User) -> UserResponse:
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: str,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     # Users can only fetch their own profile; admins (via Admin JWT) can fetch anyone
     if str(current_user.id) != user_id:
-        user = await get_user_by_id(session, user_id)
+        user = await get_user_by_id(supabase, user_id)
     else:
         user = current_user
     return _build_user_response(user)
@@ -45,29 +50,31 @@ async def get_user(
 async def patch_user(
     user_id: str,
     payload: UserProfileUpdate,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     if str(current_user.id) != user_id:
         # Non-matching ID falls back to updating the calling user's own profile
         user = current_user
     else:
-        user = await get_user_by_id(session, user_id)
+        user = await get_user_by_id(supabase, user_id)
 
-    updated = await update_user_profile(session, user, payload.model_dump(exclude_unset=True))
+    updated = await update_user_profile(
+        supabase, user, payload.model_dump(exclude_unset=True)
+    )
     return _build_user_response(updated)
 
 
 @router.get("/{user_id}/events", response_model=UserEventsResponse)
 async def get_user_events(
     user_id: str,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> UserEventsResponse:
     if str(current_user.id) != user_id:
         user = current_user
     else:
-        user = await get_user_by_id(session, user_id)
+        user = await get_user_by_id(supabase, user_id)
 
     payload = get_user_events_payload(user)
     return UserEventsResponse(**payload)
@@ -85,7 +92,7 @@ _MEAL_LABELS: dict[str, str] = {
 @router.get("/{user_id}/meals", response_model=list[MealSlot])
 async def get_user_meals(
     user_id: str,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> list[MealSlot]:
     """
@@ -104,14 +111,7 @@ async def get_user_meals(
     ]
 
 
-class MealMarkRequest:
-    """Thin namespace; body validated inline."""
-    pass
-
-
-from pydantic import BaseModel as _BM
-
-class _MealMarkBody(_BM):
+class _MealMarkBody(BaseModel):
     meal: str   # "meal1" | "meal2" | "meal3"
 
 
@@ -119,7 +119,7 @@ class _MealMarkBody(_BM):
 async def admin_mark_meal(
     user_id: str,
     body: _MealMarkBody,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> list[MealSlot]:
     """
@@ -129,10 +129,13 @@ async def admin_mark_meal(
     if body.meal not in _MEAL_LABELS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid meal slot '{body.meal}'. Must be one of: {list(_MEAL_LABELS)}",
+            detail=(
+                f"Invalid meal slot '{body.meal}'. Must be one of: "
+                f"{list(_MEAL_LABELS)}"
+            ),
         )
-    target = await get_user_by_id(session, user_id)
-    msg = await scan_food(session, target, body.meal)
+    target = await get_user_by_id(supabase, user_id)
+    await scan_food(supabase, target, body.meal)
     food = target.food or {"meal1": False, "meal2": False, "meal3": False}
     return [
         MealSlot(slot=slot, label=label, collected=bool(food.get(slot, False)))

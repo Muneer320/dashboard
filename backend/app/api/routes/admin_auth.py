@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.api.deps import get_current_admin
-from app.db.session import get_db_session
+from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.schemas.auth import TokenResponse
 from app.services.admin_auth_service import admin_login
@@ -24,13 +24,14 @@ class AdminLoginRequest(BaseModel):
     username: str
     password: str
 
+
 @router.post("/login", response_model=TokenResponse)
 async def admin_login_endpoint(
     payload: AdminLoginRequest,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
 ) -> TokenResponse:
     """Login for admin, eventManager, and scanner accounts."""
-    token = await admin_login(session, payload.username, payload.password)
+    token = await admin_login(supabase, payload.username, payload.password)
     return TokenResponse(access_token=token)
 
 

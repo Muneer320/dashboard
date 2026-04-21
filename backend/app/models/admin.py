@@ -1,11 +1,13 @@
+"""Admin row dataclass."""
+
+from __future__ import annotations
+
 import enum
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, Enum, Integer, String, func
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.db.base import Base
+from app.models._util import coerce_datetime
 
 
 class AdminRole(str, enum.Enum):
@@ -14,20 +16,47 @@ class AdminRole(str, enum.Enum):
     SCANNER = "Scanner"
 
 
-class Admin(Base):
-    __tablename__ = "admins"
+@dataclass
+class Admin:
+    uid: int
+    username: str
+    name: str
+    password_hash: str
+    mail: str
+    role: AdminRole = AdminRole.ADMIN
+    events: list = field(default_factory=list)
+    phone: str | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    uid: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    role: Mapped[AdminRole] = mapped_column(
-        Enum(AdminRole, name="admin_role_enum"), default=AdminRole.ADMIN)
-    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    name: Mapped[str] = mapped_column(String(255))
-    password_hash: Mapped[str] = mapped_column(String(255))
-    events: Mapped[list] = mapped_column(JSONB, nullable=True, default=list)
-    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    mail: Mapped[str] = mapped_column(String(255), unique=True)
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "Admin":
+        raw_role = row.get("role") or AdminRole.ADMIN.value
+        try:
+            role = AdminRole(raw_role)
+        except ValueError:
+            role = AdminRole.ADMIN
+        return cls(
+            uid=int(row["uid"]),
+            username=row["username"],
+            name=row["name"],
+            password_hash=row["password_hash"],
+            mail=row["mail"],
+            role=role,
+            events=row.get("events") or [],
+            phone=row.get("phone"),
+            created_at=coerce_datetime(row.get("created_at")),
+            updated_at=coerce_datetime(row.get("updated_at")),
+        )
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    def to_insert(self) -> dict[str, Any]:
+        """Insert payload — omits `uid` so Postgres autoincrement fires."""
+        return {
+            "username": self.username,
+            "name": self.name,
+            "password_hash": self.password_hash,
+            "mail": self.mail,
+            "role": self.role.value,
+            "events": self.events,
+            "phone": self.phone,
+        }

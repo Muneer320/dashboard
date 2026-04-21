@@ -1,41 +1,49 @@
+"""Event row dataclass."""
+
+from __future__ import annotations
+
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.db.base import Base
+from app.models._util import coerce_datetime, coerce_uuid
 
 
-class Event(Base):
-    __tablename__ = "events"
+@dataclass
+class Event:
+    id: uuid.UUID
+    name: str
+    description: str = ""
+    start_date: datetime | None = None
+    end_date: datetime | None = None
+    venue: list[str] = field(default_factory=list)
+    judges: list[str] = field(default_factory=list)
+    rounds: dict = field(default_factory=dict)
+    participants: dict = field(default_factory=dict)
+    schedule: list = field(default_factory=list)
+    rules: str = ""
+    max_participants: int = 500
+    registration_deadline: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(255), index=True)
-    description: Mapped[str] = mapped_column(Text, default="")
-
-    start_date: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True)
-    end_date: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True)
-
-    venue: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-    judges: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
-
-    rounds: Mapped[dict] = mapped_column(JSONB, default=dict)
-    participants: Mapped[dict] = mapped_column(JSONB, default=dict)
-
-    # Array of schedule items: [{title, start_time, end_time, venue}]
-    schedule: Mapped[list] = mapped_column(JSONB, default=list)
-
-    rules: Mapped[str] = mapped_column(Text, default="")
-    max_participants: Mapped[int] = mapped_column(Integer, default=500)
-    registration_deadline: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "Event":
+        return cls(
+            id=coerce_uuid(row["id"]),
+            name=row["name"],
+            description=row.get("description") or "",
+            start_date=coerce_datetime(row.get("start_date")),
+            end_date=coerce_datetime(row.get("end_date")),
+            venue=list(row.get("venue") or []),
+            judges=list(row.get("judges") or []),
+            rounds=row.get("rounds") or {},
+            participants=row.get("participants") or {},
+            schedule=row.get("schedule") or [],
+            rules=row.get("rules") or "",
+            max_participants=int(row.get("max_participants") or 500),
+            registration_deadline=coerce_datetime(row.get("registration_deadline")),
+            created_at=coerce_datetime(row.get("created_at")),
+            updated_at=coerce_datetime(row.get("updated_at")),
+        )

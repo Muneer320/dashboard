@@ -8,13 +8,13 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.api.deps import get_admin_only, get_current_user
-from app.db.session import get_db_session
+from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.models.user import User
-from app.schemas.schedule import AnnouncementItem, GlobalScheduleItem
+from app.schemas.schedule import GlobalScheduleItem
 from app.services.schedule_service import add_announcement, list_all_announcements
 
 router = APIRouter()
@@ -47,21 +47,21 @@ async def get_announcements(
         None,
         description="Filter announcements to this category (e.g. 'general', 'alert').",
     ),
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: User = Depends(get_current_user),
 ) -> list[AnnouncementFeedItem]:
     """
     Return a flat, time-sorted (newest first) list of announcements across
     all event days. Filter by ``category`` and paginate via ``limit``.
     """
-    items = await list_all_announcements(session, limit=limit, category=category)
+    items = await list_all_announcements(supabase, limit=limit, category=category)
     return [AnnouncementFeedItem(**i) for i in items]
 
 
 @router.post("", response_model=GlobalScheduleItem, status_code=201)
 async def post_announcement(
     body: AddAnnouncementBody,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> GlobalScheduleItem:
     """
@@ -71,7 +71,7 @@ async def post_announcement(
     """
     day = date.fromisoformat(body.date)
     row = await add_announcement(
-        session,
+        supabase,
         day=day,
         announcement=body.announcement,
         time=body.time,

@@ -1,7 +1,7 @@
 """
 admin_panel_service.py
 ======================
-Business logic for all /admin-panel/* endpoints.
+Business logic for all /admin-panel/* endpoints. Supabase-backed.
 
 Scoping rules
 ─────────────
@@ -10,12 +10,15 @@ Scoping rules
   Scanner      → no data-read access (403) except lookup_participant
 """
 
+from __future__ import annotations
+
 import uuid
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
+from app.core.security import get_password_hash
+from app.db.supabase_client import first_row, rows
 from app.models.admin import Admin, AdminRole
 from app.models.event import Event
 from app.models.user import User
@@ -73,7 +76,7 @@ def _parse_event_uuid(event_id: str) -> uuid.UUID:
 
 
 def _build_participant_dict(
-    user: "User",
+    user: User,
     event_id: str,
     event_name: str,
     entry: dict,
@@ -105,20 +108,26 @@ def _build_participant_dict(
     }
 
 
+async def _all_events(supabase: AsyncClient) -> list[Event]:
+    resp = await supabase.table("events").select("*").execute()
+    return [Event.from_row(r) for r in rows(resp)]
+
+
+async def _all_users(supabase: AsyncClient) -> list[User]:
+    resp = await supabase.table("users").select("*").execute()
+    return [User.from_row(r) for r in rows(resp)]
+
+
 # ── Service functions ─────────────────────────────────────────────────────────
 
-async def get_overview_stats(session: AsyncSession, admin: Admin) -> dict:
+async def get_overview_stats(supabase: AsyncClient, admin: Admin) -> dict:
     """Aggregate stats cards for the Overview tab."""
-    # Load all events
-    ev_result = await session.execute(select(Event))
-    all_events = list(ev_result.scalars().all())
+    all_events = await _all_events(supabase)
     all_event_ids = [str(e.id) for e in all_events]
 
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
 
-    # Load all users
-    u_result = await session.execute(select(User))
-    all_users = list(u_result.scalars().all())
+    all_users = await _all_users(supabase)
 
     registered_ids: set[str] = set()
     attending = 0
@@ -161,17 +170,17 @@ async def get_overview_stats(session: AsyncSession, admin: Admin) -> dict:
     }
 
 
-async def get_events_with_stats(session: AsyncSession, admin: Admin) -> list[dict]:
+async def get_events_with_stats(
+    supabase: AsyncClient, admin: Admin
+) -> list[dict]:
     """Per-event stat rows for the Overview events breakdown table."""
-    ev_result = await session.execute(select(Event))
-    all_events = list(ev_result.scalars().all())
+    all_events = await _all_events(supabase)
     all_event_ids = [str(e.id) for e in all_events]
 
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
     scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
 
-    u_result = await session.execute(select(User))
-    all_users = list(u_result.scalars().all())
+    all_users = await _all_users(supabase)
 
     result: list[dict] = []
     for event in scoped_events:
@@ -207,15 +216,14 @@ async def get_events_with_stats(session: AsyncSession, admin: Admin) -> list[dic
 
 
 async def get_participants_list(
-    session: AsyncSession,
+    supabase: AsyncClient,
     admin: Admin,
     event_id: str | None = None,
     search: str | None = None,
     status_filter: str | None = None,
 ) -> list[dict]:
     """Participants table with optional filters."""
-    ev_result = await session.execute(select(Event))
-    all_events = list(ev_result.scalars().all())
+    all_events = await _all_events(supabase)
     all_event_ids = [str(e.id) for e in all_events]
     event_name_map = {str(e.id): e.name for e in all_events}
 
@@ -230,12 +238,11 @@ async def get_participants_list(
             )
         scoped_ids = {event_id}
 
-    u_result = await session.execute(select(User))
-    all_users = list(u_result.scalars().all())
+    all_users = await _all_users(supabase)
 
     result: list[dict] = []
     for user in all_users:
-        # Name / username search
+        # Name / username search (client-side ilike equivalent)
         if search:
             s = search.lower()
             if s not in user.name.lower() and s not in user.username.lower():
@@ -263,7 +270,7 @@ async def get_participants_list(
 
 
 async def restrict_participant(
-    session: AsyncSession,
+    supabase: AsyncClient,
     admin: Admin,
     user_id: str,
     event_id: str,
@@ -289,10 +296,17 @@ async def restrict_participant(
         )
 
     user_uuid = _parse_user_uuid(user_id)
-    u_result = await session.execute(select(User).where(User.id == user_uuid))
-    user = u_result.scalar_one_or_none()
-    if user is None:
+    user_resp = await (
+        supabase.table("users")
+        .select("*")
+        .eq("id", str(user_uuid))
+        .limit(1)
+        .execute()
+    )
+    user_row = first_row(user_resp)
+    if user_row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    user = User.from_row(user_row)
 
     user_events: dict = user.events or {}
     if event_id not in user_events:
@@ -303,26 +317,39 @@ async def restrict_participant(
 
     # Update user.events JSONB
     user_events[event_id]["restricted"] = restricted
-    user.events = user_events
-    session.add(user)
+    await (
+        supabase.table("users")
+        .update({"events": user_events})
+        .eq("id", str(user.id))
+        .execute()
+    )
 
     # Sync event.participants status for consistency
     event_uuid = _parse_event_uuid(event_id)
-    ev_result = await session.execute(select(Event).where(Event.id == event_uuid))
-    event = ev_result.scalar_one_or_none()
-    if event:
-        participants: dict = event.participants or {}
+    event_resp = await (
+        supabase.table("events")
+        .select("*")
+        .eq("id", str(event_uuid))
+        .limit(1)
+        .execute()
+    )
+    event_row = first_row(event_resp)
+    if event_row is not None:
+        participants: dict = event_row.get("participants") or {}
         if user_id in participants:
             participants[user_id]["status"] = "eliminated" if restricted else "active"
-            event.participants = participants
-            session.add(event)
+            await (
+                supabase.table("events")
+                .update({"participants": participants})
+                .eq("id", str(event_uuid))
+                .execute()
+            )
 
-    await session.commit()
     return {"user_id": user_id, "event_id": event_id, "restricted": restricted}
 
 
 async def lookup_participant(
-    session: AsyncSession,
+    supabase: AsyncClient,
     admin: Admin,
     user_id: str | None = None,
     q: str | None = None,
@@ -333,8 +360,7 @@ async def lookup_participant(
     Scanners are allowed here (allow_scanner=True).
     Returns a list so name-search can surface multiple matches.
     """
-    ev_result = await session.execute(select(Event))
-    all_events = list(ev_result.scalars().all())
+    all_events = await _all_events(supabase)
     all_event_ids = [str(e.id) for e in all_events]
     event_name_map = {str(e.id): e.name for e in all_events}
 
@@ -343,29 +369,52 @@ async def lookup_participant(
     if event_id is not None:
         scoped_ids = {event_id} if event_id in scoped_ids else set()
 
+    users: list[User] = []
+
     # ── Exact UUID lookup ──
     if user_id is not None:
         user_uuid = _parse_user_uuid(user_id)
-        u_result = await session.execute(select(User).where(User.id == user_uuid))
-        user = u_result.scalar_one_or_none()
-        if user is None:
+        resp = await (
+            supabase.table("users")
+            .select("*")
+            .eq("id", str(user_uuid))
+            .limit(1)
+            .execute()
+        )
+        row = first_row(resp)
+        if row is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found."
             )
-        users = [user]
+        users = [User.from_row(row)]
 
     # ── Name / username search ──
     elif q:
-        u_result = await session.execute(
-            select(User).where(
-                or_(User.name.ilike(f"%{q}%"), User.username.ilike(f"%{q}%"))
+        # Prefer PostgREST `or` filter with ilike on both columns.
+        pattern = f"%{q}%"
+        try:
+            resp = await (
+                supabase.table("users")
+                .select("*")
+                .or_(f"name.ilike.{pattern},username.ilike.{pattern}")
+                .execute()
             )
-        )
-        users = list(u_result.scalars().all())
-        if not users:
+            found = rows(resp)
+        except Exception:
+            # Fallback: pull everything and filter in Python.
+            all_resp = await supabase.table("users").select("*").execute()
+            needle = q.lower()
+            found = [
+                r
+                for r in rows(all_resp)
+                if needle in (r.get("name") or "").lower()
+                or needle in (r.get("username") or "").lower()
+            ]
+        if not found:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found."
             )
+        users = [User.from_row(r) for r in found]
 
     else:
         raise HTTPException(
@@ -390,17 +439,15 @@ async def lookup_participant(
     return result
 
 
-async def get_my_events(session: AsyncSession, admin: Admin) -> list[dict]:
+async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
     """Events with full participant list for My Events tab."""
-    ev_result = await session.execute(select(Event))
-    all_events = list(ev_result.scalars().all())
+    all_events = await _all_events(supabase)
     all_event_ids = [str(e.id) for e in all_events]
 
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
     scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
 
-    u_result = await session.execute(select(User))
-    all_users = list(u_result.scalars().all())
+    all_users = await _all_users(supabase)
 
     result: list[dict] = []
     for event in scoped_events:
@@ -448,12 +495,15 @@ async def get_my_events(session: AsyncSession, admin: Admin) -> list[dict]:
     return result
 
 
-async def get_event_managers(session: AsyncSession) -> list[dict]:
+async def get_event_managers(supabase: AsyncClient) -> list[dict]:
     """All eventManager rows — admin-only Contact Info tab."""
-    result = await session.execute(
-        select(Admin).where(Admin.role == AdminRole.EVENT_MANAGER)
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("role", AdminRole.EVENT_MANAGER.value)
+        .execute()
     )
-    managers = list(result.scalars().all())
+    managers = [Admin.from_row(r) for r in rows(resp)]
     return [
         {
             "uid": m.uid,
@@ -468,7 +518,7 @@ async def get_event_managers(session: AsyncSession) -> list[dict]:
 
 
 async def create_event_manager(
-    session: AsyncSession,
+    supabase: AsyncClient,
     username: str,
     name: str,
     password: str,
@@ -480,53 +530,62 @@ async def create_event_manager(
     Create a new Admin row with role=eventManager.
     Raises 409 if username or mail is already taken.
     """
-    from app.core.security import get_password_hash
-
     # Uniqueness checks
-    existing_username = await session.execute(
-        select(Admin).where(Admin.username == username)
+    u_resp = await (
+        supabase.table("admins")
+        .select("uid")
+        .eq("username", username)
+        .limit(1)
+        .execute()
     )
-    if existing_username.scalar_one_or_none() is not None:
+    if first_row(u_resp) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Username '{username}' is already taken",
         )
 
-    existing_mail = await session.execute(
-        select(Admin).where(Admin.mail == mail)
+    m_resp = await (
+        supabase.table("admins")
+        .select("uid")
+        .eq("mail", mail)
+        .limit(1)
+        .execute()
     )
-    if existing_mail.scalar_one_or_none() is not None:
+    if first_row(m_resp) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Email '{mail}' is already registered",
         )
 
-    em = Admin(
-        role=AdminRole.EVENT_MANAGER,
-        username=username,
-        name=name,
-        password_hash=get_password_hash(password),
-        mail=mail,
-        phone=phone,
-        events=events,
+    payload = {
+        "role": AdminRole.EVENT_MANAGER.value,
+        "username": username,
+        "name": name,
+        "password_hash": get_password_hash(password),
+        "mail": mail,
+        "phone": phone,
+        "events": events,
+    }
+    insert_resp = await (
+        supabase.table("admins")
+        .insert(payload)
+        .execute()
     )
-    session.add(em)
-    await session.commit()
-    await session.refresh(em)
+    row = first_row(insert_resp) or {**payload, "uid": None}
 
     return {
-        "uid": em.uid,
-        "username": em.username,
-        "name": em.name,
-        "phone": em.phone,
-        "mail": em.mail,
-        "events": em.events or [],
+        "uid": row.get("uid"),
+        "username": row["username"],
+        "name": row["name"],
+        "phone": row.get("phone"),
+        "mail": row["mail"],
+        "events": row.get("events") or [],
         "message": "Event manager created successfully",
     }
 
 
 async def update_event_manager(
-    session: AsyncSession,
+    supabase: AsyncClient,
     uid: int,
     name: str | None,
     mail: str | None,
@@ -538,50 +597,68 @@ async def update_event_manager(
     Only fields provided (non-None) are changed.
     Passing events=[...] fully replaces the assigned events list.
     """
-    result = await session.execute(
-        select(Admin).where(Admin.uid == uid, Admin.role == AdminRole.EVENT_MANAGER)
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", uid)
+        .eq("role", AdminRole.EVENT_MANAGER.value)
+        .limit(1)
+        .execute()
     )
-    em = result.scalar_one_or_none()
-    if em is None:
+    row = first_row(resp)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Event manager not found",
         )
 
+    patch: dict = {}
     if name is not None:
-        em.name = name
+        patch["name"] = name
     if mail is not None:
         # Check mail uniqueness against other admins
-        conflict = await session.execute(
-            select(Admin).where(Admin.mail == mail, Admin.uid != uid)
+        conflict = await (
+            supabase.table("admins")
+            .select("uid")
+            .eq("mail", mail)
+            .neq("uid", uid)
+            .limit(1)
+            .execute()
         )
-        if conflict.scalar_one_or_none() is not None:
+        if first_row(conflict) is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Email '{mail}' is already registered",
             )
-        em.mail = mail
+        patch["mail"] = mail
     if phone is not None:
-        em.phone = phone
+        patch["phone"] = phone
     if events is not None:
-        em.events = events   # full replacement
+        patch["events"] = events
 
-    session.add(em)
-    await session.commit()
-    await session.refresh(em)
+    if patch:
+        update_resp = await (
+            supabase.table("admins")
+            .update(patch)
+            .eq("uid", uid)
+            .execute()
+        )
+        updated = first_row(update_resp) or {**row, **patch}
+    else:
+        updated = row
 
     return {
-        "uid": em.uid,
-        "username": em.username,
-        "name": em.name,
-        "phone": em.phone,
-        "mail": em.mail,
-        "events": em.events or [],
+        "uid": updated["uid"],
+        "username": updated["username"],
+        "name": updated["name"],
+        "phone": updated.get("phone"),
+        "mail": updated["mail"],
+        "events": updated.get("events") or [],
         "message": "Event manager updated successfully",
     }
 
 
-async def delete_event_manager(session: AsyncSession, uid: int) -> dict:
+async def delete_event_manager(supabase: AsyncClient, uid: int) -> dict:
     """
     Delete an eventManager account.
 
@@ -589,32 +666,39 @@ async def delete_event_manager(session: AsyncSession, uid: int) -> dict:
     has that event in their events list), the deletion is blocked until the admin
     assigns a replacement.
     """
-    result = await session.execute(
-        select(Admin).where(Admin.uid == uid, Admin.role == AdminRole.EVENT_MANAGER)
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", uid)
+        .eq("role", AdminRole.EVENT_MANAGER.value)
+        .limit(1)
+        .execute()
     )
-    em = result.scalar_one_or_none()
-    if em is None:
+    row = first_row(resp)
+    if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Event manager not found",
         )
 
+    em = Admin.from_row(row)
     my_events: list[str] = [str(e) for e in (em.events or [])]
 
     if my_events:
         # Load all OTHER event managers
-        others_result = await session.execute(
-            select(Admin).where(
-                Admin.role == AdminRole.EVENT_MANAGER,
-                Admin.uid != uid,
-            )
+        others_resp = await (
+            supabase.table("admins")
+            .select("events")
+            .eq("role", AdminRole.EVENT_MANAGER.value)
+            .neq("uid", uid)
+            .execute()
         )
-        other_ems = list(others_result.scalars().all())
+        other_rows = rows(others_resp)
 
         # Build a set of event IDs covered by at least one other EM
         covered_by_others: set[str] = set()
-        for other in other_ems:
-            for eid in (other.events or []):
+        for other in other_rows:
+            for eid in (other.get("events") or []):
                 covered_by_others.add(str(eid))
 
         # Find events where this EM is the sole manager
@@ -622,10 +706,14 @@ async def delete_event_manager(session: AsyncSession, uid: int) -> dict:
 
         if sole_managed:
             # Look up event names for a helpful error message
-            ev_result = await session.execute(select(Event))
-            all_events = {str(e.id): e.name for e in ev_result.scalars().all()}
+            ev_resp = await (
+                supabase.table("events")
+                .select("id, name")
+                .execute()
+            )
+            all_events_map = {str(e["id"]): e["name"] for e in rows(ev_resp)}
             event_names = [
-                all_events.get(eid, eid) for eid in sole_managed
+                all_events_map.get(eid, eid) for eid in sole_managed
             ]
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -646,6 +734,10 @@ async def delete_event_manager(session: AsyncSession, uid: int) -> dict:
         "message": f"Event manager '{em.username}' removed successfully",
     }
 
-    await session.delete(em)
-    await session.commit()
+    await (
+        supabase.table("admins")
+        .delete()
+        .eq("uid", uid)
+        .execute()
+    )
     return saved

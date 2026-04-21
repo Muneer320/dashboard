@@ -1,25 +1,31 @@
+"""Team row dataclass."""
+
+from __future__ import annotations
+
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.db.base import Base
+from app.models._util import coerce_datetime, coerce_optional_uuid, coerce_uuid
 
 
-class Team(Base):
-    __tablename__ = "teams"
+@dataclass
+class Team:
+    id: uuid.UUID
+    name: str
+    event_id: uuid.UUID
+    leader_id: uuid.UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(255), index=True)
-    event_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("events.id"), nullable=False)
-    leader_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "Team":
+        return cls(
+            id=coerce_uuid(row["id"]),
+            name=row["name"],
+            event_id=coerce_uuid(row["event_id"]),
+            leader_id=coerce_optional_uuid(row.get("leader_id")),
+            created_at=coerce_datetime(row.get("created_at")),
+            updated_at=coerce_datetime(row.get("updated_at")),
+        )

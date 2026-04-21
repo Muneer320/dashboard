@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase import AsyncClient
 
 from app.api.deps import get_admin_only
-from app.db.session import get_db_session
+from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.schemas.unstop import UnstopSyncRequest, UnstopSyncResponse
 from app.services.event_service import set_event_phase_state
@@ -14,10 +14,10 @@ router = APIRouter()
 @router.post("/unstop/sync", response_model=UnstopSyncResponse)
 async def sync_unstop(
     payload: UnstopSyncRequest,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> UnstopSyncResponse:
-    result = await sync_unstop_users(session, payload.users)
+    result = await sync_unstop_users(supabase, payload.users)
     return UnstopSyncResponse(**result)
 
 
@@ -25,10 +25,10 @@ async def sync_unstop(
 async def activate_event_phase(
     event_id: str,
     phase: int,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> dict:
-    event = await set_event_phase_state(session, event_id, phase, is_active=True, is_locked=False)
+    event = await set_event_phase_state(supabase, event_id, phase, is_active=True, is_locked=False)
     return {"message": "Phase activated", "event_id": str(event.id), "phase": phase}
 
 
@@ -36,10 +36,10 @@ async def activate_event_phase(
 async def lock_event_phase(
     event_id: str,
     phase: int,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> dict:
-    event = await set_event_phase_state(session, event_id, phase, is_locked=True)
+    event = await set_event_phase_state(supabase, event_id, phase, is_locked=True)
     return {"message": "Phase locked", "event_id": str(event.id), "phase": phase}
 
 
@@ -47,8 +47,8 @@ async def lock_event_phase(
 async def unlock_event_phase(
     event_id: str,
     phase: int,
-    session: AsyncSession = Depends(get_db_session),
+    supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> dict:
-    event = await set_event_phase_state(session, event_id, phase, is_locked=False)
+    event = await set_event_phase_state(supabase, event_id, phase, is_locked=False)
     return {"message": "Phase unlocked", "event_id": str(event.id), "phase": phase}
