@@ -2,7 +2,17 @@
 import React from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground } from './shared';
-import { events as eventsApi } from '../lib/api';
+import { events as eventsApi, feedback as feedbackApi } from '../lib/api';
+
+// Slider label → backend JSON key mapping. Must match the FeedbackScores schema
+// in backend/app/schemas/feedback.py.
+const FEEDBACK_SLIDERS = [
+  ['Organization',  'organization'],
+  ['Food',          'food'],
+  ['Events',        'events'],
+  ['Ambiance',      'ambiance'],
+  ['Communication', 'communication'],
+];
 
 export function Rating() {
   const isMobile = useMobile();
@@ -107,8 +117,33 @@ export function Rating() {
 export function Feedback() {
   const isMobile = useMobile();
   const navigate = useNavigate();
-  const sliders = ['Organization', 'Food', 'Events', 'Ambiance', 'Communication'];
-  const [vals, setVals] = React.useState(Object.fromEntries(sliders.map(s => [s, 7])));
+
+  const [vals, setVals] = React.useState(
+    Object.fromEntries(FEEDBACK_SLIDERS.map(([, key]) => [key, 7]))
+  );
+  const [fix,       setFix]       = React.useState('');
+  const [highlight, setHighlight] = React.useState('');
+  const [loading,   setLoading]   = React.useState(false);
+  const [success,   setSuccess]   = React.useState(false);
+  const [error,     setError]     = React.useState('');
+
+  async function handleSubmit() {
+    setError('');
+    setLoading(true);
+    try {
+      await feedbackApi.submit({
+        scores: vals,
+        fix:       fix.trim()       || null,
+        highlight: highlight.trim() || null,
+      });
+      setSuccess(true);
+    } catch (e) {
+      setError(e?.message || 'Submission failed.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="" />
@@ -120,42 +155,78 @@ export function Feedback() {
         </div>
 
         <div className="glass-strong fade-up" style={{ marginTop: 32, padding: isMobile ? 20 : 34 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-            {sliders.map(s => (
-              <div key={s}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <label className="label" style={{ margin: 0 }}>{s}</label>
-                  <div className="display" style={{ fontSize: 24, color: 'var(--violet)' }}>{vals[s]}<span style={{ color: 'var(--ink-mute)', fontSize: 14 }}>/10</span></div>
-                </div>
-                <div style={{ position: 'relative', height: 8 }}>
-                  <div style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'rgba(255,255,255,0.06)' }}/>
-                  <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${vals[s]*10}%`, borderRadius: 999, background: 'linear-gradient(90deg, var(--teal), var(--violet))', boxShadow: '0 0 12px rgba(127,119,221,0.5)' }}/>
-                  <input type="range" min="0" max="10" value={vals[s]} onChange={e => setVals(v => ({...v, [s]: +e.target.value}))} style={{
-                    position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer',
-                  }}/>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-                  <span>POOR</span><span>EXCELLENT</span>
-                </div>
+          {success ? (
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <div style={{ fontSize: 40 }}>✓</div>
+              <div className="display" style={{ fontSize: 28, marginTop: 12 }}>Thanks — we're listening.</div>
+              <div style={{ marginTop: 10, color: 'var(--ink-dim)', fontSize: 14 }}>
+                Your feedback is in. Submitted anonymously — no user id attached.
               </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 30 }}>
-            <label className="label">One thing we should fix next year</label>
-            <textarea className="input" rows={3} placeholder="Be specific. Be kind. Be honest." />
-          </div>
-          <div style={{ marginTop: 18 }}>
-            <label className="label">One thing we nailed</label>
-            <textarea className="input" rows={3} placeholder="What made the weekend for you?" />
-          </div>
-
-          <div style={{ marginTop: 26, display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 16, paddingTop: 20, borderTop: '1px solid var(--glass-border)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)', flexShrink: 0 }}/> ANONYMOUS · NOT LINKED TO YOU
+              <button onClick={() => navigate(-1)} className="btn sm" style={{ marginTop: 20 }}>← Go back</button>
             </div>
-            <button className="btn primary" style={{ width: isMobile ? '100%' : 'auto' }}>Submit feedback →</button>
-          </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+                {FEEDBACK_SLIDERS.map(([label, key]) => (
+                  <div key={key}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <label className="label" style={{ margin: 0 }}>{label}</label>
+                      <div className="display" style={{ fontSize: 24, color: 'var(--violet)' }}>
+                        {vals[key]}<span style={{ color: 'var(--ink-mute)', fontSize: 14 }}>/10</span>
+                      </div>
+                    </div>
+                    <div style={{ position: 'relative', height: 8 }}>
+                      <div style={{ position: 'absolute', inset: 0, borderRadius: 999, background: 'rgba(255,255,255,0.06)' }}/>
+                      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${vals[key]*10}%`, borderRadius: 999, background: 'linear-gradient(90deg, var(--teal), var(--violet))', boxShadow: '0 0 12px rgba(127,119,221,0.5)' }}/>
+                      <input
+                        type="range" min="0" max="10" value={vals[key]}
+                        onChange={e => setVals(v => ({ ...v, [key]: +e.target.value }))}
+                        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
+                      <span>POOR</span><span>EXCELLENT</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ marginTop: 30 }}>
+                <label className="label">One thing we should fix next year</label>
+                <textarea
+                  className="input" rows={3}
+                  placeholder="Be specific. Be kind. Be honest."
+                  value={fix} onChange={e => setFix(e.target.value)} maxLength={5000}
+                />
+              </div>
+              <div style={{ marginTop: 18 }}>
+                <label className="label">One thing we nailed</label>
+                <textarea
+                  className="input" rows={3}
+                  placeholder="What made the weekend for you?"
+                  value={highlight} onChange={e => setHighlight(e.target.value)} maxLength={5000}
+                />
+              </div>
+
+              {error && (
+                <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ marginTop: 26, display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: 16, paddingTop: 20, borderTop: '1px solid var(--glass-border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal)', flexShrink: 0 }}/> ANONYMOUS · NOT LINKED TO YOU
+                </div>
+                <button
+                  onClick={handleSubmit} disabled={loading}
+                  className="btn primary" style={{ width: isMobile ? '100%' : 'auto' }}
+                >
+                  {loading ? 'Submitting…' : 'Submit feedback →'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </PageBackground>

@@ -125,6 +125,13 @@ export const announcements = {
   list: (limit = 50) => get(`/announcements?limit=${limit}`),
 };
 
+// ─── Feedback (anonymous overall-festival form) ──────────────────────────────
+
+export const feedback = {
+  // body: { scores: { organization, food, events, ambiance, communication }, fix, highlight }
+  submit: (body) => post('/feedback', body),
+};
+
 // ─── Credentials (request access) ────────────────────────────────────────────
 
 export const credentials = {
@@ -145,14 +152,25 @@ export const credentials = {
 
 export const adminPanel = {
   stats:        () => get('/admin-panel/stats', { adminAuth: true }),
+
+  // Per-event breakdown (used by Overview + DataContext)
+  eventsStats:  () => get('/admin-panel/events/stats', { adminAuth: true }),
+
   participants: (eventId) =>
     get(`/admin-panel/participants${eventId ? `?event_id=${eventId}` : ''}`, { adminAuth: true }),
-  lookup:       (userId) => get(`/admin-panel/participants/lookup/${userId}`, { adminAuth: true }),
-  myEvents:     () => get('/admin-panel/my-events', { adminAuth: true }),
-  eventManagers:() => get('/admin-panel/event-managers', { adminAuth: true }),
 
-  updateStatus: (userId, status) =>
-    patch(`/admin-panel/participants/${userId}/status`, { status }, { adminAuth: true }),
+  lookup: (params) => {
+    const q = new URLSearchParams(params).toString();
+    return get(`/admin-panel/participants/lookup?${q}`, { adminAuth: true });
+  },
+
+  myEvents:      () => get('/admin-panel/my-events', { adminAuth: true }),
+  eventManagers: () => get('/admin-panel/event-managers', { adminAuth: true }),
+
+  // PATCH /admin-panel/participants/{user_id}/restrict
+  // body: { event_id: str, restricted: bool }
+  restrictParticipant: (userId, eventId, restricted) =>
+    patch(`/admin-panel/participants/${userId}/restrict`, { event_id: eventId, restricted }, { adminAuth: true }),
 
   addEM:    (body) => post('/admin-panel/event-managers', body, { adminAuth: true }),
   updateEM: (uid, body) => patch(`/admin-panel/event-managers/${uid}`, body, { adminAuth: true }),

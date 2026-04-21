@@ -37,7 +37,7 @@ export default function App() {
 
         {/* Protected user app */}
         <Route path="/dashboard"     element={<RequireAuth><Dashboard /></RequireAuth>} />
-        <Route path="/event-detail"  element={<RequireAuth><EventDetail /></RequireAuth>} />
+        <Route path="/event-detail/:eventId" element={<RequireAuth><EventDetail /></RequireAuth>} />
         <Route path="/explore"       element={<RequireAuth><Explore /></RequireAuth>} />
         <Route path="/schedule"      element={<RequireAuth><Schedule /></RequireAuth>} />
         <Route path="/leaderboard"   element={<RequireAuth><Leaderboard /></RequireAuth>} />
