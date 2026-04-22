@@ -25,6 +25,7 @@ class Event:
     end_date: datetime | None = None
     venue: list[str] = field(default_factory=list)
     judges: list[str] = field(default_factory=list)
+    category: str = ""
     rounds: dict = field(default_factory=dict)
     participants: dict = field(default_factory=dict)
     schedule: list = field(default_factory=list)
@@ -44,6 +45,7 @@ class Event:
             id=coerce_uuid(row["id"]),
             name=row["name"],
             description=row.get("description") or "",
+            category=row.get("category") or "",
             start_date=coerce_datetime(row.get("start_date")),
             end_date=coerce_datetime(row.get("end_date")),
             venue=list(row.get("venue") or []),

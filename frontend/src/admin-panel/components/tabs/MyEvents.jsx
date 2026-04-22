@@ -135,6 +135,10 @@ export default function MyEvents() {
   const { user, isAdmin } = useAuth()
   const { events, participants } = useData()
 
+  // Modal state lives here so the modal renders OUTSIDE .event-block divs,
+  // avoiding the border-radius + overflow:hidden stacking-context clipping bug.
+  const [modalParticipant, setModalParticipant] = useState(null)
+
   const visibleEvents = isAdmin
     ? events
     : events.filter(ev => user?.events?.includes(ev.id))
@@ -156,9 +160,22 @@ export default function MyEvents() {
       ) : (
         <div className="events-list">
           {visibleEvents.map(ev => (
-            <EventBlock key={ev.id} event={ev} participants={participants} />
+            <EventBlock
+              key={ev.id}
+              event={ev}
+              participants={participants}
+              onViewSubmission={setModalParticipant}
+            />
           ))}
         </div>
+      )}
+
+      {/* Modal rendered at page level — outside any overflow:hidden container */}
+      {modalParticipant && (
+        <SubmissionModal
+          participant={modalParticipant}
+          onClose={() => setModalParticipant(null)}
+        />
       )}
     </div>
   )
@@ -166,9 +183,8 @@ export default function MyEvents() {
 
 // ── Event block ────────────────────────────────────────────────────────────────
 
-function EventBlock({ event, participants }) {
+function EventBlock({ event, participants, onViewSubmission }) {
   const evParticipants = participants.filter(p => p.eventId === event.id)
-  const [modalParticipant, setModalParticipant] = useState(null)
 
   return (
     <div className="event-block">
@@ -177,7 +193,7 @@ function EventBlock({ event, participants }) {
         <div className="event-meta">
           <h3 className="event-block-title">{event.name}</h3>
           <div className="event-chips">
-            <span className="badge badge-accent">{event.category}</span>
+            {event.category && <span className="badge badge-accent">{event.category}</span>}
             <span className="badge badge-info">{event.date ? new Date(event.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</span>
             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{Array.isArray(event.venue) ? event.venue.join(', ') : event.venue}</span>
           </div>
@@ -219,7 +235,7 @@ function EventBlock({ event, participants }) {
                   <div>{p.name}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{p.username}</div>
                 </td>
-                <td style={{ fontSize: '0.82rem' }}>{p.teamName || '—'}</td>
+                <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{p.teamId ? p.teamId.slice(0, 8) + '…' : '—'}</td>
                 <td>
                   <span className={`badge ${p.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
                     {p.status === 'active' ? 'Active' : 'Restricted'}
@@ -233,7 +249,7 @@ function EventBlock({ event, participants }) {
                 <td>
                   {p.submitted ? (
                     <button
-                      onClick={() => setModalParticipant(p)}
+                      onClick={() => onViewSubmission({ ...p, eventName: event.name })}
                       style={viewBtnStyle}
                     >
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -255,13 +271,6 @@ function EventBlock({ event, participants }) {
         </table>
       )}
 
-      {/* Submission modal */}
-      {modalParticipant && (
-        <SubmissionModal
-          participant={modalParticipant}
-          onClose={() => setModalParticipant(null)}
-        />
-      )}
     </div>
   )
 }
@@ -277,15 +286,15 @@ const overlayStyle = {
 }
 
 const modalStyle = {
-  background: 'var(--surface-1, #16161e)',
-  border: '1px solid var(--border)',
+  background: 'var(--bg-elevated, #1c1c28)',
+  border: '1px solid var(--border-accent, rgba(124,58,237,0.3))',
   borderRadius: 16,
   width: '100%',
   maxWidth: 680,
   maxHeight: '88vh',
   padding: '28px 30px',
   position: 'relative',
-  boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+  boxShadow: '0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06)',
   overflowY: 'auto',
 }
 
@@ -304,7 +313,7 @@ const closeBtnStyle = {
 }
 
 const phaseCardStyle = {
-  background: 'var(--surface-2, rgba(255,255,255,0.04))',
+  background: 'var(--bg-card, #16161f)',
   border: '1px solid var(--border)',
   borderRadius: 12,
   padding: '18px 20px',

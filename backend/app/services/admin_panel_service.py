@@ -219,7 +219,7 @@ async def get_events_with_stats(
         result.append({
             "id": eid,
             "name": event.name,
-            "category": "",
+            "category": event.category or "Other",
             "date": event.start_date.date().isoformat() if event.start_date else None,
             "venue": event.venue or [],
             "maxParticipants": event.max_participants,
