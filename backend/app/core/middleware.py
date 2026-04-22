@@ -58,7 +58,8 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         role = payload.get("role")
         request.state.token_payload = payload
 
-        if path.startswith("/api/v1/admin") and role != "admin":
+        _admin_roles = {"admin", "eventManager", "Scanner"}
+        if path.startswith("/api/v1/admin") and role not in _admin_roles:
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": "Admin role required"},

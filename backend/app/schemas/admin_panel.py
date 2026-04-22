@@ -81,45 +81,50 @@ class MyEventItem(BaseModel):
     communityLink: Optional[str] = None
 
 
-# ── Contact Info ──────────────────────────────────────────────────────────────
+# ── Contact Info & Admins ─────────────────────────────────────────────────────
 
-class EventManagerItem(BaseModel):
+class AdminUserItem(BaseModel):
     uid: int
     username: str
     name: str
+    role: str
     phone: Optional[str]
-    mail: str
+    mail: Optional[str]
     events: list                 # list as stored in JSONB (names or IDs)
 
 
-# ── Event Manager CRUD ────────────────────────────────────────────────────────
+# ── Admin User CRUD ───────────────────────────────────────────────────────────
 
-class EventManagerCreate(BaseModel):
-    """Body for POST /event-managers — creates a new eventManager account."""
+class AdminUserCreate(BaseModel):
+    """Body for POST /admin-users — creates a new admin account."""
     username: str
     name: str
+    role: str
     password: str                # plain-text; will be hashed server-side
-    mail: str
+    mail: Optional[str] = None
     phone: Optional[str] = None
     # list of event ID strings to assign immediately
     events: list[str] = []
 
 
-class EventManagerUpdate(BaseModel):
-    """Body for PATCH /event-managers/{uid} — all fields optional."""
+class AdminUserUpdate(BaseModel):
+    """Body for PATCH /admin-users/{uid} — all fields optional."""
     name: Optional[str] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
     mail: Optional[str] = None
     phone: Optional[str] = None
     events: Optional[list[str]] = None  # full replacement of the events list
 
 
-class EventManagerResponse(BaseModel):
-    """Returned by POST / PATCH / DELETE on event-managers."""
+class AdminUserResponse(BaseModel):
+    """Returned by POST / PATCH / DELETE on admin-users."""
     uid: int
     username: str
     name: str
+    role: str
     phone: Optional[str]
-    mail: str
+    mail: Optional[str]
     events: list
     message: str
 

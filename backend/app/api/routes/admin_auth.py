@@ -16,7 +16,8 @@ class AdminMeResponse(BaseModel):
     username: str
     name: str
     role: str
-    mail: str
+    mail: str | None
+    events: list[str] = []
 
 
 class AdminLoginRequest(BaseModel):
@@ -46,4 +47,5 @@ async def admin_me(
         name=current_admin.name,
         role=current_admin.role.value,
         mail=current_admin.mail,
+        events=current_admin.events or [],
     )

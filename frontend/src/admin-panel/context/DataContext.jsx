@@ -8,7 +8,7 @@ export function DataProvider({ children }) {
   const { user } = useAuth()
 
   const [events, setEvents]               = useState([])   // EventStatsItem[] shape
-  const [eventManagers, setEventManagers] = useState([])   // EventManagerItem[]
+  const [adminUsers, setAdminUsers]       = useState([])   // AdminUserItem[]
   const [participants, setParticipants]   = useState([])   // ParticipantItem[]
   const [stats, setStats]                 = useState({
     totalRegistered: 0,
@@ -65,14 +65,14 @@ export function DataProvider({ children }) {
     }
   }, [])
 
-  const loadEventManagers = useCallback(async () => {
-    // Only admin can see all event managers — EM and Scanner get empty list
+  const loadAdminUsers = useCallback(async () => {
+    // Only admin can see all admin users — EM and Scanner get empty list
     if (user?.role !== 'admin') return
     try {
-      const data = await adminPanel.eventManagers()
-      setEventManagers(data ?? [])
+      const data = await adminPanel.adminUsers()
+      setAdminUsers(data ?? [])
     } catch (e) {
-      console.error('Event managers fetch failed:', e.message)
+      console.error('Admin users fetch failed:', e.message)
     }
   }, [user?.role])
 
@@ -100,11 +100,11 @@ export function DataProvider({ children }) {
       loadStats(),
       loadParticipants(),
       loadEvents(),
-      loadEventManagers(),
+      loadAdminUsers(),
       loadMeals(),
     ])
     setLoading(false)
-  }, [user, loadStats, loadParticipants, loadEvents, loadEventManagers, loadMeals])
+  }, [user, loadStats, loadParticipants, loadEvents, loadAdminUsers, loadMeals])
 
   useEffect(() => { loadAll() }, [loadAll])
 
@@ -205,11 +205,12 @@ export function DataProvider({ children }) {
 
   return (
     <DataContext.Provider value={{
-      events, eventManagers, participants, stats,
+      events, adminUsers, participants, stats,
       eventsMealsCount, maxMealsCount, userMeals,
       loading, error,
       reload:               loadAll,
       loadParticipants,
+      loadAdminUsers,
       loadMeals,
       updateParticipantStatus,
       markAttended, markFoodClaimed, markEntryScanned,

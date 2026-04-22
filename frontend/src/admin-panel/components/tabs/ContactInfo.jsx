@@ -3,8 +3,10 @@ import { useData } from '../../context/DataContext'
 import './ContactInfo.css'
 
 export default function ContactInfo() {
-  const { events, eventManagers } = useData()
+  const { events, adminUsers } = useData()
   const [search, setSearch] = useState('')
+
+  const eventManagers = adminUsers.filter(u => u.role === 'eventManager')
 
   // Group managers by event — em.events[] stores event IDs
   const eventManagerMap = events.map(ev => ({

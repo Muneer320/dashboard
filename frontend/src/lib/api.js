@@ -188,16 +188,16 @@ export const adminPanel = {
   },
 
   myEvents: () => get('/admin-panel/my-events', { adminAuth: true }),
-  eventManagers: () => get('/admin-panel/event-managers', { adminAuth: true }),
+  adminUsers: () => get('/admin-panel/admin-users', { adminAuth: true }),
 
   // PATCH /admin-panel/participants/{user_id}/restrict
   // body: { event_id: str, restricted: bool }
   restrictParticipant: (userId, eventId, restricted) =>
     patch(`/admin-panel/participants/${userId}/restrict`, { event_id: eventId, restricted }, { adminAuth: true }),
 
-  addEM: (body) => post('/admin-panel/event-managers', body, { adminAuth: true }),
-  updateEM: (uid, body) => patch(`/admin-panel/event-managers/${uid}`, body, { adminAuth: true }),
-  deleteEM: (uid) => del(`/admin-panel/event-managers/${uid}`, { adminAuth: true }),
+  addAdminUser: (body) => post('/admin-panel/admin-users', body, { adminAuth: true }),
+  updateAdminUser: (uid, body) => patch(`/admin-panel/admin-users/${uid}`, body, { adminAuth: true }),
+  deleteAdminUser: (uid) => del(`/admin-panel/admin-users/${uid}`, { adminAuth: true }),
 
   // ── Meals (per-event meals_count + per-user claim matrix) ────────────────
   eventsMealsCount: () =>

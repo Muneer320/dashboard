@@ -501,12 +501,11 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
     return result
 
 
-async def get_event_managers(supabase: AsyncClient) -> list[dict]:
-    """All eventManager rows -- admin-only Contact Info tab."""
+async def get_admin_users(supabase: AsyncClient) -> list[dict]:
+    """All admin rows -- admin-only Admins tab."""
     resp = await (
         supabase.table("admins")
         .select("*")
-        .eq("role", AdminRole.EVENT_MANAGER.value)
         .execute()
     )
     managers = [Admin.from_row(r) for r in rows(resp)]
@@ -515,6 +514,7 @@ async def get_event_managers(supabase: AsyncClient) -> list[dict]:
             "uid": m.uid,
             "username": m.username,
             "name": m.name,
+            "role": m.role.value,
             "phone": m.phone,
             "mail": m.mail,
             "events": m.events or [],
@@ -523,17 +523,18 @@ async def get_event_managers(supabase: AsyncClient) -> list[dict]:
     ]
 
 
-async def create_event_manager(
+async def create_admin_user(
     supabase: AsyncClient,
     username: str,
     name: str,
+    role: str,
     password: str,
-    mail: str,
+    mail: str | None,
     phone: str | None,
     events: list[str],
 ) -> dict:
     """
-    Create a new Admin row with role=eventManager.
+    Create a new Admin row.
     Raises 409 if username or mail is already taken.
     """
     u_resp = await (
@@ -549,21 +550,22 @@ async def create_event_manager(
             detail=f"Username '{username}' is already taken",
         )
 
-    m_resp = await (
-        supabase.table("admins")
-        .select("uid")
-        .eq("mail", mail)
-        .limit(1)
-        .execute()
-    )
-    if first_row(m_resp) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Email '{mail}' is already registered",
+    if mail:
+        m_resp = await (
+            supabase.table("admins")
+            .select("uid")
+            .eq("mail", mail)
+            .limit(1)
+            .execute()
         )
+        if first_row(m_resp) is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Email '{mail}' is already registered",
+            )
 
     payload = {
-        "role": AdminRole.EVENT_MANAGER.value,
+        "role": role,
         "username": username,
         "name": name,
         "password_hash": get_password_hash(password),
@@ -582,30 +584,32 @@ async def create_event_manager(
         "uid": row.get("uid"),
         "username": row["username"],
         "name": row["name"],
+        "role": row["role"],
         "phone": row.get("phone"),
         "mail": row["mail"],
         "events": row.get("events") or [],
-        "message": "Event manager created successfully",
+        "message": "Admin created successfully",
     }
 
 
-async def update_event_manager(
+async def update_admin_user(
     supabase: AsyncClient,
     uid: int,
     name: str | None,
+    role: str | None,
+    password: str | None,
     mail: str | None,
     phone: str | None,
     events: list[str] | None,
 ) -> dict:
     """
-    Update an eventManager's profile fields.
+    Update an admin's profile fields.
     Only fields provided (non-None) are changed.
     """
     resp = await (
         supabase.table("admins")
         .select("*")
         .eq("uid", uid)
-        .eq("role", AdminRole.EVENT_MANAGER.value)
         .limit(1)
         .execute()
     )
@@ -613,26 +617,31 @@ async def update_event_manager(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Event manager not found",
+            detail="Admin not found",
         )
 
     patch: dict = {}
     if name is not None:
         patch["name"] = name
+    if role is not None:
+        patch["role"] = role
+    if password is not None and password.strip():
+        patch["password_hash"] = get_password_hash(password)
     if mail is not None:
-        conflict = await (
-            supabase.table("admins")
-            .select("uid")
-            .eq("mail", mail)
-            .neq("uid", uid)
-            .limit(1)
-            .execute()
-        )
-        if first_row(conflict) is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Email '{mail}' is already registered",
+        if mail:
+            conflict = await (
+                supabase.table("admins")
+                .select("uid")
+                .eq("mail", mail)
+                .neq("uid", uid)
+                .limit(1)
+                .execute()
             )
+            if first_row(conflict) is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Email '{mail}' is already registered",
+                )
         patch["mail"] = mail
     if phone is not None:
         patch["phone"] = phone
@@ -654,10 +663,48 @@ async def update_event_manager(
         "uid": updated["uid"],
         "username": updated["username"],
         "name": updated["name"],
+        "role": updated["role"],
         "phone": updated.get("phone"),
         "mail": updated["mail"],
         "events": updated.get("events") or [],
-        "message": "Event manager updated successfully",
+        "message": "Admin updated successfully",
+    }
+
+async def delete_admin_user(supabase: AsyncClient, uid: int, current_admin_uid: int) -> dict:
+    """
+    Remove an admin account.
+    """
+    if uid == current_admin_uid:
+        raise HTTPException(status_code=409, detail="Cannot delete your own account")
+
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", uid)
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Admin not found")
+        
+    # Prevent deleting the last admin
+    if row["role"] == AdminRole.ADMIN.value:
+        admins_resp = await supabase.table("admins").select("uid").eq("role", AdminRole.ADMIN.value).execute()
+        if len(rows(admins_resp)) <= 1:
+            raise HTTPException(status_code=409, detail="Cannot delete the last super admin")
+
+    await supabase.table("admins").delete().eq("uid", uid).execute()
+    
+    return {
+        "uid": row["uid"],
+        "username": row["username"],
+        "name": row["name"],
+        "role": row["role"],
+        "phone": row.get("phone"),
+        "mail": row["mail"],
+        "events": row.get("events") or [],
+        "message": "Admin deleted successfully",
     }
 
 
