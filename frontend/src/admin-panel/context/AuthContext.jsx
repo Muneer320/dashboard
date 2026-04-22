@@ -55,6 +55,7 @@ export function AuthProvider({ children }) {
       scanAttendance: ['admin', 'eventManager'],
       scanFood:       ['admin', 'Scanner'],
       manageRegistrations: ['admin'],
+      announcements:       ['admin'],
     }
     return (matrix[feature] || []).includes(user.role)
   }

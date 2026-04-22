@@ -48,6 +48,7 @@ from app.services.admin_panel_service import (
     update_event_meals_count,
 )
 from app.services.bulk_enroll_service import bulk_enroll, parse_upload
+from app.services.schedule_service import list_all_announcements
 
 router = APIRouter()
 
@@ -80,28 +81,40 @@ async def handle_bulk_registration(
         
     result = await bulk_enroll(supabase, event_id, parsed_rows)
     
-    # Generate CSV of newly created users
+    import json as _json
+
+    # Generate CSV — new users get a password row; existing users get blank password
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Name", "Username", "Password", "Event"])
-    
+    writer.writerow(["Name", "Username", "Password", "Event", "Type"])
+
     for cred in result["new_credentials"]:
-        writer.writerow([cred["name"], cred["email"], cred["password"], cred["event"]])
-        
+        writer.writerow([cred["name"], cred["email"], cred["password"], cred["event"], "new"])
+
+    for existing in result["added_to_existing"]:
+        writer.writerow([existing["name"], existing["email"], "", result["event"]["name"], "existing"])
+
     output.seek(0)
-    
-    event_id_val = result["event"]["id"]
+
+    event_id_val   = result["event"]["id"]
     event_name_val = result["event"]["name"]
     safe_event_name = _SAFE_FILENAME_RE.sub("_", event_name_val)[:40]
     out_filename = f"Ascent_{safe_event_name}_Credentials_{event_id_val[:8]}.csv"
-    
+
+    # Serialise errors_detail as JSON for the frontend (truncated to avoid huge headers)
+    errors_json = _json.dumps(result["errors_detail"][:20])
+
     headers = {
         "Content-Disposition": f"attachment; filename={out_filename}",
-        "X-Stats-Created": str(result["summary"]["created"]),
-        "X-Stats-Added": str(result["summary"]["added_to_existing"]),
+        "X-Stats-Created":    str(result["summary"]["created"]),
+        "X-Stats-Added":      str(result["summary"]["added_to_existing"]),
         "X-Stats-Duplicates": str(result["summary"]["duplicates"]),
-        "X-Stats-Errors": str(result["summary"]["errors"]),
-        "Access-Control-Expose-Headers": "X-Stats-Created, X-Stats-Added, X-Stats-Duplicates, X-Stats-Errors, Content-Disposition",
+        "X-Stats-Errors":     str(result["summary"]["errors"]),
+        "X-Errors-Detail":    errors_json,
+        "Access-Control-Expose-Headers": (
+            "X-Stats-Created, X-Stats-Added, X-Stats-Duplicates, "
+            "X-Stats-Errors, X-Errors-Detail, Content-Disposition"
+        ),
     }
 
     return StreamingResponse(
@@ -381,3 +394,15 @@ async def remove_user_meal(
     """
     data = await set_user_meal_entry(supabase, user_id, meal_id, claimed=False)
     return MealEntryResponse(**data)
+
+
+# ── Announcements (admin read) ─────────────────────────────────────────────────
+
+@router.get("/announcements")
+async def admin_list_announcements(
+    limit: int = 100,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> list[dict]:
+    """Return all announcements — admin only, uses admin JWT."""
+    return await list_all_announcements(supabase, limit=limit)

@@ -117,8 +117,9 @@ export function Announcements() {
   const isMobile = useMobile();
   const [posts, setPosts]         = React.useState([]);
   const [loading, setLoading]     = React.useState(true);
+  const [filter, setFilter]       = React.useState('all'); // 'all' | 'general' | 'events'
   // Set of lowercase event names the user is registered for
-  const [myEventNames, setMyEventNames] = React.useState(null); // null = still loading
+  const [myEventNames, setMyEventNames] = React.useState(null);
   // Set of all event names (lowercase) — used to detect event-targeted categories
   const [allEventNames, setAllEventNames] = React.useState(null);
 
@@ -173,7 +174,21 @@ export function Announcements() {
     return `${Math.floor(hrs / 24)}d ago`;
   }
 
-  const visible = posts.filter(isVisible);
+  const visible = posts.filter(p => {
+    if (!isVisible(p)) return false;
+    if (filter === 'all') return true;
+    const cat = (p.category || 'general').trim().toLowerCase();
+    const isEvent = allEventNames?.has(cat) && !BROADCAST_CATEGORIES.has(cat);
+    if (filter === 'general') return !isEvent;
+    if (filter === 'events')  return isEvent;
+    return true;
+  });
+
+  const FILTERS = [
+    { key: 'all',     label: 'All' },
+    { key: 'general', label: 'General' },
+    { key: 'events',  label: 'My Events' },
+  ];
 
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
@@ -185,7 +200,38 @@ export function Announcements() {
           Official word from the organizers. Pinned items sit up top.
         </div>
 
-        <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {/* Filter chips */}
+        <div style={{ marginTop: 24, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {FILTERS.map(f => (
+            <div
+              key={f.key}
+              onClick={() => setFilter(f.key)}
+              className="chip"
+              style={{
+                cursor: 'pointer', padding: '7px 16px', fontSize: 11,
+                background: filter === f.key ? 'rgba(127,119,221,0.2)' : undefined,
+                borderColor: filter === f.key ? 'rgba(127,119,221,0.55)' : undefined,
+                color: filter === f.key ? '#F1EFE8' : undefined,
+              }}
+            >
+              {f.label}
+              {!loading && (
+                <span style={{ marginLeft: 6, opacity: 0.5 }}>
+                  {f.key === 'all'
+                    ? posts.filter(isVisible).length
+                    : posts.filter(p => {
+                        if (!isVisible(p)) return false;
+                        const cat = (p.category || 'general').trim().toLowerCase();
+                        const isEv = allEventNames?.has(cat) && !BROADCAST_CATEGORIES.has(cat);
+                        return f.key === 'events' ? isEv : !isEv;
+                      }).length}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {loading && (
             <div style={{ color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: 24, textAlign: 'center' }}>Loading…</div>
           )}

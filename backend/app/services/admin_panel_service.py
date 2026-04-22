@@ -106,6 +106,7 @@ def _build_participant_dict(
 ) -> dict:
     """Build the ParticipantItem dict from a user + one event entry."""
     food = user.food or {}
+    sub = entry.get("submission")
     return {
         "id": str(user.id),
         "name": user.name,
@@ -118,6 +119,7 @@ def _build_participant_dict(
         "foodClaimed": any(food.values()),
         "entryScanned": bool(user.is_attending),
         "submitted": _has_any_submission(entry),
+        "submissionData": sub if isinstance(sub, dict) else None,
     }
 
 

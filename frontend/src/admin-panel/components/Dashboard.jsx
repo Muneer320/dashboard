@@ -10,6 +10,7 @@ import MyEvents from './tabs/MyEvents'
 import ContactInfo from './tabs/ContactInfo'
 import Meals from './tabs/Meals'
 import ManageRegistrations from './tabs/ManageRegistrations'
+import Announcements from './tabs/Announcements'
 import './Dashboard.css'
 
 export default function Dashboard() {
@@ -32,6 +33,7 @@ export default function Dashboard() {
             <Route path="contact"      element={canAccess('contactInfo') ? <ContactInfo />  : <Forbidden />} />
             <Route path="meals"        element={canAccess('meals')       ? <Meals />        : <Forbidden />} />
             <Route path="manage-registrations" element={canAccess('manageRegistrations') ? <ManageRegistrations /> : <Forbidden />} />
+            <Route path="announcements"        element={canAccess('announcements')       ? <Announcements />        : <Forbidden />} />
           </Routes>
         </main>
       </div>

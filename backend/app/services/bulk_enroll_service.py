@@ -458,8 +458,17 @@ async def bulk_enroll(
     # ── Hash passwords concurrently, then batch-insert new users ─────────────
     new_user_payloads: list[dict] = []
     if new_user_tasks:
-        results = await asyncio.gather(*new_user_tasks)
-        for payload, cred in results:
+        # return_exceptions=True so one bcrypt failure doesn't abort the rest
+        gather_results = await asyncio.gather(*new_user_tasks, return_exceptions=True)
+        for item in gather_results:
+            if isinstance(item, BaseException):
+                errors_detail.append({
+                    "row": -1,
+                    "email": "password-hash",
+                    "reason": f"Password hashing failed: {item}",
+                })
+                continue
+            payload, cred = item
             new_user_payloads.append(payload)
             created.append(cred)
 
@@ -467,22 +476,12 @@ async def bulk_enroll(
         for i in range(0, len(new_user_payloads), 500):
             batch = new_user_payloads[i : i + 500]
             try:
-                # These are guaranteed-new users (not in existing_map), so a
-                # plain INSERT is correct and avoids the upsert/on_conflict
-                # silent-no-op issue in some supabase-py versions.
-                resp = await supabase.table("users").insert(batch).execute()
-                # Explicit check: supabase-py v2 raises APIError for HTTP
-                # errors, but a successful response with empty data means the
-                # rows were silently rejected (trigger / check constraint).
-                if not resp.data:
-                    errors_detail.append({
-                        "row": -1,
-                        "email": "new-users-insert",
-                        "reason": (
-                            "Insert returned no rows — possible schema mismatch "
-                            "or DB constraint rejection. Check server logs."
-                        ),
-                    })
+                # Note: supabase-py v1 does not support .select() after
+                # .insert() — omit it and trust that no raised exception
+                # means the insert succeeded. The credentials are already
+                # in `created` from the gather step above, so we don't
+                # need the returned rows for the CSV.
+                await supabase.table("users").insert(batch).execute()
             except Exception as exc:
                 errors_detail.append({
                     "row": -1,
@@ -493,18 +492,12 @@ async def bulk_enroll(
     # ── Update existing users' events + team_id (targeted columns only) ───────
     for upd in existing_user_updates:
         try:
-            resp = await (
+            await (
                 supabase.table("users")
                 .update({"events": upd["events"]})
                 .eq("id", upd["id"])
                 .execute()
             )
-            if not resp.data:
-                errors_detail.append({
-                    "row": -1,
-                    "email": upd["email"],
-                    "reason": "Update returned no rows — user may have been deleted.",
-                })
         except Exception as exc:
             errors_detail.append({
                 "row": -1,

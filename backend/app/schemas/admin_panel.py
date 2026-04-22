@@ -43,6 +43,7 @@ class ParticipantItem(BaseModel):
     foodClaimed: bool
     entryScanned: bool           # campus-level gate (user.is_attending)
     submitted: bool              # True once ANY phase has a completed submission
+    submissionData: Optional[dict] = None  # raw submission JSONB from users.events[eid]
 
 
 class RestrictRequest(BaseModel):
