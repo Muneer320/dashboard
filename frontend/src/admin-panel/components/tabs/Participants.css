@@ -6,10 +6,9 @@
 
 .filters-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   gap: 16px;
-  flex-wrap: wrap;
 }
 
 .event-tabs {
@@ -61,17 +60,18 @@
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
 }
 .search-icon {
   position: absolute;
-  left: 11px;
+  left: 16px;
   color: var(--text-muted);
   pointer-events: none;
 }
 .search-input {
-  padding-left: 34px;
-  width: 240px;
-  font-size: 0.85rem;
+  padding-left: 44px;
+  width: 100%;
+  font-size: 0.9rem;
 }
 
 .btn-sm {

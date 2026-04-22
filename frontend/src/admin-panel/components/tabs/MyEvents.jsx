@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useData } from '../../context/DataContext'
+import Pagination from '../Pagination'
 import './MyEvents.css'
 
 // ── Submission Modal (rendered via portal onto document.body) ──────────────────
@@ -308,6 +309,16 @@ function EventBlock({ event, participants, onViewSubmission }) {
   const evParticipants = participants.filter(p => p.eventId === event.id)
   const submittedCount = evParticipants.filter(p => p.submitted).length
 
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [event.id])
+
+  const totalPages = Math.ceil(evParticipants.length / itemsPerPage)
+  const paginatedParticipants = evParticipants.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+
   return (
     <div className="event-block">
       {/* Event heading */}
@@ -366,18 +377,20 @@ function EventBlock({ event, participants, onViewSubmission }) {
           No participants registered yet.
         </p>
       ) : (
-        <table className="data-table submissions-table">
-          <thead>
-            <tr>
-              <th>Participant</th>
-              <th>Team</th>
-              <th>Status</th>
-              <th>Attended</th>
-              <th>Submission</th>
-            </tr>
-          </thead>
-          <tbody>
-            {evParticipants.map(p => (
+        <>
+          <div className="table-responsive">
+            <table className="data-table submissions-table">
+              <thead>
+                <tr>
+                  <th>Participant</th>
+                  <th>Team</th>
+                  <th>Status</th>
+                  <th>Attended</th>
+                  <th>Submission</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedParticipants.map(p => (
               <tr key={p.id} className="submission-row">
                 <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
                   <div>{p.name}</div>
@@ -418,7 +431,14 @@ function EventBlock({ event, participants, onViewSubmission }) {
               </tr>
             ))}
           </tbody>
-        </table>
+            </table>
+          </div>
+          <Pagination 
+            currentPage={currentPage} 
+            totalPages={totalPages} 
+            onPageChange={setCurrentPage} 
+          />
+        </>
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import Sidebar from './Sidebar'
@@ -17,11 +17,20 @@ export default function Dashboard() {
   const { canAccess, user } = useAuth()
   const defaultTab = user?.role === 'Scanner' ? '/admin/dashboard/scanner' : '/admin/dashboard/overview'
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen)
+
   return (
     <div className="app-shell">
-      <Sidebar />
-      <div className="main-content">
-        <Topbar />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      
+      {/* Mobile overlay for sidebar */}
+      {isSidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setIsSidebarOpen(false)}></div>
+      )}
+
+      <div className={`main-content ${isSidebarOpen ? 'shifted' : ''}`}>
+        <Topbar toggleSidebar={toggleSidebar} />
         <main className="page-area">
           <Routes>
             <Route path="/" element={<Navigate to={defaultTab} replace />} />

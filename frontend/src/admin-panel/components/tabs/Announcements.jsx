@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { adminPanel as adminApi } from '../../../lib/api'
+import Pagination from '../Pagination'
+import './Announcements.css'
 
 const BASE = (import.meta.env.VITE_API_BASE || '/api/v1').replace(/\/$/, '')
 
@@ -32,6 +34,28 @@ function relTime(iso) {
   return `${Math.floor(h / 24)}d ago`
 }
 
+function ExpandableText({ text, maxLength = 150 }) {
+  const [expanded, setExpanded] = useState(false)
+  
+  if (!text || text.length <= maxLength) {
+    return <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{text}</p>
+  }
+
+  return (
+    <div>
+      <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+        {expanded ? text : `${text.slice(0, maxLength)}...`}
+      </p>
+      <button 
+        onClick={() => setExpanded(!expanded)} 
+        style={{ background: 'none', border: 'none', color: 'var(--accent-light)', cursor: 'pointer', padding: 0, fontSize: 12, marginTop: 6, fontWeight: 600 }}
+      >
+        {expanded ? 'View Less' : 'View More'}
+      </button>
+    </div>
+  )
+}
+
 export default function Announcements() {
   const [announcements, setAnnouncements] = useState([])
   const [events, setEvents]               = useState([])
@@ -40,7 +64,7 @@ export default function Announcements() {
   const [error, setError]                 = useState('')
   const [success, setSuccess]             = useState('')
 
-  // Form state
+  // form state
   const today = new Date().toISOString().split('T')[0]
   // audienceType: 'broadcast' | 'event'
   const [form, setForm] = useState({
@@ -51,6 +75,10 @@ export default function Announcements() {
     eventCat: '',                // value when audienceType === 'event'
     is_pinned: false,
   })
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -112,6 +140,9 @@ export default function Announcements() {
     return cat  // event name
   }
 
+  const totalPages = Math.ceil(announcements.length / itemsPerPage)
+  const paginatedAnns = announcements.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+
   return (
     <div className="fade-in" style={{ padding: '0 0 48px' }}>
       {/* Header */}
@@ -140,7 +171,7 @@ export default function Announcements() {
             />
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="announcements-grid">
             {/* Date */}
             <div>
               <label style={labelStyle}>Date</label>
@@ -174,7 +205,7 @@ export default function Announcements() {
           </div>
 
           {/* Two dropdowns — one active, one dimmed */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div className="announcements-grid">
             {/* Broadcast category */}
             <div style={{ opacity: form.audienceType === 'broadcast' ? 1 : 0.35, transition: 'opacity .2s', pointerEvents: form.audienceType === 'broadcast' ? 'auto' : 'none' }}>
               <label style={labelStyle}>Broadcast Category</label>
@@ -268,7 +299,7 @@ export default function Announcements() {
         <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>No announcements yet.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {announcements.map((a, i) => {
+          {paginatedAnns.map((a, i) => {
             const isPinned = a.category === 'pinned'
             const isEvent  = !BROADCAST_CATS.includes((a.category || '').toLowerCase())
             return (
@@ -295,9 +326,7 @@ export default function Announcements() {
                         {categoryLabel(a.category || 'general')}
                       </span>
                     </div>
-                    <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                      {a.announcement}
-                    </p>
+                    <ExpandableText text={a.announcement} />
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
                     {relTime(a.time)}
@@ -308,6 +337,12 @@ export default function Announcements() {
               </div>
             )
           })}
+          
+          <Pagination 
+            currentPage={currentPage} 
+            totalPages={totalPages} 
+            onPageChange={setCurrentPage} 
+          />
         </div>
       )}
     </div>

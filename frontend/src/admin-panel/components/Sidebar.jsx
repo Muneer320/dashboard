@@ -109,7 +109,7 @@ const NAV_ITEMS = [
   }
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }) {
   const { user, logout, isAdmin, isScanner, isEM } = useAuth()
   const navigate = useNavigate()
 
@@ -124,7 +124,7 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       {/* Brand */}
       <div className="sidebar-brand">
         <div className="brand-icon">
@@ -136,6 +136,13 @@ export default function Sidebar() {
         </div>
         <span className="brand-name">Ascent</span>
         <span className="brand-tag">Admin</span>
+        
+        <button className="sidebar-close-btn" onClick={onClose}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
 
       {/* User card */}
@@ -158,6 +165,7 @@ export default function Sidebar() {
           <NavLink
             key={item.key}
             to={item.path}
+            onClick={onClose}
             className={({ isActive }) =>
               `nav-item${isActive ? ' active' : ''}`
             }
