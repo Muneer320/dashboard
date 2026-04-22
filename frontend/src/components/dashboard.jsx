@@ -1075,9 +1075,22 @@ export function EventDetail() {
     );
 
   // ── Build normalised rounds list ─────────────────────────────────────────
-  const rounds = Object.entries(event.rounds ?? {}).map(([key, val]) =>
-    normaliseRound(key, val),
-  );
+  // Build rounds sorted by phase number
+  const rounds = Object.entries(event.rounds ?? {})
+    .map(([key, val]) => normaliseRound(key, val))
+    .sort((a, b) => (a.phaseNum ?? 99) - (b.phaseNum ?? 99));
+
+  // Phase-ordering gate: a phase can't be live/locked if any earlier phase
+  // hasn't completed yet. Walk forward and override states accordingly.
+  for (let i = 1; i < rounds.length; i++) {
+    const prev = rounds[i - 1];
+    if (prev.phaseNum && rounds[i].phaseNum) {
+      if (prev.state === "upcoming" || prev.state === "live") {
+        // Previous phase not yet done → force this phase to upcoming
+        rounds[i] = { ...rounds[i], state: "upcoming" };
+      }
+    }
+  }
 
   const selectedRound = rounds[selectedIdx] ?? null;
   const isRegistered = !!userEntry;
@@ -1625,10 +1638,15 @@ export function EventDetail() {
                     isRegistered={isRegistered}
                     isRestricted={isRestricted}
                     userData={{
-                      email: profile?.details?.email || '',
+                      email: profile?.username || user?.username || '',
+                      name: profile?.name || user?.name || '',
                       teamName: team?.name || '',
                       college: profile?.details?.college || '',
-                      name: profile?.name || user?.name || '',
+                      phone: profile?.details?.phone || '',
+                      year: profile?.details?.year || '',
+                      branch: profile?.details?.branch || '',
+                      gender: profile?.details?.gender || '',
+                      city: profile?.details?.city || '',
                     }}
                     onSuccess={() => {
                       setSubmittedPhases(
@@ -1754,120 +1772,6 @@ export function EventDetail() {
               </div>
             )}
 
-            {/* Phase submission summary card */}
-            {isRegistered && rounds.length > 0 && (
-              <div className="glass" style={{ padding: 20 }}>
-                <div className="eyebrow">§ PHASE STATUS</div>
-                <div
-                  style={{
-                    marginTop: 14,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  {rounds.map((r) => {
-                    const submitted =
-                      r.phaseNum && submittedPhases.has(`phase${r.phaseNum}`);
-                    return (
-                      <div
-                        key={r.key}
-                        onClick={() => {
-                          const idx = rounds.indexOf(r);
-                          setSelectedIdx(idx);
-                          document
-                            .getElementById("submission-form")
-                            ?.scrollIntoView({ behavior: "smooth" });
-                        }}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "8px 10px",
-                          borderRadius: 7,
-                          border: "1px solid var(--glass-border)",
-                          background: "rgba(255,255,255,0.02)",
-                          cursor: "pointer",
-                          transition: "border-color .2s",
-                        }}
-                        onMouseEnter={(e) =>
-                          (e.currentTarget.style.borderColor =
-                            "rgba(127,119,221,0.3)")
-                        }
-                        onMouseLeave={(e) =>
-                          (e.currentTarget.style.borderColor =
-                            "var(--glass-border)")
-                        }
-                      >
-                        <div>
-                          <div style={{ fontSize: 12, color: "var(--ink)" }}>
-                            {r.title}
-                          </div>
-                          <div
-                            style={{
-                              fontFamily: "var(--f-mono)",
-                              fontSize: 9.5,
-                              color:
-                                r.state === "live"
-                                  ? "var(--violet)"
-                                  : r.state === "locked"
-                                    ? "var(--teal)"
-                                    : "var(--ink-mute)",
-                              marginTop: 2,
-                            }}
-                          >
-                            {r.state === "live"
-                              ? "OPEN"
-                              : r.state === "locked"
-                                ? "CLOSED"
-                                : "UPCOMING"}
-                          </div>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                          }}
-                        >
-                          {submitted ? (
-                            <span
-                              style={{
-                                fontFamily: "var(--f-mono)",
-                                fontSize: 10,
-                                color: "var(--teal)",
-                              }}
-                            >
-                              ✓ submitted
-                            </span>
-                          ) : r.state === "live" ? (
-                            <span
-                              style={{
-                                fontFamily: "var(--f-mono)",
-                                fontSize: 10,
-                                color: "var(--amber)",
-                              }}
-                            >
-                              pending →
-                            </span>
-                          ) : (
-                            <span
-                              style={{
-                                fontFamily: "var(--f-mono)",
-                                fontSize: 10,
-                                color: "var(--ink-mute)",
-                              }}
-                            >
-                              —
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
 
             <a

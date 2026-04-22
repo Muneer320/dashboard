@@ -750,21 +750,65 @@ function ExistingSubmission({ submission, questions, onEdit }) {
 function getAutoFill(q, userData) {
   if (!userData) return null;
   const text = (q.question_text || '').toLowerCase().trim();
+  const qid  = (q.question_id  || '').toLowerCase();
   const type = (q.question_type || '').toLowerCase();
 
-  // Email-type questions → user's email
-  if (type === 'email') return userData.email || null;
+  // ── Email ─────────────────────────────────────────────────────────────
+  if (
+    type === 'email' ||
+    qid.includes('email') || qid.includes('mail') ||
+    text.includes('email')
+  ) return userData.email || null;
 
-  // Text questions matched by label keywords
-  if (type === 'text' || type === 'text-long' || type === 'email') {
-    if (text.includes('email')) return userData.email || null;
-    if (text.includes('team name') || text === 'team name')
-      return userData.teamName || null;
-    if (text.includes('college') || text.includes('institution') || text.includes('university'))
-      return userData.college || null;
-    if (text === 'name' || text === 'your name' || text === 'full name' || text === 'participant name')
-      return userData.name || null;
-  }
+  // ── Team name ─────────────────────────────────────────────────────────
+  if (
+    qid.includes('team') ||
+    text.includes('team name') || text === 'team name' || text.startsWith('team ')
+  ) return userData.teamName || null;
+
+  // ── Phone / mobile ────────────────────────────────────────────────────
+  if (
+    qid.includes('phone') || qid.includes('mobile') || qid.includes('whatsapp') ||
+    text.includes('phone') || text.includes('mobile') || text.includes('whatsapp')
+  ) return userData.phone || null;
+
+  // ── College / institution ─────────────────────────────────────────────
+  if (
+    qid.includes('college') || qid.includes('institution') || qid.includes('university') ||
+    text.includes('college') || text.includes('institution') || text.includes('university')
+  ) return userData.college || null;
+
+  // ── Year of study ─────────────────────────────────────────────────────
+  if (
+    qid.includes('year') ||
+    text.includes('year of study') || text === 'year' || text.startsWith('year ')
+  ) return userData.year ? String(userData.year) : null;
+
+  // ── Branch / department ───────────────────────────────────────────────
+  if (
+    qid.includes('branch') || qid.includes('dept') || qid.includes('department') ||
+    text.includes('branch') || text.includes('department') || text === 'dept'
+  ) return userData.branch || null;
+
+  // ── Gender ────────────────────────────────────────────────────────────
+  if (
+    qid.includes('gender') ||
+    text === 'gender' || text.includes('gender')
+  ) return userData.gender || null;
+
+  // ── City / location ───────────────────────────────────────────────────
+  if (
+    qid.includes('city') || qid.includes('location') || qid.includes('hometown') ||
+    text.includes('city') || text === 'location'
+  ) return userData.city || null;
+
+  // ── Full name (last priority — 'name' substring is very broad) ────────
+  if (
+    qid === 'name' || qid === 'full_name' || qid === 'fullname' ||
+    text === 'name' || text === 'your name' || text === 'full name' ||
+    text === 'participant name' || text === 'participant\'s name'
+  ) return userData.name || null;
+
   return null;
 }
 
@@ -848,13 +892,14 @@ export function SubmissionPanel({
     try {
       const res = await eventsApi.submission(eventId, phase);
       setExisting(res);
-      // Pre-fill answers with existing submission
+      // Merge existing answers on top of auto-fill values.
+      // Existing submission always wins over auto-fill.
       if (res.has_submission && res.answers) {
         const prefill = {};
         res.answers.forEach((a) => {
           prefill[a.question_id] = a.answer;
         });
-        setAnswers(prefill);
+        setAnswers((prev) => ({ ...prev, ...prefill }));
       }
     } catch {
       // If not registered / no submission, just ignore
