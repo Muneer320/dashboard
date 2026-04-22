@@ -205,7 +205,7 @@ export default function Landing() {
             <span style={{ color: 'var(--teal)' }}>tinkerers</span>, and the genuinely curious collide.
           </h2>
           <div style={{ marginTop: 24, color: 'var(--ink-dim)', fontSize: isMobile ? 14 : 16, lineHeight: 1.65, maxWidth: 620 }}>
-            Ascent is the annual tech fest hosted by our college — two days of hackathons, hardware mayhem,
+            Ascent is the annual tech fest hosted by <span style={{ color: 'var(--teal)' }}>Scaler School of Technology</span> — two days of hackathons, hardware mayhem,
             design jams, late-night pitch sessions, and the kind of conversations you'll remember years later.
           </div>
 
@@ -219,9 +219,9 @@ export default function Landing() {
             background: 'rgba(255,255,255,0.02)',
           }}>
             {[
-              { v: 24,   s: '',    l: 'Events across 6 tracks' },
-              { v: 2400, s: '+',   l: 'Registered builders' },
-              { v: 18,   s: 'L',   l: 'Prize pool (INR)' },
+              { v: 20,   s: '',    l: 'Events across 6 tracks' },
+              { v: 5000, s: '+',   l: 'Registered builders' },
+              { v: 6,   s: 'L',   l: 'Prize pool' },
               { v: 48,   s: 'h',   l: 'Of continuous chaos' },
             ].map((st, i) => (
               <div key={i} style={{
@@ -288,7 +288,7 @@ export default function Landing() {
             <div>
               <div className="eyebrow">§ 02 · POSTERS</div>
               <h2 className="display" style={{ fontSize: isMobile ? 32 : 44, marginTop: 16, letterSpacing: '-0.02em' }}>
-                This year's headliners.
+                Our Flagships
               </h2>
             </div>
             <a onClick={() => navigate('/explore')} className="btn sm">See all 24 events →</a>
@@ -299,12 +299,12 @@ export default function Landing() {
             gap: 16,
           }}>
             {[
-              { title: 'MIRAGE', tone: 'violet' },
-              { title: 'CIRCUIT RUSH', tone: 'teal' },
-              { title: 'PITCH./DEV', tone: 'amber' },
-              { title: 'HACK NIGHT', tone: 'violet' },
-            ].map(({ title, tone }) => (
-              <PosterPlaceholder key={title} title={title} sub="700 × 400" w="100%" h={isMobile ? 200 : 340} tone={tone} />
+              { title: 'Anvil', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Anvil_poydj2.png' },
+              { title: 'Ship to Scaler', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png' },
+              { title: 'Impulse', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Impulse_fhczet.png' },
+              { title: 'Launchpad', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Launchpad_dixz7h.png' },
+            ].map(({ title, imgUrl }) => (
+              <PosterPlaceholder key={title} title={title} imgUrl={imgUrl} w="100%" h={isMobile ? 200 : 340} />
             ))}
           </div>
         </div>
@@ -312,13 +312,12 @@ export default function Landing() {
 
       {/* ─────────────── SPONSOR WALL ─────────────── */}
       <section style={{ padding: isMobile ? '60px 0 40px' : '100px 0 60px', position: 'relative' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto 28px', padding: `0 ${hPad}` }}>
-          <div className="eyebrow">§ 03 · PARTNERS</div>
-          <h2 className="display" style={{ fontSize: isMobile ? 32 : 44, marginTop: 16, letterSpacing: '-0.02em' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto 28px', padding: `0 ${hPad}`, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          <h2 className="display" style={{ fontSize: isMobile ? 32 : 44, marginTop: 16, letterSpacing: '-0.02em', margin: 'auto' }}>
             Backed by the ones who build.
           </h2>
         </div>
-        <SponsorStrip isMobile={isMobile} />
+        {/* <SponsorStrip isMobile={isMobile} /> */}
       </section>
 
       {/* ─────────────── FAQ ─────────────── */}
@@ -373,14 +372,14 @@ function Rings() {
 }
 
 function Marquee() {
-  const items = ['HACK NIGHT', '★', 'CIRCUIT RUSH', '★', 'MIRAGE', '★', 'PITCH./DEV', '★', 'CODE CLASH', '★', 'DESIGN JAM', '★', 'ROBO WARS', '★', 'QUANTUM QUIZ', '★'];
+  const items = ['VORFLUX.AI',' ',  '★', ' ', 'Google for Developers', ' ', '★', ' ', 'Slikk', ' ', '★',, ' ',  'Together Fund', ' ', '★', ' '];
   return (
-    <div style={{ display: 'flex', gap: 48, whiteSpace: 'nowrap', animation: 'marq 40s linear infinite' }}>
+    <div style={{ display: 'flex', gap: 48, whiteSpace: 'nowrap', animation: 'marq 20s linear infinite' }}>
       <style>{`@keyframes marq { to { transform: translateX(-50%); } }`}</style>
       {[...items, ...items].map((t, i) => (
         <span key={i} style={{
           fontFamily: 'var(--f-display)',
-          fontSize: 22, fontWeight: 500,
+          fontSize: 24, fontWeight: 500,
           color: t === '★' ? 'var(--violet)' : 'var(--ink-dim)',
           letterSpacing: t === '★' ? 0 : '0.04em',
         }}>{t}</span>
@@ -438,8 +437,8 @@ function FAQList() {
     { q: 'How do I get credentials?', a: 'Fill out the request form on the Get Credentials page. Our organizers verify your college ID and email, then send your login within 24 hours.' },
     { q: 'Is there a participation fee?', a: 'Entry to the campus and most events is free. A handful of premium events (Hack Night, Robo Wars) carry a small registration fee that covers kits, food, and prizes.' },
     { q: 'Can I form my own team?', a: "Yes. Most events allow teams of 2–4. We also run a matchmaking thread on our Discord if you're flying solo." },
-    { q: 'Where does the fest happen?', a: 'Across the main campus — block C for coding tracks, the robotics lab for hardware events, and the auditorium for finals. A full map ships with your credentials.' },
-    { q: 'What about food and stay?', a: 'All meals are covered by your Food QR. Outstation participants get a hostel bed (limited, first-come, first-served — request on the form).' },
+    { q: 'Where does the fest happen?', a: 'Across the main campus of Scaler School of Technology, Bengaluru.' },
+    { q: 'What about food and stay?', a: 'All meals are covered by your Food QR.' },
   ];
   const [open, setOpen] = React.useState(0);
   return (
