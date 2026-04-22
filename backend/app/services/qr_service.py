@@ -2,60 +2,80 @@
 
 from __future__ import annotations
 
-import re
-
 from fastapi import HTTPException, status
 from supabase import AsyncClient
 
-from app.models.event import Event
+from app.db.supabase_client import rows as supabase_rows
+from app.models.event import DEFAULT_EVENT_MEALS_COUNT, Event
 from app.models.user import User
-from app.services.schedule_service import get_meals_count
 
 
-_MEAL_KEY_RE = re.compile(r"^meal(\d+)$")
-
-
-def _meal_index(meal: str) -> int | None:
-    """Return 1-based index from a key like 'meal3', or None if malformed."""
-    m = _MEAL_KEY_RE.match(meal or "")
-    if not m:
-        return None
-    return int(m.group(1))
-
-
-async def scan_food(supabase: AsyncClient, user: User, meal: str) -> str:
+async def _user_meal_allowance(supabase: AsyncClient, user: User) -> int:
     """
-    Mark a meal as claimed for the user.
-
-    ``users.food`` starts as an empty dict. On a valid scan we add/set the
-    entry ``food[meal_id] = True``. A duplicate scan (key already True)
-    returns an "already consumed" message. The meal key must be of the form
-    ``meal<N>`` where ``1 <= N <= current meals_count`` (admin-configured on
-    the ``global`` table).
+    Sum ``events.meals_count`` across every event this user is registered for
+    (restricted events still count — restriction is independent of allowance).
+    Returns 0 if the user isn't registered for any event.
     """
-    idx = _meal_index(meal)
-    if idx is None or idx < 1:
+    event_ids = list((user.events or {}).keys())
+    if not event_ids:
+        return 0
+
+    resp = await (
+        supabase.table("events")
+        .select("id, meals_count")
+        .in_("id", event_ids)
+        .execute()
+    )
+
+    total = 0
+    for row in supabase_rows(resp):
+        raw = row.get("meals_count")
+        total += int(raw if raw is not None else DEFAULT_EVENT_MEALS_COUNT)
+    return total
+
+
+def _next_meal_key(food: dict) -> tuple[str, int]:
+    """
+    Pick the next meal slot to assign.
+
+    Counts entries currently marked ``True`` in ``food``, then returns
+    ``("meal{N+1}", claimed_count)`` so callers know both the new key and the
+    existing count. Non-``True`` values (``False`` / missing) are treated as
+    unclaimed — consistent with how we render the admin matrix.
+    """
+    claimed = sum(1 for v in (food or {}).values() if v)
+    return f"meal{claimed + 1}", claimed
+
+
+async def scan_food(supabase: AsyncClient, user: User) -> str:
+    """
+    Claim the next meal slot for the user.
+
+    Logic: allowance = sum(event.meals_count) over the events the user is
+    registered for. Claimed = number of ``True`` entries in ``users.food``.
+    If claimed < allowance, assign ``food["meal{claimed+1}"] = True`` and
+    succeed. Otherwise reject with a clear message so the scanner UI can
+    show a red alert.
+    """
+    allowance = await _user_meal_allowance(supabase, user)
+    if allowance <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid meal key '{meal}' — expected 'meal1', 'meal2', …",
+            detail="User is not registered for any event — no meal allowance",
         )
 
-    meals_count = await get_meals_count(supabase)
-    if idx > meals_count:
+    food = dict(user.food or {})
+    next_key, claimed = _next_meal_key(food)
+
+    if claimed >= allowance:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
-                f"Meal '{meal}' is out of range — only {meals_count} meals "
-                f"are configured. Ask an admin to raise the meals count first."
+                f"No meals left — already claimed {claimed}/{allowance}"
             ),
         )
 
-    food = user.food or {}
-
-    if food.get(meal):
-        return "Meal already consumed"
-
-    food[meal] = True
+    food[next_key] = True
     user.food = food
 
     await (
@@ -64,7 +84,7 @@ async def scan_food(supabase: AsyncClient, user: User, meal: str) -> str:
         .eq("id", str(user.id))
         .execute()
     )
-    return "Meal marked as consumed"
+    return f"Meal {next_key} marked as consumed ({claimed + 1}/{allowance})"
 
 
 async def scan_college_entry(supabase: AsyncClient, user: User) -> str:

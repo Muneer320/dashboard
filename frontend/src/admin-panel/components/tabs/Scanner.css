@@ -82,6 +82,15 @@
 .em-event-name  { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); flex: 1; }
 .em-event-date  { font-size: 0.75rem; color: var(--text-muted); }
 .em-event-count { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+.em-event-empty {
+  padding: 14px 16px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  max-width: 480px;
+}
 
 .selected-badge {
   margin-top: 12px;

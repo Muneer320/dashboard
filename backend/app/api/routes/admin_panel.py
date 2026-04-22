@@ -1,5 +1,16 @@
-from fastapi import APIRouter, Depends
+import csv
+import io
+import re
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import StreamingResponse
 from supabase import AsyncClient
+
+# Maximum accepted upload size (10 MB).
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+# Only keep alphanumerics, hyphens, and underscores in the output filename.
+_SAFE_FILENAME_RE = re.compile(r"[^\w\-]")
 
 from app.api.deps import get_admin_only, get_admin_or_em, get_current_admin, get_scanner_or_above
 from app.db.supabase_client import get_supabase
@@ -9,10 +20,10 @@ from app.schemas.admin_panel import (
     EventManagerItem,
     EventManagerResponse,
     EventManagerUpdate,
+    EventMealsItem,
+    EventMealsUpdate,
     EventStatsItem,
     MealEntryResponse,
-    MealsConfigResponse,
-    MealsConfigUpdate,
     MyEventItem,
     ParticipantItem,
     RestrictRequest,
@@ -24,8 +35,8 @@ from app.services.admin_panel_service import (
     create_event_manager,
     delete_event_manager,
     get_event_managers,
+    get_events_meals_counts,
     get_events_with_stats,
-    get_meals_config,
     get_my_events,
     get_overview_stats,
     get_participants_list,
@@ -34,10 +45,71 @@ from app.services.admin_panel_service import (
     restrict_participant,
     set_user_meal_entry,
     update_event_manager,
-    update_meals_config,
+    update_event_meals_count,
 )
+from app.services.bulk_enroll_service import bulk_enroll, parse_upload
 
 router = APIRouter()
+
+# ── Bulk Registration ─────────────────────────────────────────────────────────
+
+@router.post("/registrations/upload")
+async def handle_bulk_registration(
+    event_id: str = Form(...),
+    file: UploadFile = File(...),
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    """
+    Process an uploaded CSV or XLSX roster for a specific event.
+    Returns a generated CSV containing the new users' credentials.
+    Admin role only.
+    """
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file uploaded")
+    if len(content) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large — maximum allowed size is {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+        )
+        
+    parsed_rows = parse_upload(file.filename, content)
+    if not parsed_rows:
+        raise HTTPException(status_code=400, detail="No readable rows found in uploaded file")
+        
+    result = await bulk_enroll(supabase, event_id, parsed_rows)
+    
+    # Generate CSV of newly created users
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Name", "Username", "Password", "Event"])
+    
+    for cred in result["new_credentials"]:
+        writer.writerow([cred["name"], cred["email"], cred["password"], cred["event"]])
+        
+    output.seek(0)
+    
+    event_id_val = result["event"]["id"]
+    event_name_val = result["event"]["name"]
+    safe_event_name = _SAFE_FILENAME_RE.sub("_", event_name_val)[:40]
+    out_filename = f"Ascent_{safe_event_name}_Credentials_{event_id_val[:8]}.csv"
+    
+    headers = {
+        "Content-Disposition": f"attachment; filename={out_filename}",
+        "X-Stats-Created": str(result["summary"]["created"]),
+        "X-Stats-Added": str(result["summary"]["added_to_existing"]),
+        "X-Stats-Duplicates": str(result["summary"]["duplicates"]),
+        "X-Stats-Errors": str(result["summary"]["errors"]),
+        "Access-Control-Expose-Headers": "X-Stats-Created, X-Stats-Added, X-Stats-Duplicates, X-Stats-Errors, Content-Disposition",
+    }
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers=headers,
+    )
+
 
 
 # ── Overview ──────────────────────────────────────────────────────────────────
@@ -225,32 +297,38 @@ async def delete_em(
 
 
 # ── Meals management ──────────────────────────────────────────────────────────
+#
+# meals_count lives on ``events`` now — one slot count per event, summed across
+# a user's registered events to form their total allowance. QR scans
+# auto-assign the next slot; admins can still toggle slots here manually.
 
-@router.get("/meals", response_model=MealsConfigResponse)
-async def meals_config(
+
+@router.get("/events/meals-count", response_model=list[EventMealsItem])
+async def list_events_meals(
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+) -> list[EventMealsItem]:
+    """
+    Per-event meals_count list.
+    admin       → all events
+    eventManager → assigned events only
+    """
+    rows = await get_events_meals_counts(supabase, admin)
+    return [EventMealsItem(**r) for r in rows]
+
+
+@router.patch("/events/{event_id}/meals-count", response_model=EventMealsItem)
+async def patch_event_meals(
+    event_id: str,
+    body: EventMealsUpdate,
     supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
-) -> MealsConfigResponse:
+) -> EventMealsItem:
     """
-    Current festival-wide meals_count (default 3).
-    Admin role only — this is a global config.
+    Change a single event's meals_count (0..20). Admin role only.
     """
-    data = await get_meals_config(supabase)
-    return MealsConfigResponse(**data)
-
-
-@router.patch("/meals", response_model=MealsConfigResponse)
-async def update_meals(
-    body: MealsConfigUpdate,
-    supabase: AsyncClient = Depends(get_supabase),
-    _: Admin = Depends(get_admin_only),
-) -> MealsConfigResponse:
-    """
-    Change the festival-wide meals_count (1..20).
-    Admin role only.
-    """
-    data = await update_meals_config(supabase, body.meals_count)
-    return MealsConfigResponse(**data)
+    data = await update_event_meals_count(supabase, event_id, body.meals_count)
+    return EventMealsItem(**data)
 
 
 @router.get("/meals/users", response_model=UserMealsResponse)
@@ -259,8 +337,8 @@ async def user_meals(
     _: Admin = Depends(get_admin_only),
 ) -> UserMealsResponse:
     """
-    Per-user meals claim matrix: meals_count + every user's claimed/unclaimed
-    status for meal1..mealN. Admin role only.
+    Per-user meals claim matrix plus each user's total allowance
+    (sum of their registered events' meals_count). Admin role only.
     """
     data = await list_user_meals(supabase)
     return UserMealsResponse(**data)
@@ -279,7 +357,8 @@ async def add_user_meal(
 ) -> MealEntryResponse:
     """
     Manually mark a user's meal as claimed (e.g., if QR scan failed).
-    Adds (or overwrites) user.food[meal_id] = True.
+    Adds (or overwrites) user.food[meal_id] = True — bounded by the user's
+    allowance.
     Admin role only.
     """
     data = await set_user_meal_entry(supabase, user_id, meal_id, claimed=True)

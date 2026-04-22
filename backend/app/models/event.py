@@ -10,6 +10,12 @@ from typing import Any
 from app.models._util import coerce_datetime, coerce_uuid
 
 
+# Per-event default — the number of meal slots this event contributes to a
+# registered user's overall allowance. Summed across all events a user is
+# registered for to determine their total meals_count.
+DEFAULT_EVENT_MEALS_COUNT = 3
+
+
 @dataclass
 class Event:
     id: uuid.UUID
@@ -24,6 +30,7 @@ class Event:
     schedule: list = field(default_factory=list)
     rules: str = ""
     max_participants: int = 500
+    meals_count: int = DEFAULT_EVENT_MEALS_COUNT
     registration_deadline: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
@@ -43,6 +50,11 @@ class Event:
             schedule=row.get("schedule") or [],
             rules=row.get("rules") or "",
             max_participants=int(row.get("max_participants") or 500),
+            meals_count=int(
+                row.get("meals_count")
+                if row.get("meals_count") is not None
+                else DEFAULT_EVENT_MEALS_COUNT
+            ),
             registration_deadline=coerce_datetime(row.get("registration_deadline")),
             created_at=coerce_datetime(row.get("created_at")),
             updated_at=coerce_datetime(row.get("updated_at")),

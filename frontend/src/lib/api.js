@@ -177,10 +177,11 @@ export const adminPanel = {
   updateEM: (uid, body) => patch(`/admin-panel/event-managers/${uid}`, body, { adminAuth: true }),
   deleteEM: (uid) => del(`/admin-panel/event-managers/${uid}`, { adminAuth: true }),
 
-  // ── Meals ────────────────────────────────────────────────────────────────
-  mealsConfig:      () => get('/admin-panel/meals', { adminAuth: true }),
-  setMealsCount:    (meals_count) =>
-    patch('/admin-panel/meals', { meals_count }, { adminAuth: true }),
+  // ── Meals (per-event meals_count + per-user claim matrix) ────────────────
+  eventsMealsCount: () =>
+    get('/admin-panel/events/meals-count', { adminAuth: true }),
+  setEventMealsCount: (eventId, meals_count) =>
+    patch(`/admin-panel/events/${eventId}/meals-count`, { meals_count }, { adminAuth: true }),
   userMeals:        () => get('/admin-panel/meals/users', { adminAuth: true }),
   addUserMeal:      (userId, mealId) =>
     post(`/admin-panel/meals/users/${userId}/${mealId}`, {}, { adminAuth: true }),
@@ -192,12 +193,13 @@ export const adminPanel = {
 
 // Frontend uses `scan_type` internally (entry / attendance / food). The backend
 // accepts those as aliases and canonicalises to mode = collegeEntry / event / food.
-// ``meal`` is only used when scan_type === 'food' (e.g. 'meal1').
+// Food scans auto-assign the next meal slot on the backend — no meal picker
+// required from the client.
 export const qr = {
-  scan: ({ user_id, scan_type, event_id, meal }) =>
+  scan: ({ user_id, scan_type, event_id }) =>
     post(
       '/qr/scan',
-      { user_id, mode: scan_type, event_id, meal },
+      { user_id, mode: scan_type, event_id },
       { adminAuth: true },
     ),
 };

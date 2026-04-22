@@ -8,6 +8,7 @@ dependencies = [
     "asyncpg>=0.31.0",
     "fastapi>=0.135.3",
     "greenlet<3.4",
+    "openpyxl>=3.1.5",
     "passlib[bcrypt]>=1.7.4",
     "pydantic-settings>=2.13.1",
     "python-jose[cryptography]>=3.5.0",

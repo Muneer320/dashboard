@@ -4,25 +4,38 @@ import './Meals.css'
 
 export default function Meals() {
   const {
-    mealsCount,
+    eventsMealsCount,
+    maxMealsCount,
     userMeals,
-    updateMealsCount,
+    updateEventMealsCount,
     addMealEntry,
     removeMealEntry,
     loadMeals,
   } = useData()
 
   const [search, setSearch] = useState('')
-  const [pendingCount, setPendingCount] = useState(mealsCount)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  // Keep the draft count in sync when the source number updates externally.
-  React.useEffect(() => { setPendingCount(mealsCount) }, [mealsCount])
+  const totalEventsAllowance = useMemo(
+    () => eventsMealsCount.reduce((sum, e) => sum + (e.meals_count || 0), 0),
+    [eventsMealsCount],
+  )
+
+  // Columns for the per-user matrix. Size to the largest user allowance we've
+  // actually seen (fall back to the cap returned by the server so the header
+  // still renders something useful when no one has registered yet).
+  const tableMealCount = useMemo(() => {
+    const maxFromUsers = userMeals.reduce(
+      (m, u) => Math.max(m, u.allowance || 0),
+      0,
+    )
+    return Math.max(maxFromUsers, maxMealsCount || 0)
+  }, [userMeals, maxMealsCount])
 
   const mealIds = useMemo(
-    () => Array.from({ length: mealsCount }, (_, i) => `meal${i + 1}`),
-    [mealsCount],
+    () => Array.from({ length: tableMealCount }, (_, i) => `meal${i + 1}`),
+    [tableMealCount],
   )
 
   const filteredUsers = useMemo(() => {
@@ -34,24 +47,30 @@ export default function Meals() {
     )
   }, [userMeals, search])
 
-  async function handleSaveCount() {
-    const next = Number(pendingCount)
-    if (!Number.isInteger(next) || next < 1 || next > 20) {
-      setErr('Meals count must be a whole number between 1 and 20.')
+  async function handleEventCountSave(eventId, nextRaw) {
+    const next = Number(nextRaw)
+    if (!Number.isInteger(next) || next < 0 || next > 20) {
+      setErr('Event meals count must be a whole number between 0 and 20.')
       return
     }
     setBusy(true); setErr('')
     try {
-      await updateMealsCount(next)
+      await updateEventMealsCount(eventId, next)
     } catch (e) {
-      setErr(e?.message || 'Failed to update meals count.')
+      setErr(e?.message || 'Failed to update event meals count.')
     } finally {
       setBusy(false)
     }
   }
 
-  async function handleToggle(userId, mealId, currentlyClaimed) {
+  async function handleToggle(userId, mealId, currentlyClaimed, allowance, index) {
+    // Only allow ticking slots inside the user's allowance.
+    if (!currentlyClaimed && index > allowance) {
+      setErr(`Slot out of this user's allowance (${allowance}).`)
+      return
+    }
     try {
+      setErr('')
       if (currentlyClaimed) await removeMealEntry(userId, mealId)
       else                  await addMealEntry(userId, mealId)
     } catch (e) {
@@ -84,35 +103,32 @@ export default function Meals() {
         </button>
       </div>
 
-      {/* Config card — total meals */}
+      {/* Per-event meals_count list */}
       <div className="meals-config-card">
         <div className="meals-config-info">
-          <h3 className="meals-config-title">Total meals served</h3>
+          <h3 className="meals-config-title">Per-event meal allowance</h3>
           <p className="meals-config-sub">
-            Set how many meals the festival is serving in total. Each user's claim
-            status is tracked per meal slot (meal1…meal{mealsCount}).
+            Each event contributes this many meal slots to a registered user's
+            total allowance. A user's overall allowance is the sum across every
+            event they're registered for. Current total across all events:{' '}
+            <strong>{totalEventsAllowance}</strong>.
           </p>
         </div>
-        <div className="meals-config-edit">
-          <input
-            id="meals-count-input"
-            className="input-field meals-count-input"
-            type="number"
-            min="1"
-            max="20"
-            value={pendingCount}
-            onChange={e => setPendingCount(e.target.value)}
-            disabled={busy}
+      </div>
+
+      <div className="meals-events-list">
+        {eventsMealsCount.length === 0 ? (
+          <div className="meals-empty" style={{ padding: 12 }}>
+            No events yet.
+          </div>
+        ) : eventsMealsCount.map(ev => (
+          <EventMealRow
+            key={ev.id}
+            event={ev}
+            busy={busy}
+            onSave={(val) => handleEventCountSave(ev.id, val)}
           />
-          <button
-            id="meals-count-save"
-            className="btn btn-primary"
-            onClick={handleSaveCount}
-            disabled={busy || Number(pendingCount) === mealsCount}
-          >
-            {busy ? 'Saving…' : 'Save'}
-          </button>
-        </div>
+        ))}
       </div>
 
       {err && <div className="meals-error">{err}</div>}
@@ -138,6 +154,7 @@ export default function Meals() {
           <thead>
             <tr>
               <th className="meals-user-col">Participant</th>
+              <th className="meals-allowance-col">Claimed / Allowed</th>
               {mealIds.map(mid => (
                 <th key={mid} className="meals-meal-col">
                   <div className="meals-col-label">{mid}</div>
@@ -149,7 +166,7 @@ export default function Meals() {
           <tbody>
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={mealIds.length + 1} className="meals-empty">
+                <td colSpan={mealIds.length + 2} className="meals-empty">
                   No participants match "{search}".
                 </td>
               </tr>
@@ -161,17 +178,29 @@ export default function Meals() {
                     <div className="meals-user-name">{u.name}</div>
                     <div className="meals-user-handle">@{u.username}</div>
                   </td>
-                  {mealIds.map(mid => {
+                  <td className="meals-allowance-cell">
+                    <span className={`meals-allowance-pill${u.claimed >= u.allowance && u.allowance > 0 ? ' full' : ''}`}>
+                      {u.claimed}/{u.allowance}
+                    </span>
+                  </td>
+                  {mealIds.map((mid, i) => {
+                    const index = i + 1
+                    const outOfScope = index > (u.allowance || 0)
                     const claimed = !!claimMap[mid]
                     return (
                       <td key={mid} className="meals-cell">
                         <button
                           id={`meal-toggle-${u.user_id}-${mid}`}
-                          className={`meal-chip${claimed ? ' claimed' : ''}`}
-                          onClick={() => handleToggle(u.user_id, mid, claimed)}
-                          title={claimed ? 'Click to remove entry' : 'Click to add entry'}
+                          className={`meal-chip${claimed ? ' claimed' : ''}${outOfScope ? ' out-of-scope' : ''}`}
+                          onClick={() => handleToggle(u.user_id, mid, claimed, u.allowance || 0, index)}
+                          disabled={outOfScope && !claimed}
+                          title={
+                            outOfScope
+                              ? `Outside this user's allowance (${u.allowance})`
+                              : claimed ? 'Click to remove entry' : 'Click to add entry'
+                          }
                         >
-                          {claimed ? '✓' : '+'}
+                          {outOfScope && !claimed ? '—' : claimed ? '✓' : '+'}
                         </button>
                       </td>
                     )
@@ -181,6 +210,42 @@ export default function Meals() {
             })}
           </tbody>
         </table>
+      </div>
+    </div>
+  )
+}
+
+function EventMealRow({ event, busy, onSave }) {
+  const [draft, setDraft] = useState(event.meals_count)
+
+  // Keep the draft in sync when the parent data updates externally.
+  React.useEffect(() => { setDraft(event.meals_count) }, [event.meals_count])
+
+  const changed = Number(draft) !== event.meals_count
+
+  return (
+    <div className="meals-event-row">
+      <div className="meals-event-name">
+        <span>{event.name}</span>
+        <span className="meals-event-sub">{event.meals_count} meal slot{event.meals_count === 1 ? '' : 's'}</span>
+      </div>
+      <div className="meals-event-edit">
+        <input
+          className="input-field meals-count-input"
+          type="number"
+          min="0"
+          max="20"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          disabled={busy}
+        />
+        <button
+          className="btn btn-primary"
+          onClick={() => onSave(draft)}
+          disabled={busy || !changed}
+        >
+          {busy ? 'Saving…' : 'Save'}
+        </button>
       </div>
     </div>
   )

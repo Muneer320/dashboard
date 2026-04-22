@@ -21,9 +21,8 @@ from supabase import AsyncClient
 from app.core.security import get_password_hash
 from app.db.supabase_client import first_row, rows
 from app.models.admin import Admin, AdminRole
-from app.models.event import Event
+from app.models.event import DEFAULT_EVENT_MEALS_COUNT, Event
 from app.models.user import User
-from app.services.schedule_service import get_meals_count, set_meals_count
 
 
 _MEAL_KEY_RE = re.compile(r"^meal(\d+)$")
@@ -664,69 +663,142 @@ async def update_event_manager(
 
 
 # ── Meals ─────────────────────────────────────────────────────────────────────
+#
+# Model: ``events.meals_count`` holds how many meal slots each event contributes
+# to a registered user's allowance. A user's total allowance is the sum of
+# ``meals_count`` across every event they're registered for. ``users.food`` is
+# a JSONB dict of ``{"meal1": True, "meal2": True, …}`` populated as slots get
+# claimed. The QR scanner auto-assigns the next slot; admins can still add or
+# remove entries manually here.
 
-def _validate_meal_key(meal_id: str, meals_count: int) -> int:
-    """Return the 1-based index for a valid meal key, or raise 400."""
+
+def _parse_meal_index(meal_id: str) -> int:
     m = _MEAL_KEY_RE.match(meal_id or "")
     if not m:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid meal key '{meal_id}' — expected 'meal1', 'meal2', …",
         )
-    idx = int(m.group(1))
-    if idx < 1 or idx > meals_count:
+    return int(m.group(1))
+
+
+def _event_meals_count(event: Event) -> int:
+    """Read a dataclass Event's meals_count with a sensible default."""
+    raw = event.meals_count
+    return int(raw if raw is not None else DEFAULT_EVENT_MEALS_COUNT)
+
+
+async def get_events_meals_counts(supabase: AsyncClient, admin: Admin) -> list[dict]:
+    """
+    Return the per-event meals_count list for the Meals admin tab.
+    admin      → all events
+    eventManager → assigned events only (they don't strictly need this
+    endpoint yet, but scoping keeps parity with the rest of the panel).
+    """
+    all_events = await _all_events(supabase)
+    all_event_ids = [str(e.id) for e in all_events]
+    scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
+    scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
+
+    return [
+        {
+            "id": str(e.id),
+            "name": e.name,
+            "meals_count": _event_meals_count(e),
+        }
+        for e in sorted(scoped_events, key=lambda e: e.name.lower())
+    ]
+
+
+async def update_event_meals_count(
+    supabase: AsyncClient,
+    event_id: str,
+    meals_count: int,
+) -> dict:
+    """
+    Change a single event's meals_count. Admin-only (route enforces).
+    Validates 0..20 — 0 is a valid value for events that don't serve meals.
+    """
+    if meals_count < 0 or meals_count > 20:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Meal '{meal_id}' is out of range — current meals_count is {meals_count}."
-            ),
+            detail="meals_count must be between 0 and 20",
         )
-    return idx
 
-
-async def get_meals_config(supabase: AsyncClient) -> dict:
-    """Return {meals_count: int} — current festival-wide count."""
-    count = await get_meals_count(supabase)
-    return {"meals_count": count}
-
-
-async def update_meals_config(supabase: AsyncClient, count: int) -> dict:
-    """Change the festival-wide meals count (1..20)."""
-    try:
-        new_count = await set_meals_count(supabase, count)
-    except ValueError as exc:
+    event_uuid = _parse_event_uuid(event_id)
+    resp = await (
+        supabase.table("events")
+        .select("id, name")
+        .eq("id", str(event_uuid))
+        .limit(1)
+        .execute()
+    )
+    if first_row(resp) is None:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    return {"meals_count": new_count}
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found",
+        )
+
+    update_resp = await (
+        supabase.table("events")
+        .update({"meals_count": meals_count})
+        .eq("id", str(event_uuid))
+        .execute()
+    )
+    updated = first_row(update_resp) or {}
+    return {
+        "id": str(event_uuid),
+        "name": updated.get("name") or first_row(resp)["name"],
+        "meals_count": int(updated.get("meals_count", meals_count)),
+    }
 
 
 async def list_user_meals(supabase: AsyncClient) -> dict:
     """
-    Return the current meals_count plus a row per user with their claim
-    status for meal1..mealN. Absent keys on users.food are treated as False.
+    Per-user meals matrix:
+      - Each user's allowance = sum(events.meals_count) over their registered events.
+      - ``claimed`` = number of True entries currently in ``users.food``.
+      - ``claims`` expands to meal1..meal{allowance} with claimed flags (absent
+        keys → False) so the admin UI can still toggle any slot up to the cap.
+
+    Also returns the global cap (``max_meals_count`` = sum of every event's
+    meals_count) so the UI can size its table safely for the power-user case.
     """
-    meals_count = await get_meals_count(supabase)
+    all_events = await _all_events(supabase)
     all_users = await _all_users(supabase)
 
-    meal_ids = [f"meal{i}" for i in range(1, meals_count + 1)]
+    event_meal_map: dict[str, int] = {
+        str(e.id): _event_meals_count(e) for e in all_events
+    }
+    max_meals_count = sum(event_meal_map.values())
 
     users_payload: list[dict] = []
     for user in sorted(all_users, key=lambda u: u.name.lower()):
         food = user.food or {}
-        claims = [
-            {"meal_id": mid, "claimed": bool(food.get(mid))}
-            for mid in meal_ids
-        ]
+        allowance = 0
+        for eid in (user.events or {}).keys():
+            allowance += event_meal_map.get(str(eid), 0)
+
+        claimed_count = sum(1 for v in food.values() if v)
+
+        claims: list[dict] = []
+        for i in range(1, allowance + 1):
+            mid = f"meal{i}"
+            claims.append({"meal_id": mid, "claimed": bool(food.get(mid))})
+
         users_payload.append({
             "user_id": str(user.id),
             "name": user.name,
             "username": user.username,
+            "allowance": allowance,
+            "claimed": claimed_count,
             "claims": claims,
         })
 
-    return {"meals_count": meals_count, "users": users_payload}
+    return {
+        "max_meals_count": max_meals_count,
+        "users": users_payload,
+    }
 
 
 async def set_user_meal_entry(
@@ -738,12 +810,12 @@ async def set_user_meal_entry(
     """
     Manually add or remove a meal claim for a user.
 
-    ``claimed=True``  → sets user.food[meal_id] = True (adds or overwrites).
+    ``claimed=True``  → sets user.food[meal_id] = True (respects their
+    allowance — can't manually grant more than they're entitled to).
     ``claimed=False`` → removes the meal_id key from user.food entirely so
     the row doesn't carry stale keys around.
     """
-    meals_count = await get_meals_count(supabase)
-    _validate_meal_key(meal_id, meals_count)
+    idx = _parse_meal_index(meal_id)
 
     user_uuid = _parse_user_uuid(user_id)
     user_resp = await (
@@ -761,6 +833,31 @@ async def set_user_meal_entry(
         )
 
     user = User.from_row(row)
+
+    # Compute allowance from their registered events (same logic as scan_food).
+    allowance = 0
+    user_event_ids = list((user.events or {}).keys())
+    if user_event_ids:
+        ev_resp = await (
+            supabase.table("events")
+            .select("id, meals_count")
+            .in_("id", user_event_ids)
+            .execute()
+        )
+        for ev in rows(ev_resp):
+            raw = ev.get("meals_count")
+            allowance += int(raw if raw is not None else DEFAULT_EVENT_MEALS_COUNT)
+
+    if claimed and idx > allowance:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Meal '{meal_id}' exceeds the user's allowance "
+                f"({allowance}). Raise an event's meals_count or register "
+                f"them for another event first."
+            ),
+        )
+
     food = dict(user.food or {})
 
     if claimed:

@@ -126,33 +126,41 @@ class EventManagerResponse(BaseModel):
 
 # ── Meals ─────────────────────────────────────────────────────────────────────
 
-class MealsConfigResponse(BaseModel):
-    """Current festival-wide meals count."""
+class EventMealsItem(BaseModel):
+    """One row in the per-event meals_count table."""
+    id: str
+    name: str
     meals_count: int
 
 
-class MealsConfigUpdate(BaseModel):
-    """Body for PATCH /admin-panel/meals — change the festival meals count."""
+class EventMealsUpdate(BaseModel):
+    """Body for PATCH /admin-panel/events/{event_id}/meals-count."""
     meals_count: int
 
 
 class UserMealClaim(BaseModel):
-    """One row in the per-user meals table."""
+    """One meal slot in the per-user claim matrix."""
     meal_id: str        # e.g. "meal1"
     claimed: bool
 
 
 class UserMealsRow(BaseModel):
-    """All meal claims for a single user."""
+    """All meal claims for a single user, plus their allowance summary."""
     user_id: str
     name: str
     username: str
-    claims: list[UserMealClaim]
+    allowance: int       # sum(events.meals_count) across registered events
+    claimed: int         # count of True entries in users.food
+    claims: list[UserMealClaim]  # covers meal1..meal{allowance}
 
 
 class UserMealsResponse(BaseModel):
-    """GET /admin-panel/meals/users — count + per-user claim matrix."""
-    meals_count: int
+    """
+    GET /admin-panel/meals/users — per-user claim matrix.
+    ``max_meals_count`` is the sum of meals_count across all events, useful
+    for sizing the UI table columns.
+    """
+    max_meals_count: int
     users: list[UserMealsRow]
 
 
@@ -162,3 +170,62 @@ class MealEntryResponse(BaseModel):
     meal_id: str
     claimed: bool
     message: str
+
+
+# ── Bulk Enroll ───────────────────────────────────────────────────────────────
+
+class BulkEnrollCredential(BaseModel):
+    """One new user created by the bulk-enroll flow. Sent back so admins can
+    email credentials out to participants."""
+    email: str
+    password: str
+    name: str
+    event: str
+    event_id: str
+
+
+class BulkEnrollExistingRow(BaseModel):
+    """A user that already existed and had the event added to their list."""
+    email: str
+    user_id: str
+    name: str
+
+
+class BulkEnrollDuplicate(BaseModel):
+    """A user that was already enrolled in this specific event — skipped."""
+    row: int
+    email: str
+
+
+class BulkEnrollError(BaseModel):
+    """A row that couldn't be processed (bad email, DB error, …)."""
+    row: int
+    email: str
+    reason: str
+
+
+class BulkEnrollSummary(BaseModel):
+    total_rows: int
+    created: int
+    added_to_existing: int
+    duplicates: int
+    errors: int
+
+
+class BulkEnrollEvent(BaseModel):
+    id: str
+    name: str
+
+
+class BulkEnrollResponse(BaseModel):
+    """
+    Response for POST /admin-panel/users/bulk-enroll.
+    ``new_credentials`` holds the rows the frontend should export to CSV so the
+    admin can mail logins out.
+    """
+    event: BulkEnrollEvent
+    summary: BulkEnrollSummary
+    new_credentials: list[BulkEnrollCredential]
+    added_to_existing: list[BulkEnrollExistingRow]
+    duplicates_detail: list[BulkEnrollDuplicate]
+    errors_detail: list[BulkEnrollError]

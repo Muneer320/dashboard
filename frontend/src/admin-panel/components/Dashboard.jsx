@@ -9,6 +9,7 @@ import Scanner from './tabs/Scanner'
 import MyEvents from './tabs/MyEvents'
 import ContactInfo from './tabs/ContactInfo'
 import Meals from './tabs/Meals'
+import ManageRegistrations from './tabs/ManageRegistrations'
 import './Dashboard.css'
 
 export default function Dashboard() {
@@ -30,6 +31,7 @@ export default function Dashboard() {
             <Route path="events"       element={canAccess('myEvents')    ? <MyEvents />     : <Forbidden />} />
             <Route path="contact"      element={canAccess('contactInfo') ? <ContactInfo />  : <Forbidden />} />
             <Route path="meals"        element={canAccess('meals')       ? <Meals />        : <Forbidden />} />
+            <Route path="manage-registrations" element={canAccess('manageRegistrations') ? <ManageRegistrations /> : <Forbidden />} />
           </Routes>
         </main>
       </div>

@@ -19,8 +19,9 @@ export function DataProvider({ children }) {
     submitted:       0,
     eventCount:      0,
   })
-  const [mealsCount, setMealsCountState] = useState(3)        // festival-wide
-  const [userMeals, setUserMeals]         = useState([])      // UserMealsRow[]
+  const [eventsMealsCount, setEventsMealsCount] = useState([])  // [{ id, name, meals_count }]
+  const [maxMealsCount, setMaxMealsCount]       = useState(0)   // cap = sum of all events' meals_count
+  const [userMeals, setUserMeals]               = useState([])  // UserMealsRow[]
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
 
@@ -76,16 +77,16 @@ export function DataProvider({ children }) {
   }, [user?.role])
 
   const loadMeals = useCallback(async () => {
-    // Admin-only endpoints. Scanner/EM just need the count for their picker,
-    // but meals_count leaks through the /meals config route — we gate to admin
-    // here and let the Scanner fall back to the last-known value or the default.
+    // Admin-only endpoints. The scanner auto-assigns slots server-side and
+    // doesn't need these reads.
     if (user?.role !== 'admin') return
     try {
-      const [config, perUser] = await Promise.all([
-        adminPanel.mealsConfig(),
+      const [perEvent, perUser] = await Promise.all([
+        adminPanel.eventsMealsCount(),
         adminPanel.userMeals(),
       ])
-      setMealsCountState(config?.meals_count ?? 3)
+      setEventsMealsCount(perEvent ?? [])
+      setMaxMealsCount(perUser?.max_meals_count ?? 0)
       setUserMeals(perUser?.users ?? [])
     } catch (e) {
       console.error('Meals fetch failed:', e.message)
@@ -123,78 +124,96 @@ export function DataProvider({ children }) {
     }
   }, [])
 
-  // QR scan actions — POST /qr/scan
-  const _scan = useCallback(async (participantId, scanType, { event_id = null, meal = null } = {}) => {
+  // QR scan actions — POST /qr/scan. Returns `{ status, message }` so the
+  // caller (Scanner UI) can show a green/red alert. `status` is:
+  //   'accepted' — scan applied successfully
+  //   'rejected' — server accepted the request but the scan was a no-op
+  //                 (already claimed, not registered, etc.)
+  //   'error'    — request failed (bad input / 4xx / network)
+  const _scan = useCallback(async (participantId, scanType, { event_id = null } = {}) => {
     try {
-      return await qr.scan({ user_id: participantId, scan_type: scanType, event_id, meal })
+      const res = await qr.scan({ user_id: participantId, scan_type: scanType, event_id })
+      return { ...(res || {}), status: res?.status || 'accepted' }
     } catch (e) {
       console.error(`Scan (${scanType}) failed:`, e.message)
-      return null
+      return { status: 'error', message: e?.message || 'Scan failed' }
     }
   }, [])
 
   const markEntryScanned = useCallback(async (id) => {
     // Main-gate / college entry — no event context required.
     const res = await _scan(id, 'entry')
-    if (res) setParticipants(prev => prev.map(p => p.id === id ? { ...p, entryScanned: true } : p))
+    if (res.status === 'accepted') {
+      setParticipants(prev => prev.map(p => p.id === id ? { ...p, entryScanned: true } : p))
+    }
+    return res
   }, [_scan])
 
   const markAttended = useCallback(async (id, eventId) => {
     const res = await _scan(id, 'attendance', { event_id: eventId })
-    if (res) {
+    if (res.status === 'accepted') {
       // Event-entry also flips top-level is_attending on the server, so mirror it here.
       setParticipants(prev => prev.map(p =>
         p.id === id ? { ...p, isAttending: true, entryScanned: true } : p
       ))
     }
+    return res
   }, [_scan])
 
-  const markFoodClaimed = useCallback(async (id, mealId) => {
-    if (!mealId) {
-      console.error('markFoodClaimed: meal is required (e.g. "meal1")')
-      return
+  const markFoodClaimed = useCallback(async (id) => {
+    // Backend auto-assigns the next meal slot based on the user's remaining
+    // allowance across their registered events. No meal picker needed.
+    const res = await _scan(id, 'food')
+    if (res.status === 'accepted') {
+      setParticipants(prev => prev.map(p => p.id === id ? { ...p, foodClaimed: true } : p))
     }
-    const res = await _scan(id, 'food', { meal: mealId })
-    if (res) setParticipants(prev => prev.map(p => p.id === id ? { ...p, foodClaimed: true } : p))
+    return res
   }, [_scan])
 
   // ── Meals admin mutations ───────────────────────────────────────────────────
 
-  const updateMealsCount = useCallback(async (count) => {
-    const res = await adminPanel.setMealsCount(count)
-    setMealsCountState(res?.meals_count ?? count)
-    await loadMeals()  // re-pull user matrix so column count is in sync
+  const updateEventMealsCount = useCallback(async (eventId, count) => {
+    const res = await adminPanel.setEventMealsCount(eventId, count)
+    setEventsMealsCount(prev => prev.map(e =>
+      e.id === eventId ? { ...e, meals_count: res?.meals_count ?? count } : e
+    ))
+    // Re-pull the user matrix so everyone's allowance/columns stay in sync.
+    await loadMeals()
   }, [loadMeals])
+
+  const _toggleUserMealLocal = (userId, mealId, claimed) =>
+    setUserMeals(prev => prev.map(row => {
+      if (row.user_id !== userId) return row
+      const claims = row.claims.map(c =>
+        c.meal_id === mealId ? { ...c, claimed } : c,
+      )
+      const delta = claimed ? 1 : -1
+      // Clamp to [0, allowance] so stale data doesn't make the count go negative.
+      const nextClaimed = Math.max(0, Math.min((row.allowance ?? 0), (row.claimed ?? 0) + delta))
+      return { ...row, claims, claimed: nextClaimed }
+    }))
 
   const addMealEntry = useCallback(async (userId, mealId) => {
     await adminPanel.addUserMeal(userId, mealId)
-    setUserMeals(prev => prev.map(row =>
-      row.user_id === userId
-        ? { ...row, claims: row.claims.map(c => c.meal_id === mealId ? { ...c, claimed: true } : c) }
-        : row
-    ))
+    _toggleUserMealLocal(userId, mealId, true)
   }, [])
 
   const removeMealEntry = useCallback(async (userId, mealId) => {
     await adminPanel.removeUserMeal(userId, mealId)
-    setUserMeals(prev => prev.map(row =>
-      row.user_id === userId
-        ? { ...row, claims: row.claims.map(c => c.meal_id === mealId ? { ...c, claimed: false } : c) }
-        : row
-    ))
+    _toggleUserMealLocal(userId, mealId, false)
   }, [])
 
   return (
     <DataContext.Provider value={{
       events, eventManagers, participants, stats,
-      mealsCount, userMeals,
+      eventsMealsCount, maxMealsCount, userMeals,
       loading, error,
       reload:               loadAll,
       loadParticipants,
       loadMeals,
       updateParticipantStatus,
       markAttended, markFoodClaimed, markEntryScanned,
-      updateMealsCount, addMealEntry, removeMealEntry,
+      updateEventMealsCount, addMealEntry, removeMealEntry,
     }}>
       {children}
     </DataContext.Provider>
