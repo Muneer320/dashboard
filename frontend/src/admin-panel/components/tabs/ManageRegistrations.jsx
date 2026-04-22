@@ -21,12 +21,12 @@ function parseCSV(text) {
 // Google Apps Script doesn't respond to CORS preflight, so we must use
 // mode:'no-cors' and omit Content-Type:application/json (which triggers preflight).
 // The response will be opaque — if fetch doesn't throw, the request went through.
-async function sendCredentialEmail({ name, email, password }) {
+async function sendCredentialEmails(payload) {
   try {
     await fetch(GOOGLE_SCRIPT_URL, {
       method: 'POST',
       mode: 'no-cors',
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify(payload),
     })
     return 'sent'
   } catch {
@@ -137,41 +137,25 @@ export default function ManageRegistrations() {
     if (!newUsers.length) return
     setIsSending(true)
 
-    // Mark all as pending first
-    const pending = {}
-    newUsers.forEach(u => { pending[u.Username] = 'pending' })
-    setEmailProgress(pending)
+    // Mark all as sending
+    const progress = {}
+    newUsers.forEach(u => { progress[u.Username] = 'sending' })
+    setEmailProgress(progress)
 
-    // Send in small batches so Google Apps Script appendRow()
-    // doesn't race with itself under concurrent writes.
-    const BATCH_SIZE = 3
-    const BATCH_DELAY_MS = 400
+    const payload = newUsers.map(u => ({
+      name: u.Name,
+      email: u.Username,
+      password: u.Password
+    }))
 
-    for (let i = 0; i < newUsers.length; i += BATCH_SIZE) {
-      const batch = newUsers.slice(i, i + BATCH_SIZE)
+    const result = await sendCredentialEmails(payload)
 
-      // Mark batch as sending
-      setEmailProgress(prev => {
-        const next = { ...prev }
-        batch.forEach(u => { next[u.Username] = 'sending' })
-        return next
-      })
-
-      // Fire batch concurrently, wait for all to finish
-      await Promise.all(batch.map(async (u) => {
-        const result = await sendCredentialEmail({
-          name:     u.Name,
-          email:    u.Username,
-          password: u.Password,
-        })
-        setEmailProgress(prev => ({ ...prev, [u.Username]: result }))
-      }))
-
-      // Small gap between batches so the script can finish writing
-      if (i + BATCH_SIZE < newUsers.length) {
-        await new Promise(r => setTimeout(r, BATCH_DELAY_MS))
-      }
-    }
+    // Update all progress to result ('sent' or 'failed')
+    setEmailProgress(prev => {
+      const next = { ...prev }
+      newUsers.forEach(u => { next[u.Username] = result })
+      return next
+    })
 
     setIsSending(false)
   }
