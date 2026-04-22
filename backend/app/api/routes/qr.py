@@ -41,12 +41,9 @@ async def scan_qr(
         return QRScanResponse(message=message, status=status_text)
 
     if payload.mode == "food":
-        if not payload.meal:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Meal is required in food mode",
-            )
-        message = await scan_food(supabase, target_user, payload.meal)
+        # Meal slot is auto-assigned by the backend based on the user's
+        # remaining allowance; payload.meal (if sent) is ignored.
+        message = await scan_food(supabase, target_user)
         status_text = "accepted" if "marked" in message.lower() else "rejected"
         return QRScanResponse(message=message, status=status_text)
 

@@ -8,7 +8,7 @@ const NAV_ITEMS = [
     key: 'overview',
     label: 'Overview',
     path: '/admin/dashboard/overview',
-    access: ['admin', 'event_manager'],
+    access: ['admin', 'eventManager'],
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
@@ -20,7 +20,7 @@ const NAV_ITEMS = [
     key: 'participants',
     label: 'Participants',
     path: '/admin/dashboard/participants',
-    access: ['admin', 'event_manager'],
+    access: ['admin', 'eventManager'],
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
@@ -34,7 +34,7 @@ const NAV_ITEMS = [
     key: 'scanner',
     label: 'Scanner',
     path: '/admin/dashboard/scanner',
-    access: ['admin', 'scanner', 'event_manager'],
+    access: ['admin', 'Scanner', 'eventManager'],
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <polyline points="23 7 23 1 17 1"/><line x1="16" y1="8" x2="23" y2="1"/>
@@ -48,7 +48,7 @@ const NAV_ITEMS = [
     key: 'myEvents',
     label: 'My Events',
     path: '/admin/dashboard/events',
-    access: ['admin', 'event_manager'],
+    access: ['admin', 'eventManager'],
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
@@ -75,10 +75,23 @@ const NAV_ITEMS = [
     access: ['admin'],
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        {/* plate + fork + knife */}
         <circle cx="12" cy="12" r="9"/>
         <path d="M8 7v5a2 2 0 0 0 2 2v3"/>
         <path d="M15 7c-1 2-1 4 0 6v4"/>
+      </svg>
+    )
+  },
+  {
+    key: 'manageRegistrations',
+    label: 'Manage Registrations',
+    path: '/admin/dashboard/manage-registrations',
+    access: ['admin'],
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+        <circle cx="8.5" cy="7" r="4"/>
+        <line x1="20" y1="8" x2="20" y2="14"/>
+        <line x1="23" y1="11" x2="17" y2="11"/>
       </svg>
     )
   }
@@ -90,8 +103,8 @@ export default function Sidebar() {
 
   const visibleItems = NAV_ITEMS.filter(item => item.access.includes(user?.role))
 
-  const roleLabel = { admin: 'Administrator', event_manager: 'Event Manager', scanner: 'Scanner' }
-  const roleBadge = { admin: 'badge-accent', event_manager: 'badge-info', scanner: 'badge-warning' }
+  const roleLabel = { admin: 'Administrator', eventManager: 'Event Manager', Scanner: 'Scanner' }
+  const roleBadge = { admin: 'badge-accent', eventManager: 'badge-info', Scanner: 'badge-warning' }
 
   function handleLogout() {
     logout()

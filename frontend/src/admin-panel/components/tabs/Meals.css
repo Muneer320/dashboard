@@ -8,8 +8,8 @@
   justify-content: space-between;
   align-items: center;
   gap: 24px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #e5e7eb);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 18px 20px;
   margin-top: 8px;
@@ -25,7 +25,7 @@
 
 .meals-config-sub {
   font-size: 0.82rem;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
   margin: 0;
   line-height: 1.4;
 }
@@ -57,10 +57,10 @@
 /* Table ────────────────────────────────────────────────────────────────────── */
 .meals-table-wrap {
   margin-top: 8px;
-  border: 1px solid var(--border, #e5e7eb);
+  border: 1px solid var(--border);
   border-radius: 10px;
   overflow: auto;
-  background: var(--surface, #fff);
+  background: var(--bg-card);
 }
 
 .meals-table {
@@ -70,12 +70,12 @@
 }
 
 .meals-table thead th {
-  background: var(--surface-alt, #f9fafb);
-  border-bottom: 1px solid var(--border, #e5e7eb);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
   padding: 10px 14px;
   text-align: left;
   font-weight: 600;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-muted);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -91,25 +91,25 @@
 }
 .meals-col-count {
   font-size: 0.7rem;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   font-weight: 500;
   margin-top: 2px;
 }
 
 .meals-table tbody td {
   padding: 10px 14px;
-  border-bottom: 1px solid var(--border-subtle, #f3f4f6);
+  border-bottom: 1px solid var(--border);
 }
 
 .meals-table tbody tr:hover {
-  background: var(--surface-hover, #fafafa);
+  background: var(--bg-hover);
 }
 
 .meals-user-cell { line-height: 1.3; }
-.meals-user-name { font-weight: 600; color: var(--text, #111827); }
+.meals-user-name { font-weight: 600; color: var(--text-primary); }
 .meals-user-handle {
   font-size: 0.75rem;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
 }
 
 .meals-cell { text-align: center; }
@@ -117,7 +117,7 @@
 .meals-empty {
   padding: 32px 14px !important;
   text-align: center;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -126,25 +126,94 @@
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  border: 1px solid var(--border, #e5e7eb);
+  border: 1px solid var(--border);
   background: transparent;
-  color: var(--text-muted, #9ca3af);
+  color: var(--text-muted);
   font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 .meal-chip:hover {
-  border-color: var(--accent, #6366f1);
-  color: var(--accent, #6366f1);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .meal-chip.claimed {
-  background: var(--success-bg, #d1fae5);
-  border-color: var(--success, #10b981);
-  color: var(--success-text, #065f46);
+  background: var(--success-dim);
+  border-color: var(--success);
+  color: var(--success);
 }
 .meal-chip.claimed:hover {
-  background: var(--danger-bg, #fee2e2);
-  border-color: var(--danger, #dc2626);
-  color: var(--danger-text, #991b1b);
+  background: var(--danger-dim);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.meal-chip.out-of-scope {
+  opacity: 0.35;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+.meal-chip.out-of-scope:hover {
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+/* Per-event meals_count list ──────────────────────────────────────────────── */
+.meals-events-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.meals-event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.meals-event-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.meals-event-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.meals-event-edit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Allowance column (per-user matrix) ─────────────────────────────────────── */
+.meals-allowance-col { text-align: center !important; min-width: 120px; }
+.meals-allowance-cell { text-align: center; }
+
+.meals-allowance-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
+
+.meals-allowance-pill.full {
+  background: var(--success-dim);
+  border-color: var(--success);
+  color: var(--success);
 }

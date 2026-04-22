@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, field_validator
 
 
 # Accepted mode names. ``collegeEntry`` / ``event`` are the historical names;
@@ -15,8 +15,11 @@ _MODE_ALIASES = {
 class QRScanRequest(BaseModel):
     user_id: str
     mode: str
-    meal: str | None = Field(default=None, pattern=r"^meal\d+$")
     event_id: str | None = None
+    # ``meal`` is accepted for backward compatibility with older clients but
+    # is ignored — the backend now auto-assigns the next meal slot based on
+    # the user's remaining allowance across their registered events.
+    meal: str | None = None
 
     @field_validator("mode")
     @classmethod

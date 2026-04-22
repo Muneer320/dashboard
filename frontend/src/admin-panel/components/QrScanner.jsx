@@ -3,49 +3,95 @@ import './QrScanner.css'
 
 /**
  * Simulated QR Scanner UI.
- * Accepts a list of `participants` to match against.
- * Calls `onScan(participant)` when a valid ID is found.
- * `already` = field name to check if already processed (e.g. 'entryScanned')
- * `actionLabel` = what the scan does (e.g. 'Entry', 'Attendance', 'Food')
+ *
+ * Props:
+ *   participants   — list to match against
+ *   onScan(p)      — called when a matching participant is found. May return
+ *                    a Promise resolving to `{ status, message }` from the
+ *                    backend. The overlay shown on the QR frame reflects this
+ *                    server result (green for accepted, red for rejected /
+ *                    error).
+ *   alreadyField   — optional client-side flag to short-circuit with a warn
+ *                    state before calling onScan (e.g. 'entryScanned').
+ *   actionLabel    — human label for the action (e.g. 'Food', 'Entry').
+ *   trustServer    — if true, skip the local alreadyField check and rely on
+ *                    the server response (recommended for food scans where
+ *                    the backend auto-assigns the next slot).
  */
-export default function QrScanner({ participants, onScan, alreadyField, actionLabel = 'Scan' }) {
+export default function QrScanner({
+  participants,
+  onScan,
+  alreadyField,
+  actionLabel = 'Scan',
+  trustServer = false,
+}) {
   const [input,       setInput]       = useState('')
   const [result,      setResult]      = useState(null) // { type: 'success'|'warn'|'error', msg, participant }
   const [scanning,    setScanning]    = useState(false)
   const [animate,     setAnimate]     = useState(false)
   const inputRef = useRef()
 
-  function simulateScan() {
+  async function simulateScan() {
     if (!input.trim()) return
     setScanning(true)
     setResult(null)
 
-    setTimeout(() => {
-      // Match by participant ID, name, or email
-      const q = input.trim().toLowerCase()
-      const p = participants.find(
-        pt =>
-          pt.id.toLowerCase() === q ||
-          pt.name.toLowerCase() === q ||
-          pt.username?.toLowerCase() === q
-      )
+    // Small delay for the scan animation — keeps the UX feeling like the real thing.
+    await new Promise(r => setTimeout(r, 600))
 
-      if (!p) {
-        setResult({ type: 'error', msg: `No participant found for "${input.trim()}"` })
-      } else if (p.status === 'restricted') {
-        setResult({ type: 'error', msg: `${p.name} is restricted and cannot be processed.`, participant: p })
-      } else if (p[alreadyField]) {
-        setResult({ type: 'warn', msg: `${p.name} has already been scanned for ${actionLabel}.`, participant: p })
-      } else {
-        setResult({ type: 'success', msg: `${p.name} — ${actionLabel} recorded successfully!`, participant: p })
-        onScan(p)
+    const q = input.trim().toLowerCase()
+    const p = participants.find(
+      pt =>
+        pt.id.toLowerCase() === q ||
+        pt.name.toLowerCase() === q ||
+        pt.username?.toLowerCase() === q
+    )
+
+    if (!p) {
+      setResult({ type: 'error', msg: `No participant found for "${input.trim()}"` })
+    } else if (p.status === 'restricted') {
+      setResult({ type: 'error', msg: `${p.name} is restricted and cannot be processed.`, participant: p })
+    } else if (!trustServer && alreadyField && p[alreadyField]) {
+      setResult({
+        type: 'warn',
+        msg: `${p.name} has already been scanned for ${actionLabel}.`,
+        participant: p,
+      })
+    } else {
+      // Fire the scan — wait for the server so the overlay reflects reality.
+      let server = null
+      try {
+        server = await onScan(p)
+      } catch (e) {
+        server = { status: 'error', message: e?.message || 'Scan failed' }
       }
+      const status = server?.status || 'accepted'
+      const serverMsg = server?.message
+      if (status === 'accepted') {
+        setResult({
+          type: 'success',
+          msg: serverMsg || `${p.name} — ${actionLabel} recorded successfully!`,
+          participant: p,
+        })
+      } else if (status === 'rejected') {
+        setResult({
+          type: 'warn',
+          msg: serverMsg || `${p.name} — already processed.`,
+          participant: p,
+        })
+      } else {
+        setResult({
+          type: 'error',
+          msg: serverMsg || `${p.name} — scan failed.`,
+          participant: p,
+        })
+      }
+    }
 
-      setScanning(false)
-      setInput('')
-      inputRef.current?.focus()
-      triggerAnimate()
-    }, 800)
+    setScanning(false)
+    setInput('')
+    inputRef.current?.focus()
+    triggerAnimate()
   }
 
   function triggerAnimate() {
@@ -56,6 +102,13 @@ export default function QrScanner({ participants, onScan, alreadyField, actionLa
   function handleKey(e) {
     if (e.key === 'Enter') simulateScan()
   }
+
+  // Outcome drives the big overlay on top of the QR frame.
+  const overlay = result && (result.type === 'success'
+    ? { tone: 'success', label: 'Accepted' }
+    : result.type === 'warn'
+      ? { tone: 'warn',  label: 'Rejected' }
+      : { tone: 'error', label: 'Rejected' })
 
   return (
     <div className="qr-scanner">
@@ -75,6 +128,30 @@ export default function QrScanner({ participants, onScan, alreadyField, actionLa
           </svg>
           <p>Point camera at QR code</p>
         </div>
+
+        {/* Big success/fail overlay on the QR frame */}
+        {overlay && (
+          <div
+            key={result.msg /* forces re-mount so the pop animation fires every scan */}
+            className={`qr-outcome qr-outcome-${overlay.tone} fade-in`}
+            role="status"
+            aria-live="polite"
+          >
+            {overlay.tone === 'success' ? (
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="8 12 11 15 16 9" />
+              </svg>
+            ) : (
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="15" y1="9" x2="9" y2="15" />
+                <line x1="9" y1="9" x2="15" y2="15" />
+              </svg>
+            )}
+            <p className="qr-outcome-label">{overlay.label}</p>
+          </div>
+        )}
       </div>
 
       {/* Manual input fallback */}

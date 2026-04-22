@@ -1,0 +1,9 @@
+/* Manage Registrations Tab Styles */
+
+.manage-registrations-page {
+  padding-bottom: 40px;
+}
+
+.manage-registrations-page .card {
+  margin-top: 8px;
+}
