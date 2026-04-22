@@ -43,7 +43,7 @@ export function Rating() {
   }
 
   return (
-    <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
+    <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="" />
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ RATE &amp; REVIEW</div>
@@ -145,7 +145,7 @@ export function Feedback() {
   }
 
   return (
-    <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
+    <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="" />
       <div style={{ maxWidth: 820, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ OVERALL FEEDBACK · ANONYMOUS</div>
@@ -245,7 +245,7 @@ export function Report() {
   ];
   const stateColor = { 'resolved': 'var(--teal)', 'in-progress': 'var(--amber)', 'received': 'var(--violet)' };
   return (
-    <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
+    <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="" />
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ REPORT AN ISSUE</div>

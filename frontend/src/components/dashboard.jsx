@@ -19,26 +19,26 @@ import { SubmissionPanel } from "./submission";
 
 // ── Event banner URL helper ─────────────────────────────────────────
 const _BANNER_MAP = {
-  'robo race':        'robo race.png',
-  'robo run':         'robo run.png',
-  'robo soccer':      'Robo soccer.png',
-  'anvil hackathon':  'Anvil.png',
-  'launchpad':        'Launchpad.png',
-  'rethesis':         'rethesis.png',
-  'override.exe':     'Override.exe.png',
-  'impulse':          'Impulse.png',
-  'invariant':        'Invariant.png',
-  'genesis':          'Genesis.png',
-  'quanta':           'Quanta.png',
-  'synapse':          'Synapse.png',
-  'ai film conclave': 'AI film conclave.png',
-  'ship to scaler':   'Ship to Scaler.png',
-  'tech play zone':   'Tech play zone.png',
+  'robo race':        'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/robo_race_dyouxs.png',
+  'robo run':         'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/robo_run_hmmcla.png',
+  'robo soccer':      'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Robo_soccer_b7cvxt.png',
+  'anvil hackathon':  'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Anvil_poydj2.png',
+  'launchpad':        'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Launchpad_dixz7h.png',
+  'rethesis':         'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878461/rethesis_ir27ii.png',
+  'override.exe':     'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878461/Override.exe_kmhpwv.png',
+  'impulse':          'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Impulse_fhczet.png',
+  'invariant':        'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878459/Invariant_s7bl8i.webp',
+  'genesis':          'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878464/Genesis_tnwjgk.png',
+  'quanta':           'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878459/Invariant_s7bl8i.webp',
+  'synapse':          'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Synapse_dtk2nc.png',
+  'ai film conclave': 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/AI_film_conclave_s789t6.png',
+  'ship to scaler':   'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png',
+  'tech play zone':   'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Tech_play_zone_emyf1q.png',
 };
 function getEventBannerUrl(name) {
   if (!name) return null;
   const file = _BANNER_MAP[name.toLowerCase().trim()];
-  return file ? `/uploads/Events/${encodeURIComponent(file)}` : null;
+  return file;
 }
 
 // Events hosted on an external platform — no dashboard submission form
@@ -194,7 +194,7 @@ export function Dashboard() {
 
   return (
     <PageBackground
-      bgImage="uploads/dashboard_scene.png"
+      bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg"
       blurAmount={16}
       dimAmount={0.78}
     >
@@ -1046,7 +1046,7 @@ export function EventDetail() {
   if (loading)
     return (
       <PageBackground
-        bgImage="uploads/dashboard_scene.png"
+        bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg"
         blurAmount={18}
         dimAmount={0.8}
       >
@@ -1058,7 +1058,7 @@ export function EventDetail() {
   if (!event)
     return (
       <PageBackground
-        bgImage="uploads/dashboard_scene.png"
+        bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg"
         blurAmount={18}
         dimAmount={0.8}
       >
@@ -1098,7 +1098,7 @@ export function EventDetail() {
   if (isRestricted) {
     return (
       <PageBackground
-        bgImage="uploads/dashboard_scene.png"
+        bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg"
         blurAmount={18}
         dimAmount={0.85}
       >
@@ -1216,7 +1216,7 @@ export function EventDetail() {
 
   return (
     <PageBackground
-      bgImage="uploads/dashboard_scene.png"
+      bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg"
       blurAmount={18}
       dimAmount={0.8}
     >

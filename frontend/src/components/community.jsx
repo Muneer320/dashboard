@@ -22,7 +22,7 @@ export function Mirage() {
   const filtered = cat === 'All' ? photos : photos.filter(p => p.c === cat);
 
   return (
-    <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
+    <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="mirage" />
 
       {/* ── Full-page lock overlay — starts below the navbar ── */}
@@ -191,7 +191,7 @@ export function Announcements() {
   ];
 
   return (
-    <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
+    <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="announcements" />
       <div style={{ maxWidth: 880, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ ORGANIZER BROADCAST</div>
@@ -289,7 +289,7 @@ export function LostFound() {
     ],
   };
   return (
-    <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
+    <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="" />
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ LOST &amp; FOUND</div>

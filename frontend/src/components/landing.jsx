@@ -22,7 +22,7 @@ export default function Landing() {
     return () => el.removeEventListener('mousemove', onMove);
   }, []);
 
-  const LANDING_BG = 'uploads/landing_hero.jpg';
+  const LANDING_BG = 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776879187/landing_hero_x2pe3l.jpg';
   const hPad = isMobile ? '20px' : '48px';
 
   return (

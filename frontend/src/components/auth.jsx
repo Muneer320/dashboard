@@ -12,7 +12,7 @@ export function Login() {
   const [email, setEmail]   = React.useState('');
   const [pw, setPw]         = React.useState('');
   const [loading, setLoading] = React.useState(false);
-  const AUTH_BG = 'uploads/auth_scene.png';
+  const AUTH_BG = 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878498/auth_scene_vjvvtq.jpg';
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -115,7 +115,7 @@ export function Credentials() {
     ...f, events: f.events.includes(e) ? f.events.filter(x => x !== e) : [...f.events, e]
   }));
 
-  const AUTH_BG = 'uploads/auth_scene.png';
+  const AUTH_BG = 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878498/auth_scene_vjvvtq.jpg';
 
   async function handleSubmit() {
     if (!form.name || !form.email) { setError('Name and email are required.'); return; }
