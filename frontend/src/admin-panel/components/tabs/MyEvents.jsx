@@ -209,10 +209,104 @@ export default function MyEvents() {
   )
 }
 
+// ── CSV export ────────────────────────────────────────────────────────────────
+
+function csvCell(val) {
+  if (val === null || val === undefined) return ''
+  const str = Array.isArray(val) ? val.join('; ') : String(val)
+  // Wrap in quotes if the value contains commas, quotes, or newlines
+  if (/[",\n\r]/.test(str)) return '"' + str.replace(/"/g, '""') + '"'
+  return str
+}
+
+function exportSubmissionsCSV(event, evParticipants) {
+  const submitted = evParticipants.filter(p => p.submitted && p.submissionData)
+
+  if (submitted.length === 0) {
+    alert('No submissions to export for this event.')
+    return
+  }
+
+  // ── Discover all phases and question IDs across every submission ──────────
+  // Structure: { phase1: Set<question_id>, phase2: Set<question_id>, ... }
+  const phaseQMap = {}
+
+  for (const p of submitted) {
+    const sub = p.submissionData || {}
+    for (const [phaseKey, phaseData] of Object.entries(sub)) {
+      if (typeof phaseData !== 'object' || !phaseData?.submitted) continue
+      if (!phaseQMap[phaseKey]) phaseQMap[phaseKey] = []
+      const answers = Array.isArray(phaseData.answers) ? phaseData.answers : []
+      for (const a of answers) {
+        if (a.question_id && !phaseQMap[phaseKey].includes(a.question_id)) {
+          phaseQMap[phaseKey].push(a.question_id)
+        }
+      }
+    }
+  }
+
+  const phases = Object.keys(phaseQMap).sort()  // ['phase1', 'phase2', ...]
+
+  // ── Build header row ──────────────────────────────────────────────────────
+  const staticCols = ['Name', 'Username', 'Status', 'Attended']
+  const phaseCols  = []  // ['phase1 » project_link', 'phase1 » submitted_at', ...]
+
+  for (const ph of phases) {
+    phaseCols.push(`${ph} » submitted_at`)
+    for (const qid of phaseQMap[ph]) {
+      phaseCols.push(`${ph} » ${qid}`)
+    }
+  }
+
+  const headers = [...staticCols, ...phaseCols]
+
+  // ── Build data rows ───────────────────────────────────────────────────────
+  const rows = submitted.map(p => {
+    const sub = p.submissionData || {}
+    const row = [
+      csvCell(p.name),
+      csvCell(p.username),
+      csvCell(p.status),
+      csvCell(p.isAttending ? 'Yes' : 'No'),
+    ]
+
+    for (const ph of phases) {
+      const phaseData = sub[ph]
+      const isSubmitted = typeof phaseData === 'object' && phaseData?.submitted
+
+      // submitted_at column
+      row.push(csvCell(isSubmitted ? phaseData.submitted_at : ''))
+
+      // one column per question
+      const answerMap = {}
+      if (isSubmitted && Array.isArray(phaseData.answers)) {
+        for (const a of phaseData.answers) answerMap[a.question_id] = a.answer
+      }
+      for (const qid of phaseQMap[ph]) {
+        row.push(csvCell(answerMap[qid] ?? ''))
+      }
+    }
+
+    return row.join(',')
+  })
+
+  // ── Assemble and trigger download ─────────────────────────────────────────
+  const csv     = [headers.join(','), ...rows].join('\r\n')
+  const blob    = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url     = URL.createObjectURL(blob)
+  const link    = document.createElement('a')
+  const safeName = event.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()
+  link.href     = url
+  link.download = `${safeName}_submissions.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 // ── Event block ────────────────────────────────────────────────────────────────
 
 function EventBlock({ event, participants, onViewSubmission }) {
   const evParticipants = participants.filter(p => p.eventId === event.id)
+  const submittedCount = evParticipants.filter(p => p.submitted).length
 
   return (
     <div className="event-block">
@@ -230,20 +324,38 @@ function EventBlock({ event, participants, onViewSubmission }) {
             </span>
           </div>
         </div>
-        <div className="event-mini-stats">
-          <div className="mini-stat">
-            <span className="mini-val">{evParticipants.length}</span>
-            <span className="mini-label">Registered</span>
-          </div>
-          <div className="mini-stat">
-            <span className="mini-val">{evParticipants.filter(p => p.submitted).length}</span>
-            <span className="mini-label">Submitted</span>
-          </div>
-          <div className="mini-stat">
-            <span className="mini-val" style={{ color: 'var(--success)' }}>
-              {evParticipants.filter(p => p.isAttending).length}
-            </span>
-            <span className="mini-label">Attended</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {/* Export CSV button */}
+          <button
+            onClick={() => exportSubmissionsCSV(event, evParticipants)}
+            style={exportBtnStyle}
+            title={submittedCount === 0 ? 'No submissions yet' : `Export ${submittedCount} submission${submittedCount !== 1 ? 's' : ''} as CSV`}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export CSV
+            {submittedCount > 0 && (
+              <span style={exportCountStyle}>{submittedCount}</span>
+            )}
+          </button>
+          <div className="event-mini-stats">
+            <div className="mini-stat">
+              <span className="mini-val">{evParticipants.length}</span>
+              <span className="mini-label">Registered</span>
+            </div>
+            <div className="mini-stat">
+              <span className="mini-val">{submittedCount}</span>
+              <span className="mini-label">Submitted</span>
+            </div>
+            <div className="mini-stat">
+              <span className="mini-val" style={{ color: 'var(--success)' }}>
+                {evParticipants.filter(p => p.isAttending).length}
+              </span>
+              <span className="mini-label">Attended</span>
+            </div>
           </div>
         </div>
       </div>
@@ -413,4 +525,23 @@ const viewBtnStyle = {
   color: '#9d5af0',
   fontSize: 12, fontWeight: 600, cursor: 'pointer',
   transition: 'background .15s, border-color .15s',
+}
+
+const exportBtnStyle = {
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  padding: '7px 14px', borderRadius: 8,
+  background: 'rgba(16, 185, 129, 0.1)',
+  border: '1px solid rgba(16, 185, 129, 0.3)',
+  color: '#6ee7b7',
+  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+  transition: 'background .15s, border-color .15s',
+  whiteSpace: 'nowrap',
+}
+
+const exportCountStyle = {
+  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  minWidth: 18, height: 18, borderRadius: 999,
+  background: 'rgba(16, 185, 129, 0.2)',
+  color: '#6ee7b7',
+  fontSize: 10, fontWeight: 700, padding: '0 4px',
 }

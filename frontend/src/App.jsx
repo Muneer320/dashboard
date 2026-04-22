@@ -52,7 +52,7 @@ export default function App() {
         <Route path="/lost-found"    element={<RequireAuth><LostFound /></RequireAuth>} />
         <Route path="/rating"        element={<RequireAuth><Rating /></RequireAuth>} />
         <Route path="/feedback"      element={<RequireAuth><Feedback /></RequireAuth>} />
-        <Route path="/report"        element={<RequireAuth><Report /></RequireAuth>} />
+        {/* <Route path="/report"        element={<RequireAuth><Report /></RequireAuth>} /> */}
 
         <Route path="*"              element={<Navigate to="/" replace />} />
       </Routes>

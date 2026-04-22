@@ -264,9 +264,6 @@ export function Dashboard() {
               />{" "}
               All systems go
             </a>
-            <a onClick={() => navigate("/report")} className="btn ghost sm">
-              Report issue
-            </a>
           </div>
         </div>
 
