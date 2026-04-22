@@ -8,9 +8,18 @@
 --   4. Seeds Phase 1 questions for each event from the official Round 1 forms
 --   5. Inserts placeholder teams (one per event — real team data TBD)
 --
--- !! NOTE !!
---   Fields marked NEEDS_INFO below are placeholders. Fill them via the
---   023_NEEDS_INFO.md file before running against production.
+-- Known information gaps (filled from 023_NEEDS_INFO.md):
+--   • Festival onsite dates:        16–17 May 2026
+--   • All phase 1 rounds:           Online
+--   • Judges:                       None assigned for online rounds
+--   • Robo Soccer deadline:         25 April 2026, 11:59 PM
+--   • ReThesis deadline:            24 April 2026, 11:59 PM
+--   • Override.exe end time:        TBD (duration not yet confirmed)
+--   • Impulse platform:             Codeforces / HackerRank
+--   • Invariant platform:           Codeforces / HackerRank
+--   • Categories:                   Added to description field
+--   • Still pending:                max_participants, team sizes, Unstop links,
+--                                   onsite phase 2 dates (robotics/Anvil/ReThesis/Launchpad)
 --
 -- UUIDs are stable — hardcoded so future migrations can reference them.
 
@@ -55,15 +64,14 @@ INSERT INTO events (
 ) VALUES (
     'a1b2c3d4-0001-4000-8000-000000000001',
     'Robo Race',
-    'Build and race a manually controlled robot through an obstacle course. Teams qualify online by submitting a video of their robot demonstrating movement, control, and obstacle handling.',
+    'A robotics competition where teams build and race a manually controlled robot through an obstacle course. Qualify online by submitting a video demonstrating movement, control, and obstacle handling.',
 
-    -- NEEDS_INFO: onsite event date/time
-    NULL,  -- start_date
+    -- Onsite finals: Ascent Techfest 16–17 May 2026 (exact date TBD)
+    NULL,  -- start_date (onsite phase 2 date TBD)
     NULL,  -- end_date
 
-    -- NEEDS_INFO: onsite venue
-    ARRAY['TBD'],
-    ARRAY[]::text[],  -- NEEDS_INFO: judges
+    ARRAY['Online'],  -- phase 1 is online; onsite venue TBD for phase 2
+    ARRAY[]::text[],  -- no judges for online qualifier
 
     -- Rounds:
     --   phase1 = Online video submission qualifier (deadline 25 Apr 2026)
@@ -153,7 +161,14 @@ INSERT INTO events (
     -- NEEDS_INFO: max_participants
     50,
     '2026-04-25T23:59:00+05:30'
-);
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description,
+    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+    venue = EXCLUDED.venue, judges = EXCLUDED.judges,
+    rounds = EXCLUDED.rounds, questions = EXCLUDED.questions,
+    rules = EXCLUDED.rules, max_participants = EXCLUDED.max_participants,
+    registration_deadline = EXCLUDED.registration_deadline;
 
 -- ── 2b. Robo Run (Line Follower) ─────────────────────────────────────────────
 INSERT INTO events (
@@ -166,13 +181,14 @@ INSERT INTO events (
 ) VALUES (
     'a1b2c3d4-0002-4000-8000-000000000002',
     'Robo Run',
-    'Build an autonomous line-following robot. Teams qualify online by submitting a video demonstrating accurate line detection, smooth movement, and stability on a track.',
+    'A robotics competition to build an autonomous line-following robot. Qualify online by submitting a video demonstrating sensor accuracy, smooth movement, and stability on a track.',
 
-    NULL,  -- NEEDS_INFO: onsite start_date
-    NULL,  -- NEEDS_INFO: onsite end_date
+    -- Onsite finals: Ascent Techfest 16–17 May 2026 (exact date TBD)
+    NULL,  -- start_date (onsite phase 2 date TBD)
+    NULL,  -- end_date
 
-    ARRAY['TBD'],  -- NEEDS_INFO: onsite venue
-    ARRAY[]::text[],  -- NEEDS_INFO: judges
+    ARRAY['Online'],  -- phase 1 is online; onsite venue TBD for phase 2
+    ARRAY[]::text[],  -- no judges for online qualifier
 
     '{
       "phase1": {
@@ -257,7 +273,14 @@ INSERT INTO events (
     'Upload a valid video (Google Drive or YouTube) clearly showing the robot following a line. Ensure line and robot movement are clearly visible. Deadline: 25 April 2026.',
     50,  -- NEEDS_INFO: max_participants
     '2026-04-25T23:59:00+05:30'
-);
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description,
+    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+    venue = EXCLUDED.venue, judges = EXCLUDED.judges,
+    rounds = EXCLUDED.rounds, questions = EXCLUDED.questions,
+    rules = EXCLUDED.rules, max_participants = EXCLUDED.max_participants,
+    registration_deadline = EXCLUDED.registration_deadline;
 
 -- ── 2c. Robo Soccer ──────────────────────────────────────────────────────────
 INSERT INTO events (
@@ -270,13 +293,14 @@ INSERT INTO events (
 ) VALUES (
     'a1b2c3d4-0003-4000-8000-000000000003',
     'Robo Soccer',
-    'Build a robot designed to play soccer — control a ball, navigate a field, and outmaneuver opponents. Teams qualify online by submitting a video of their robot demonstrating movement and ball control.',
+    'A robotics competition to build a robot capable of playing soccer — control a ball, navigate a field, and outmaneuver opponents. Qualify online by submitting a video of your robot demonstrating movement and ball control.',
 
-    NULL,  -- NEEDS_INFO: onsite start_date
-    NULL,  -- NEEDS_INFO: onsite end_date
+    -- Onsite finals: Ascent Techfest 16–17 May 2026 (exact date TBD)
+    NULL,  -- start_date (onsite phase 2 date TBD)
+    NULL,  -- end_date
 
-    ARRAY['TBD'],   -- NEEDS_INFO: venue
-    ARRAY[]::text[], -- NEEDS_INFO: judges
+    ARRAY['Online'],  -- phase 1 is online; onsite venue TBD for phase 2
+    ARRAY[]::text[],  -- no judges for online qualifier
 
     '{
       "phase1": {
@@ -285,7 +309,7 @@ INSERT INTO events (
         "problemStatement": "Build a robot capable of controlled ball interaction and field navigation.",
         "venue": ["Online"],
         "start_time": null,
-        "end_time": null,
+        "end_time": "2026-04-25T23:59:00+05:30",
         "submissionType": "url",
         "allowedFileTypes": [],
         "is_active": false,
@@ -358,11 +382,17 @@ INSERT INTO events (
       ]
     }'::jsonb,
 
-    -- NEEDS_INFO: full Robo Soccer rules + deadline
-    'Upload a valid video (Google Drive or YouTube) showing movement, ball control, and both robots if participating as a pair.',
-    50,    -- NEEDS_INFO: max_participants
-    NULL   -- NEEDS_INFO: registration_deadline
-);
+    'Upload a valid video (Google Drive or YouTube) showing movement, ball control, and both robots if participating as a pair. Use the same team name as registered on Unstop. Deadline: 25 April 2026, 11:59 PM.',
+    50,    -- NEEDS_INFO: confirm max_participants
+    '2026-04-25T23:59:00+05:30'
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description,
+    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+    venue = EXCLUDED.venue, judges = EXCLUDED.judges,
+    rounds = EXCLUDED.rounds, questions = EXCLUDED.questions,
+    rules = EXCLUDED.rules, max_participants = EXCLUDED.max_participants,
+    registration_deadline = EXCLUDED.registration_deadline;
 
 -- ── 2d. Anvil Hackathon ───────────────────────────────────────────────────────
 INSERT INTO events (
@@ -375,13 +405,14 @@ INSERT INTO events (
 ) VALUES (
     'a1b2c3d4-0004-4000-8000-000000000004',
     'Anvil Hackathon',
-    'A multi-round hackathon where teams are evaluated on their technical profile, project portfolio, and ability to execute a given idea. Qualifier round is an online application assessing team skills and startup potential.',
+    'A hackathon where teams are evaluated on their technical profile, project portfolio, and ability to execute ideas under pressure. The online qualifier assesses team skills; shortlisted teams compete onsite at Ascent Techfest.',
 
-    NULL,  -- NEEDS_INFO: onsite start_date
-    NULL,  -- NEEDS_INFO: onsite end_date
+    -- Onsite finals: Ascent Techfest 16–17 May 2026 (exact date TBD)
+    NULL,  -- start_date (onsite phase 2 date TBD)
+    NULL,  -- end_date
 
-    ARRAY['TBD'],    -- NEEDS_INFO: onsite venue
-    ARRAY[]::text[], -- NEEDS_INFO: judges
+    ARRAY['Online'],  -- phase 1 qualifier is online; onsite venue TBD
+    ARRAY[]::text[],  -- no judges for online qualifier
 
     '{
       "phase1": {
@@ -529,7 +560,14 @@ INSERT INTO events (
     -- NEEDS_INFO: max_participants
     100,
     '2026-04-28T23:59:00+05:30'
-);
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description,
+    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+    venue = EXCLUDED.venue, judges = EXCLUDED.judges,
+    rounds = EXCLUDED.rounds, questions = EXCLUDED.questions,
+    rules = EXCLUDED.rules, max_participants = EXCLUDED.max_participants,
+    registration_deadline = EXCLUDED.registration_deadline;
 
 -- ── 2e. Launchpad (Startup Pitch) ─────────────────────────────────────────────
 INSERT INTO events (
@@ -542,13 +580,14 @@ INSERT INTO events (
 ) VALUES (
     'a1b2c3d4-0005-4000-8000-000000000005',
     'Launchpad',
-    'A startup pitch competition where teams present their ideas to a panel of judges and industry mentors. The qualifier round evaluates innovation, problem clarity, market potential, and feasibility.',
+    'A startup pitch competition where teams present ideas to judges and industry mentors. The online qualifier evaluates innovation, problem clarity, market potential, and feasibility. Shortlisted teams pitch live at Ascent Techfest.',
 
-    NULL,  -- NEEDS_INFO: onsite start_date
-    NULL,  -- NEEDS_INFO: onsite end_date
+    -- Onsite finals: Ascent Techfest 16–17 May 2026 (exact date TBD)
+    NULL,  -- start_date (onsite phase 2 date TBD)
+    NULL,  -- end_date
 
-    ARRAY['TBD'],    -- NEEDS_INFO: venue
-    ARRAY[]::text[], -- NEEDS_INFO: judges
+    ARRAY['Online'],  -- phase 1 qualifier is online; onsite venue TBD
+    ARRAY[]::text[],  -- no judges for online qualifier
 
     '{
       "phase1": {
@@ -705,7 +744,14 @@ INSERT INTO events (
     'Submission window: 22–24 April 2026. All submissions must be original. Shortlisted teams will be invited for the live pitch round.',
     60,    -- NEEDS_INFO: max_participants
     '2026-04-24T23:59:00+05:30'
-);
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description,
+    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+    venue = EXCLUDED.venue, judges = EXCLUDED.judges,
+    rounds = EXCLUDED.rounds, questions = EXCLUDED.questions,
+    rules = EXCLUDED.rules, max_participants = EXCLUDED.max_participants,
+    registration_deadline = EXCLUDED.registration_deadline;
 
 -- ── 2f. ReThesis (AI Research) ────────────────────────────────────────────────
 INSERT INTO events (
@@ -718,13 +764,14 @@ INSERT INTO events (
 ) VALUES (
     'a1b2c3d4-0006-4000-8000-000000000006',
     'ReThesis',
-    'An AI and ML research showcase where participants present original research work. The qualifier evaluates innovation, technical depth, clarity of presentation, and real-world impact of the research.',
+    'An AI and ML research showcase where participants present original research work. The online qualifier evaluates innovation, technical depth, clarity, and real-world impact. Shortlisted participants present live at Ascent Techfest.',
 
-    NULL,  -- NEEDS_INFO: start_date
-    NULL,  -- NEEDS_INFO: end_date
+    -- Onsite finals: Ascent Techfest 16–17 May 2026 (exact date TBD)
+    NULL,  -- start_date (onsite phase 2 date TBD)
+    NULL,  -- end_date
 
-    ARRAY['TBD'],    -- NEEDS_INFO: venue
-    ARRAY[]::text[], -- NEEDS_INFO: judges
+    ARRAY['Online'],  -- phase 1 qualifier is online; onsite venue TBD
+    ARRAY[]::text[],  -- no judges for online qualifier
 
     '{
       "phase1": {
@@ -833,11 +880,17 @@ INSERT INTO events (
       ]
     }'::jsonb,
 
-    -- NEEDS_INFO: full rules, deadline
-    'Submissions must be original research. Published work is allowed but must be authored by the submitting team.',
-    50,   -- NEEDS_INFO: max_participants
-    NULL  -- NEEDS_INFO: registration_deadline
-);
+    'Submissions must be original research. Published work is allowed but must be authored by the submitting team. Deadline: 24 April 2026, 11:59 PM IST.',
+    50,   -- NEEDS_INFO: confirm max_participants
+    '2026-04-24T23:59:00+05:30'
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description,
+    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+    venue = EXCLUDED.venue, judges = EXCLUDED.judges,
+    rounds = EXCLUDED.rounds, questions = EXCLUDED.questions,
+    rules = EXCLUDED.rules, max_participants = EXCLUDED.max_participants,
+    registration_deadline = EXCLUDED.registration_deadline;
 
 -- ── 2g. Override.exe (CTF) ────────────────────────────────────────────────────
 INSERT INTO events (
@@ -850,13 +903,13 @@ INSERT INTO events (
 ) VALUES (
     'a1b2c3d4-0007-4000-8000-000000000007',
     'Override.exe',
-    'An online Capture The Flag (CTF) cybersecurity competition. Participants solve challenges across multiple categories including web exploitation, cryptography, forensics, binary exploitation, and miscellaneous. Ranked by challenges solved, difficulty weighting, and time.',
+    'An online Capture The Flag (CTF) cybersecurity competition. Solve challenges across web exploitation, cryptography, forensics, binary exploitation, and miscellaneous categories. Ranked by challenges solved, difficulty weighting, and time. Platform link shared before the event.',
 
-    '2026-04-26T00:00:00+05:30',  -- CTF start date (26 April 2026)
-    NULL,                          -- NEEDS_INFO: end time
+    '2026-04-26T00:00:00+05:30',  -- CTF date: 26 April 2026
+    NULL,                          -- end_date: duration TBD
 
     ARRAY['Online'],
-    ARRAY[]::text[], -- NEEDS_INFO: judges / organizers
+    ARRAY[]::text[],  -- no judges; automated CTF scoring
 
     -- Single-phase event: the CTF itself IS the qualification
     '{
@@ -876,7 +929,7 @@ INSERT INTO events (
 
     '{}'::jsonb,
 
-    -- Phase 1 questions: participants submit their CTF profile/score link post-event
+    -- Phase 1 questions: participants submit their CTF profile/score link post-contest
     '{
       "phase1": [
         {
@@ -912,10 +965,17 @@ INSERT INTO events (
       ]
     }'::jsonb,
 
-    'Date: 26 April 2026. Mode: Online. Participants must not share flags across teams. Any detected collusion will result in immediate disqualification.',
-    200,  -- NEEDS_INFO: max_participants
-    NULL  -- NEEDS_INFO: registration_deadline (before 26 Apr)
-);
+    'Date: 26 April 2026. Mode: Online. Platform link will be shared prior to the event. Participants must not share flags across teams. Any detected collusion will result in immediate disqualification.',
+    200,  -- NEEDS_INFO: confirm max_participants
+    NULL  -- registration_deadline: TBD (before 26 Apr)
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description,
+    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+    venue = EXCLUDED.venue, judges = EXCLUDED.judges,
+    rounds = EXCLUDED.rounds, questions = EXCLUDED.questions,
+    rules = EXCLUDED.rules, max_participants = EXCLUDED.max_participants,
+    registration_deadline = EXCLUDED.registration_deadline;
 
 -- ── 2h. Impulse (CP Team Contest) ────────────────────────────────────────────
 INSERT INTO events (
@@ -928,19 +988,19 @@ INSERT INTO events (
 ) VALUES (
     'a1b2c3d4-0008-4000-8000-000000000008',
     'Impulse',
-    'A 3-hour competitive programming team contest. Teams solve algorithmic problems and are ranked by number of problems solved, penalty score, and completion time. Held on 23 April 2026, 9 PM – 12 AM.',
+    'A 3-hour online competitive programming team contest hosted on Codeforces / HackerRank. Teams solve algorithmic problems and are ranked by problems solved, penalty score, and time. Held on 23 April 2026, 9 PM – 12 AM IST.',
 
     '2026-04-23T21:00:00+05:30',
     '2026-04-24T00:00:00+05:30',
 
-    ARRAY['Online'],   -- NEEDS_INFO: confirm if online or onsite
-    ARRAY[]::text[],   -- NEEDS_INFO: problem setters / judges
+    ARRAY['Online'],
+    ARRAY[]::text[],  -- no judges; automated platform scoring
 
     -- Single-phase timed contest; no separate submission round — scoreboard IS the result
     '{
       "phase1": {
         "title": "Team Contest",
-        "description": "3-hour algorithmic team contest. Teams of 2-3 solve problems ranked by difficulty. Scoring: problems solved > penalty time.",
+        "description": "3-hour algorithmic team contest on Codeforces / HackerRank. Teams solve problems ranked by difficulty. Scoring: problems solved > penalty time.",
         "problemStatement": "Problem set will be released at contest start (9 PM, 23 April 2026).",
         "venue": ["Online"],
         "start_time": "2026-04-23T21:00:00+05:30",
@@ -991,10 +1051,17 @@ INSERT INTO events (
       ]
     }'::jsonb,
 
-    'Date: 23 April 2026, 9:00 PM – 12:00 AM (3 hours). Team contest. Ranked by problems solved, then penalty time.',
-    150,  -- NEEDS_INFO: max_participants (teams)
-    NULL  -- NEEDS_INFO: registration_deadline
-);
+    'Date: 23 April 2026, 9:00 PM – 12:00 AM IST (3 hours). Online team contest on Codeforces / HackerRank. Ranked by problems solved, then penalty time.',
+    150,  -- NEEDS_INFO: confirm max_participants
+    NULL  -- registration_deadline: TBD
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description,
+    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+    venue = EXCLUDED.venue, judges = EXCLUDED.judges,
+    rounds = EXCLUDED.rounds, questions = EXCLUDED.questions,
+    rules = EXCLUDED.rules, max_participants = EXCLUDED.max_participants,
+    registration_deadline = EXCLUDED.registration_deadline;
 
 -- ── 2i. Invariant (CP Individual) ────────────────────────────────────────────
 INSERT INTO events (
@@ -1007,18 +1074,18 @@ INSERT INTO events (
 ) VALUES (
     'a1b2c3d4-0009-4000-8000-000000000009',
     'Invariant',
-    'A 2-hour individual competitive programming contest. Participants solve algorithmic problems solo and are ranked by problems solved, penalty score, and completion time. Held on 21 April 2026, 9 PM – 11 PM.',
+    'A 2-hour online individual competitive programming contest hosted on Codeforces / HackerRank. Solve as many algorithmic problems as possible, ranked by problems solved, penalty score, and time. Held on 21 April 2026, 9 PM – 11 PM IST.',
 
     '2026-04-21T21:00:00+05:30',
     '2026-04-21T23:00:00+05:30',
 
-    ARRAY['Online'],    -- NEEDS_INFO: confirm if online or onsite
-    ARRAY[]::text[],    -- NEEDS_INFO: problem setters / judges
+    ARRAY['Online'],
+    ARRAY[]::text[],  -- no judges; automated platform scoring
 
     '{
       "phase1": {
         "title": "Individual Contest",
-        "description": "2-hour individual algorithmic contest. Solve as many problems as possible. Scoring: problems solved > penalty time.",
+        "description": "2-hour individual algorithmic contest on Codeforces / HackerRank. Solve as many problems as possible. Scoring: problems solved > penalty time.",
         "problemStatement": "Problem set will be released at contest start (9 PM, 21 April 2026).",
         "venue": ["Online"],
         "start_time": "2026-04-21T21:00:00+05:30",
@@ -1069,10 +1136,17 @@ INSERT INTO events (
       ]
     }'::jsonb,
 
-    'Date: 21 April 2026, 9:00 PM – 11:00 PM (2 hours). Individual contest. Ranked by problems solved, then penalty time.',
-    300,  -- NEEDS_INFO: max_participants
-    NULL  -- NEEDS_INFO: registration_deadline
-);
+    'Date: 21 April 2026, 9:00 PM – 11:00 PM IST (2 hours). Online individual contest on Codeforces / HackerRank. Ranked by problems solved, then penalty time.',
+    300,  -- NEEDS_INFO: confirm max_participants
+    NULL  -- registration_deadline: TBD
+)
+ON CONFLICT (id) DO UPDATE SET
+    name = EXCLUDED.name, description = EXCLUDED.description,
+    start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date,
+    venue = EXCLUDED.venue, judges = EXCLUDED.judges,
+    rounds = EXCLUDED.rounds, questions = EXCLUDED.questions,
+    rules = EXCLUDED.rules, max_participants = EXCLUDED.max_participants,
+    registration_deadline = EXCLUDED.registration_deadline;
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
