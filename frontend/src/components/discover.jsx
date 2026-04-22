@@ -5,6 +5,33 @@ import { useMobile, NavBar, PageBackground, PosterPlaceholder } from './shared';
 import { events as eventsApi, schedule as scheduleApi, users } from '../lib/api';
 import { useUserAuth } from '../lib/UserAuthContext';
 
+// ── Event banner image mapping ─────────────────────────────────────────────
+const BANNER_MAP = {
+  'robo race':       'robo race.png',
+  'robo run':        'robo run.png',
+  'robo soccer':     'Robo soccer.png',
+  'anvil hackathon': 'Anvil.png',
+  'launchpad':       'Launchpad.png',
+  'rethesis':        'rethesis.png',
+  'override.exe':    'Override.exe.png',
+  'impulse':         'Impulse.png',
+  'invariant':       'Invariant.png',
+  'genesis':         'Genesis.png',
+  'quanta':          'Quanta.png',
+  'synapse':         'Synapse.png',
+  'ai film conclave':'AI film conclave.png',
+  'ship to scaler':  'Ship to Scaler.png',
+  'tech play zone':  'Tech play zone.png',
+};
+
+export function getEventBannerUrl(name) {
+  if (!name) return null;
+  const key = name.toLowerCase().trim();
+  const file = BANNER_MAP[key];
+  if (!file) return null;
+  return `/uploads/Events/${encodeURIComponent(file)}`;
+}
+
 // Deterministic tone picker so cards don't reshuffle colours on every render.
 const TONES = ['violet', 'teal', 'amber'];
 function toneFor(id) {
@@ -32,6 +59,8 @@ function EventCard({ ev, index, navigate, isMobile, showStatus }) {
     eliminated: '#D97777',
   }[status?.status] ?? 'var(--ink-mute)';
 
+  const bannerUrl = getEventBannerUrl(ev.name);
+
   return (
     <div
       key={ev.id}
@@ -42,7 +71,20 @@ function EventCard({ ev, index, navigate, isMobile, showStatus }) {
       onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.boxShadow = 'none'; }}
     >
       <div style={{ position: 'relative' }}>
-        <PosterPlaceholder title={(ev.name || '').toUpperCase()} sub="700 × 400" w="100%" h={isMobile ? 140 : 180} tone={tone} />
+        {bannerUrl ? (
+          <img
+            src={bannerUrl}
+            alt={ev.name}
+            style={{
+              width: '100%',
+              height: isMobile ? 140 : 180,
+              objectFit: 'cover',
+              display: 'block',
+            }}
+          />
+        ) : (
+          <PosterPlaceholder title={(ev.name || '').toUpperCase()} sub="700 × 400" w="100%" h={isMobile ? 140 : 180} tone={tone} />
+        )}
         {statusLabel && (
           <div style={{
             position: 'absolute', top: 10, right: 10,

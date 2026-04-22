@@ -17,6 +17,36 @@ import {
 } from "../lib/api";
 import { SubmissionPanel } from "./submission";
 
+// ── Event banner URL helper ─────────────────────────────────────────
+const _BANNER_MAP = {
+  'robo race':        'robo race.png',
+  'robo run':         'robo run.png',
+  'robo soccer':      'Robo soccer.png',
+  'anvil hackathon':  'Anvil.png',
+  'launchpad':        'Launchpad.png',
+  'rethesis':         'rethesis.png',
+  'override.exe':     'Override.exe.png',
+  'impulse':          'Impulse.png',
+  'invariant':        'Invariant.png',
+  'genesis':          'Genesis.png',
+  'quanta':           'Quanta.png',
+  'synapse':          'Synapse.png',
+  'ai film conclave': 'AI film conclave.png',
+  'ship to scaler':   'Ship to Scaler.png',
+  'tech play zone':   'Tech play zone.png',
+};
+function getEventBannerUrl(name) {
+  if (!name) return null;
+  const file = _BANNER_MAP[name.toLowerCase().trim()];
+  return file ? `/uploads/Events/${encodeURIComponent(file)}` : null;
+}
+
+// Events hosted on an external platform — no dashboard submission form
+const PLATFORM_EVENT_NAMES = new Set(['override.exe', 'impulse', 'invariant']);
+function isPlatformEvent(name) {
+  return PLATFORM_EVENT_NAMES.has((name || '').toLowerCase().trim());
+}
+
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
@@ -852,13 +882,20 @@ function normaliseRound(key, val) {
   const phaseNum = phaseMatch ? parseInt(phaseMatch[1], 10) : null;
   const isActive = !!val?.is_active;
   const isLocked = !!val?.is_locked;
+  const now = new Date();
+  const endTime = val?.end_time ? new Date(val.end_time) : null;
+  const startTime = val?.start_time ? new Date(val.start_time) : null;
 
   let state;
-  if (isLocked)
-    state = "locked"; // closed by organizer
-  else if (isActive)
-    state = "live"; // currently open
-  else state = "upcoming"; // not yet started
+  if (isLocked) {
+    // Only show "done" if it had a start_time that has already passed
+    state = (startTime && startTime < now) ? "locked" : "upcoming";
+  } else if (isActive) {
+    // Auto-close by time: if end_time passed, treat as closed
+    state = (endTime && now > endTime) ? "closed" : "live";
+  } else {
+    state = "upcoming";
+  }
 
   return {
     key,
@@ -879,8 +916,9 @@ function RoundStateDot({ state }) {
     live: "var(--violet)",
     locked: "var(--teal)",
     upcoming: "var(--ink-mute)",
+    closed: "var(--ink-mute)",
   };
-  const labels = { live: "LIVE", locked: "✓ DONE", upcoming: "SOON" };
+  const labels = { live: "LIVE", locked: "✓ DONE", upcoming: "SOON", closed: "CLOSED" };
   return (
     <span
       style={{
@@ -961,6 +999,7 @@ export function EventDetail() {
   const [team, setTeam] = useState(null);
   const [evSched, setEvSched] = useState([]);
   const [userEntry, setEntry] = useState(null); // users.events[eventId]
+  const [profile, setProfile] = useState(null); // full user profile for submission prefill
   const [loading, setLoading] = useState(true);
 
   // Which round tab is selected (index into `rounds` array)
@@ -985,6 +1024,7 @@ export function EventDetail() {
       if (schedData.status === "fulfilled" && schedData.value)
         setEvSched(schedData.value.schedule ?? []);
       if (profileData.status === "fulfilled") {
+        setProfile(profileData.value);
         const reg = profileData.value.events || {};
         const entry = reg[eventId] ?? null;
         setEntry(entry);
@@ -1410,7 +1450,7 @@ export function EventDetail() {
                             Opening soon…
                           </span>
                         )}
-                        {selectedRound.state === "locked" && (
+                        {(selectedRound.state === "locked" || selectedRound.state === "closed") && (
                           <span
                             className="btn sm ghost"
                             style={{ cursor: "default", opacity: 0.6 }}
@@ -1532,7 +1572,7 @@ export function EventDetail() {
                     >
                       {selectedRound.state === "live"
                         ? "● OPEN"
-                        : selectedRound.state === "locked"
+                        : selectedRound.state === "locked" || selectedRound.state === "closed"
                           ? "✓ CLOSED"
                           : "◌ NOT OPEN"}
                     </span>
@@ -1552,33 +1592,55 @@ export function EventDetail() {
               </div>
 
               <div className="glass" style={{ padding: isMobile ? 16 : 22 }}>
-                {currentPhase ? (
+                {isPlatformEvent(event.name) ? (
+                  <div style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    gap: 14, padding: '28px 16px', textAlign: 'center',
+                  }}>
+                    <div style={{ fontSize: 36 }}>🖥️</div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
+                      This event runs on an external platform
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--ink-dim)', maxWidth: 400, lineHeight: 1.65 }}>
+                      {event.name === 'Invariant'
+                        ? 'Invariant was hosted on Codeforces / HackerRank. Your score is tracked directly on the platform scoreboard.'
+                        : event.name === 'Impulse'
+                        ? 'Impulse is hosted live on Codeforces / HackerRank. Head there to participate—your team\'s submission is tracked on the contest platform.'
+                        : 'Override.exe is a live CTF event. The platform link will be shared before the event starts. Submit your flags directly on the CTF platform.'}
+                    </div>
+                    <div style={{
+                      fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--violet)',
+                      background: 'rgba(127,119,221,0.08)', border: '1px solid rgba(127,119,221,0.3)',
+                      borderRadius: 6, padding: '8px 16px', letterSpacing: '0.08em',
+                    }}>
+                      ● EVENT IS LIVE ON THE PLATFORM
+                    </div>
+                  </div>
+                ) : currentPhase ? (
                   <SubmissionPanel
-                    key={`${eventId}-phase${currentPhase}`} /* remount on phase change */
+                    key={`${eventId}-phase${currentPhase}`}
                     eventId={eventId}
                     phase={currentPhase}
                     phaseData={selectedRound?.phaseData}
                     isRegistered={isRegistered}
                     isRestricted={isRestricted}
-                    onSuccess={(res) => {
-                      // Mark this phase as submitted in local state (avoids refetch)
+                    userData={{
+                      email: profile?.details?.email || '',
+                      teamName: team?.name || '',
+                      college: profile?.details?.college || '',
+                      name: profile?.name || user?.name || '',
+                    }}
+                    onSuccess={() => {
                       setSubmittedPhases(
                         (prev) => new Set([...prev, `phase${currentPhase}`]),
                       );
                     }}
                   />
                 ) : (
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "var(--ink-mute)",
-                      textAlign: "center",
-                      padding: "20px 0",
-                    }}
-                  >
+                  <div style={{ fontSize: 13, color: 'var(--ink-mute)', textAlign: 'center', padding: '20px 0' }}>
                     {rounds.length === 0
-                      ? "No phases configured for this event."
-                      : "Select a round above to view its submission form."}
+                      ? 'No phases configured for this event.'
+                      : 'Select a round above to view its submission form.'}
                   </div>
                 )}
               </div>
@@ -1595,13 +1657,26 @@ export function EventDetail() {
               top: 90,
             }}
           >
-            <PosterPlaceholder
-              title={event.name.toUpperCase()}
-              sub="700 × 400"
-              w="100%"
-              h={isMobile ? 180 : 250}
-              tone="violet"
-            />
+            {(() => {
+              const bannerUrl = getEventBannerUrl(event.name);
+              return bannerUrl ? (
+                <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <img
+                    src={bannerUrl}
+                    alt={event.name}
+                    style={{ width: '100%', height: isMobile ? 180 : 250, objectFit: 'cover', display: 'block' }}
+                  />
+                </div>
+              ) : (
+                <PosterPlaceholder
+                  title={event.name.toUpperCase()}
+                  sub="700 × 400"
+                  w="100%"
+                  h={isMobile ? 180 : 250}
+                  tone="violet"
+                />
+              );
+            })()}
 
             {/* Team card */}
             {team && (
@@ -1794,57 +1869,6 @@ export function EventDetail() {
               </div>
             )}
 
-            {/* Quick facts */}
-            <div className="glass" style={{ padding: 20 }}>
-              <div className="eyebrow">§ QUICK FACTS</div>
-              <div
-                style={{
-                  marginTop: 14,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
-              >
-                {[
-                  ["Venue", venue || "—"],
-                  [
-                    "Participants",
-                    `${event.participants_count ?? 0} registered`,
-                  ],
-                  ...Object.entries(event.rounds ?? {})
-                    .slice(0, 2)
-                    .map(([k, v]) => [
-                      v?.title || k,
-                      v?.start_time ? fmtDateTime(v.start_time) : "—",
-                    ]),
-                ].map(([k, v]) => (
-                  <div
-                    key={k}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      fontSize: 12.5,
-                      gap: 8,
-                    }}
-                  >
-                    <span style={{ color: "var(--ink-mute)", flexShrink: 0 }}>
-                      {k}
-                    </span>
-                    <span
-                      style={{
-                        color: "var(--ink)",
-                        fontFamily: "var(--f-mono)",
-                        fontSize: 11,
-                        textAlign: "right",
-                        wordBreak: "break-all",
-                      }}
-                    >
-                      {v}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
 
             <a
               onClick={() => navigate(`/rating?event_id=${eventId}`)}

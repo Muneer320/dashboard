@@ -742,12 +742,39 @@ function ExistingSubmission({ submission, questions, onEdit }) {
 
 // ─── Main SubmissionPanel component ──────────────────────────────────────────
 
+// ── Auto-fill helper ─────────────────────────────────────────────────────────────────
+/**
+ * Checks if a question can be auto-filled from user profile data.
+ * Returns the pre-fill string value, or null if no match.
+ */
+function getAutoFill(q, userData) {
+  if (!userData) return null;
+  const text = (q.question_text || '').toLowerCase().trim();
+  const type = (q.question_type || '').toLowerCase();
+
+  // Email-type questions → user's email
+  if (type === 'email') return userData.email || null;
+
+  // Text questions matched by label keywords
+  if (type === 'text' || type === 'text-long' || type === 'email') {
+    if (text.includes('email')) return userData.email || null;
+    if (text.includes('team name') || text === 'team name')
+      return userData.teamName || null;
+    if (text.includes('college') || text.includes('institution') || text.includes('university'))
+      return userData.college || null;
+    if (text === 'name' || text === 'your name' || text === 'full name' || text === 'participant name')
+      return userData.name || null;
+  }
+  return null;
+}
+
 export function SubmissionPanel({
   eventId,
   phase,
   phaseData,
   isRegistered,
   isRestricted,
+  userData = null, // { email, teamName, college, name } — pre-fills known fields
   onSuccess,
 }) {
   const isNoPhase = !phaseData;
@@ -787,7 +814,21 @@ export function SubmissionPanel({
     setQuestionsErr(null);
     try {
       const res = await eventsApi.questions(eventId, phase);
-      setQuestions(res.questions ?? []);
+      const qs = res.questions ?? [];
+      setQuestions(qs);
+      // Pre-fill auto-fill fields from userData (only if not already answered)
+      if (userData) {
+        setAnswers((prev) => {
+          const prefill = { ...prev };
+          qs.forEach((q) => {
+            const autoVal = getAutoFill(q, userData);
+            if (autoVal && !prefill[q.question_id]) {
+              prefill[q.question_id] = autoVal;
+            }
+          });
+          return prefill;
+        });
+      }
     } catch (err) {
       // 404 = no questions defined for this phase
       if (err.status === 404) {
@@ -798,7 +839,7 @@ export function SubmissionPanel({
     } finally {
       setLoadingQ(false);
     }
-  }, [eventId, phase, isRegistered, phaseData]);
+  }, [eventId, phase, isRegistered, phaseData, userData]);
 
   // ── Load existing submission ────────────────────────────────────────────────
   const loadExisting = useCallback(async () => {
@@ -1063,82 +1104,105 @@ export function SubmissionPanel({
             )}
 
             {/* Questions */}
-            {questions.map((q, idx) => (
-              <div key={q.question_id}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "flex-start",
-                    justifyContent: "space-between",
-                    marginBottom: 8,
-                    gap: 8,
-                  }}
-                >
-                  <label
+            {questions.map((q, idx) => {
+              const autoFillVal = getAutoFill(q, userData);
+              const isAutoFilled = !!autoFillVal;
+              return (
+                <div key={q.question_id}>
+                  <div
                     style={{
-                      fontSize: 13,
-                      color: "var(--ink)",
-                      fontWeight: 500,
-                      lineHeight: 1.4,
                       display: "flex",
                       alignItems: "flex-start",
-                      gap: 6,
+                      justifyContent: "space-between",
+                      marginBottom: 8,
+                      gap: 8,
                     }}
                   >
-                    <span
+                    <label
                       style={{
-                        fontFamily: "var(--f-mono)",
-                        fontSize: 10,
-                        color: "var(--ink-mute)",
-                        background: "rgba(255,255,255,0.05)",
-                        border: "1px solid var(--glass-border)",
-                        borderRadius: 4,
-                        padding: "1px 5px",
-                        flexShrink: 0,
-                        marginTop: 2,
+                        fontSize: 13,
+                        color: "var(--ink)",
+                        fontWeight: 500,
+                        lineHeight: 1.4,
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 6,
                       }}
                     >
-                      {idx + 1}
-                    </span>
-                    {q.question_text}
-                    {q.required && (
                       <span
                         style={{
-                          color: "#f87171",
-                          fontSize: 12,
+                          fontFamily: "var(--f-mono)",
+                          fontSize: 10,
+                          color: "var(--ink-mute)",
+                          background: "rgba(255,255,255,0.05)",
+                          border: "1px solid var(--glass-border)",
+                          borderRadius: 4,
+                          padding: "1px 5px",
                           flexShrink: 0,
+                          marginTop: 2,
                         }}
                       >
-                        *
+                        {idx + 1}
                       </span>
-                    )}
-                  </label>
-                  <span
-                    style={{
-                      fontFamily: "var(--f-mono)",
-                      fontSize: 9,
-                      color: "var(--ink-mute)",
-                      background: "rgba(255,255,255,0.04)",
-                      border: "1px solid var(--glass-border)",
-                      borderRadius: 4,
-                      padding: "2px 6px",
-                      whiteSpace: "nowrap",
-                      flexShrink: 0,
+                      {q.question_text}
+                      {q.required && (
+                        <span
+                          style={{
+                            color: "#f87171",
+                            fontSize: 12,
+                            flexShrink: 0,
+                          }}
+                        >
+                          *
+                        </span>
+                      )}
+                    </label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                      {isAutoFilled && (
+                        <span
+                          style={{
+                            fontFamily: "var(--f-mono)",
+                            fontSize: 8,
+                            color: "var(--teal)",
+                            background: "rgba(29,158,117,0.1)",
+                            border: "1px solid rgba(29,158,117,0.3)",
+                            borderRadius: 4,
+                            padding: "2px 6px",
+                            letterSpacing: "0.06em",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          AUTO-FILLED
+                        </span>
+                      )}
+                      <span
+                        style={{
+                          fontFamily: "var(--f-mono)",
+                          fontSize: 9,
+                          color: "var(--ink-mute)",
+                          background: "rgba(255,255,255,0.04)",
+                          border: "1px solid var(--glass-border)",
+                          borderRadius: 4,
+                          padding: "2px 6px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {q.question_type}
+                      </span>
+                    </div>
+                  </div>
+                  <QuestionInput
+                    q={q}
+                    value={answers[q.question_id]}
+                    onChange={(v) => {
+                      if (!isAutoFilled)
+                        setAnswers((prev) => ({ ...prev, [q.question_id]: v }));
                     }}
-                  >
-                    {q.question_type}
-                  </span>
+                    disabled={submitting || isAutoFilled}
+                  />
                 </div>
-                <QuestionInput
-                  q={q}
-                  value={answers[q.question_id]}
-                  onChange={(v) =>
-                    setAnswers((prev) => ({ ...prev, [q.question_id]: v }))
-                  }
-                  disabled={submitting}
-                />
-              </div>
-            ))}
+              );
+            })}
 
             {/* Validation / server error */}
             {submitError && (
