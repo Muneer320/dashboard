@@ -26,6 +26,7 @@ class EventStatsItem(BaseModel):
     attended: int
     submitted: int
     restricted: int
+    communityLink: Optional[str] = None
 
 
 # ── Participants ───────────────────────────────────────────────────────────────
@@ -76,6 +77,7 @@ class MyEventItem(BaseModel):
     submitted: int
     attended: int
     participants: list[MyEventParticipant]
+    communityLink: Optional[str] = None
 
 
 # ── Contact Info ──────────────────────────────────────────────────────────────

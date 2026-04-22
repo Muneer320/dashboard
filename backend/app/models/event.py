@@ -29,6 +29,7 @@ class Event:
     participants: dict = field(default_factory=dict)
     schedule: list = field(default_factory=list)
     rules: str = ""
+    community_link: str | None = None
     max_participants: int = 500
     meals_count: int = DEFAULT_EVENT_MEALS_COUNT
     registration_deadline: datetime | None = None
@@ -51,6 +52,7 @@ class Event:
             participants=row.get("participants") or {},
             schedule=row.get("schedule") or [],
             rules=row.get("rules") or "",
+            community_link=row.get("community_link") or None,
             max_participants=int(row.get("max_participants") or 500),
 
             meals_count=int(

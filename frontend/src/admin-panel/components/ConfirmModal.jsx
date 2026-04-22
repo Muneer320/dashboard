@@ -1,8 +1,9 @@
 import React from 'react'
+import ReactDOM from 'react-dom'
 import './ConfirmModal.css'
 
 export default function ConfirmModal({ title, message, confirmLabel = 'Confirm', isDanger = false, onConfirm, onCancel }) {
-  return (
+  return ReactDOM.createPortal(
     <div className="modal-overlay" role="dialog" aria-modal="true">
       <div className="modal-box fade-in">
         <div className={`modal-icon-wrap ${isDanger ? 'icon-danger' : 'icon-success'}`}>
@@ -31,6 +32,7 @@ export default function ConfirmModal({ title, message, confirmLabel = 'Confirm',
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

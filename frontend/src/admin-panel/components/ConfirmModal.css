@@ -1,3 +1,9 @@
+/*
+  ConfirmModal renders via a React Portal into document.body, so it lives
+  outside .admin-theme. CSS variables from that scope won't reach here —
+  all values are hardcoded to match the admin panel dark theme.
+*/
+
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -6,22 +12,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999;
+  z-index: 9999;
+  font-family: "Inter", system-ui, sans-serif;
 }
 
 .modal-box {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  background: #16161f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
   padding: 32px 28px;
   max-width: 380px;
   width: 90%;
-  box-shadow: var(--shadow-card), 0 0 60px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.05);
   text-align: center;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  animation: modalFadeIn 0.2s ease forwards;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
 }
 
 .modal-icon-wrap {
@@ -32,11 +45,11 @@
   justify-content: center;
   margin-bottom: 4px;
 }
-.icon-danger  { background: var(--danger-dim);  color: var(--danger);  border: 1px solid rgba(239,68,68,0.3); }
-.icon-success { background: var(--success-dim); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+.icon-danger  { background: rgba(239,68,68,0.15);  color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+.icon-success { background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.3); }
 
-.modal-title   { font-size: 1.05rem; font-weight: 600; }
-.modal-message { font-size: 0.875rem; color: var(--text-secondary); line-height: 1.55; max-width: 280px; }
+.modal-title   { font-size: 1.05rem; font-weight: 600; color: #f0f0f8; }
+.modal-message { font-size: 0.875rem; color: #a0a0b8; line-height: 1.55; max-width: 280px; }
 
 .modal-actions {
   display: flex;
@@ -44,4 +57,35 @@
   margin-top: 8px;
   width: 100%;
   justify-content: center;
+}
+
+/* Self-contained button styles so the modal works outside .admin-theme */
+.modal-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.modal-actions .btn:hover { opacity: 0.88; }
+
+.modal-actions .btn-ghost {
+  background: rgba(255,255,255,0.05);
+  color: #a0a0b8;
+  border-color: rgba(255,255,255,0.1);
+}
+.modal-actions .btn-danger {
+  background: #ef4444;
+  color: #fff;
+}
+.modal-actions .btn-success {
+  background: #10b981;
+  color: #fff;
 }

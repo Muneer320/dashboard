@@ -32,6 +32,7 @@ async def get_events(
             venue=event.venue or [],
             rounds=event.rounds or {},
             participants_count=len(event.participants or {}),
+            community_link=event.community_link,
         )
         for event in events
     ]
@@ -51,6 +52,7 @@ async def get_single_event(
         venue=event.venue or [],
         rounds=event.rounds or {},
         participants_count=len(event.participants or {}),
+        community_link=event.community_link,
     )
 
 

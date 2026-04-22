@@ -8,6 +8,7 @@ class EventResponse(BaseModel):
     venue: list[str]
     rounds: dict
     participants_count: int
+    community_link: str | None = None
 
 
 class EventRegisterResponse(BaseModel):

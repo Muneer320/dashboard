@@ -225,6 +225,7 @@ async def get_events_with_stats(
             "attended": attended,
             "submitted": submitted_count,
             "restricted": restricted_count,
+            "communityLink": event.community_link,
         })
 
     return result
@@ -492,6 +493,7 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
             "submitted": submitted_count,
             "attended": attended,
             "participants": participants,
+            "communityLink": event.community_link,
         })
 
     return result
