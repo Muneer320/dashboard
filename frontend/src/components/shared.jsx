@@ -346,7 +346,7 @@ export function NumberCounter({ to, duration = 1400, suffix = '', decimals = 0 }
 // ─────────────────────────────────────────────────────────────
 // Placeholder poster
 // ─────────────────────────────────────────────────────────────
-export function PosterPlaceholder({ title = 'POSTER', sub = '700 × 400', w = 700, h = 400, tone = 'violet', style = {} }) {
+export function PosterPlaceholder({ title = 'POSTER', sub = '700 × 400', w = 700, h = 400, tone = 'violet', style = {}, imgUrl = null }) {
   const wNum = typeof w === 'number' ? w : 700;
   const g = tone === 'teal'
     ? 'linear-gradient(135deg, rgba(29,158,117,0.35), rgba(127,119,221,0.15) 60%, rgba(13,13,18,0.9))'
@@ -359,37 +359,41 @@ export function PosterPlaceholder({ title = 'POSTER', sub = '700 × 400', w = 70
       borderRadius: 14,
       overflow: 'hidden',
       position: 'relative',
-      background: g,
+      background: imgUrl ? `url(${imgUrl}) center/cover no-repeat` : g,
       border: '1px solid rgba(255,255,255,0.1)',
       ...style,
     }}>
-      <div style={{
-        position: 'absolute', inset: 0,
-        backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 14px)',
-      }}/>
-      <div style={{
-        position: 'absolute', inset: 0,
-        backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
-        backgroundSize: '40px 40px',
-        maskImage: 'radial-gradient(ellipse at center, #000 30%, transparent 75%)',
-      }}/>
-      <div style={{
-        position: 'absolute', inset: 0,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: 8,
-      }}>
-        <div className="eyebrow" style={{ opacity: 0.7 }}>[ drop poster {sub} ]</div>
-        <div style={{
-          fontFamily: 'var(--f-display)', fontWeight: 700,
-          fontSize: Math.min(48, wNum * 0.09), letterSpacing: '-0.02em',
-          color: 'rgba(241,239,232,0.85)',
-        }}>{title}</div>
-      </div>
-      <div style={{
-        position: 'absolute', inset: 0,
-        backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,0.08) 2px 3px)',
-        pointerEvents: 'none',
-      }}/>
+      {!imgUrl && (
+        <>
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 2px, transparent 2px 14px)',
+          }}/>
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: 'linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)',
+            backgroundSize: '40px 40px',
+            maskImage: 'radial-gradient(ellipse at center, #000 30%, transparent 75%)',
+          }}/>
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 8,
+          }}>
+            <div className="eyebrow" style={{ opacity: 0.7 }}>[ drop poster {sub} ]</div>
+            <div style={{
+              fontFamily: 'var(--f-display)', fontWeight: 700,
+              fontSize: Math.min(48, wNum * 0.09), letterSpacing: '-0.02em',
+              color: 'rgba(241,239,232,0.85)',
+            }}>{title}</div>
+          </div>
+          <div style={{
+            position: 'absolute', inset: 0,
+            backgroundImage: 'repeating-linear-gradient(to bottom, transparent 0 2px, rgba(0,0,0,0.08) 2px 3px)',
+            pointerEvents: 'none',
+          }}/>
+        </>
+      )}
     </div>
   );
 }
