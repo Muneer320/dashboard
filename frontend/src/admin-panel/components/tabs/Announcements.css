@@ -1,0 +1,11 @@
+.announcements-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 600px) {
+  .announcements-grid {
+    grid-template-columns: 1fr;
+  }
+}

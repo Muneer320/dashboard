@@ -14,6 +14,23 @@
 }
 .topbar-left {
   display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+.hamburger-btn:hover {
+  background: var(--bg-elevated);
+}
+.topbar-titles {
+  display: flex;
   align-items: baseline;
   gap: 12px;
 }
@@ -48,4 +65,21 @@
   font-weight: 700;
   color: var(--accent-light);
   cursor: default;
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 0 16px;
+  }
+  .hamburger-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .topbar-sub {
+    display: none;
+  }
+  .topbar-date {
+    display: none;
+  }
 }

@@ -75,8 +75,8 @@ export default function Overview() {
       <div className="section-header" style={{ marginTop: 32 }}>
         <span className="section-title">Event Breakdown</span>
       </div>
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <table className="data-table">
+      <div className="card no-scrollbar" style={{ padding: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <table className="data-table" style={{ minWidth: 600 }}>
           <thead>
             <tr>
               <th>Event</th>

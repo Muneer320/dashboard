@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useData } from '../../context/DataContext'
 import ConfirmModal from '../ConfirmModal'
+import Pagination from '../Pagination'
 import './Participants.css'
 
 export default function Participants() {
@@ -11,6 +12,13 @@ export default function Participants() {
   const [selectedEvent, setSelectedEvent] = useState('all')
   const [searchQuery, setSearchQuery]     = useState('')
   const [confirmState, setConfirmState]   = useState(null) // { participantId, newStatus, name }
+  const [currentPage, setCurrentPage]     = useState(1)
+  const itemsPerPage = 10
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedEvent, searchQuery])
 
   // For event manager: only show their events
   const visibleEvents = isAdmin
@@ -37,6 +45,9 @@ export default function Participants() {
     return accessOk && eventOk && searchOk
   })
 
+  const totalPages = Math.ceil(filtered.length / itemsPerPage)
+  const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+
   function handleStatusToggle(p) {
     const newStatus = p.status === 'active' ? 'restricted' : 'active'
     setConfirmState({ participantId: p.id, eventId: p.eventId, newStatus, name: p.name })
@@ -53,6 +64,20 @@ export default function Participants() {
     <div className="participants-page fade-in">
       {/* Filters */}
       <div className="filters-row">
+        <div className="search-wrap">
+          <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            className="input-field search-input"
+            type="text"
+            placeholder="Search by name or email..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            id="participants-search"
+          />
+        </div>
+
         <div className="event-tabs">
           {allOption && (
             <button
@@ -75,20 +100,6 @@ export default function Participants() {
             </button>
           ))}
         </div>
-
-        <div className="search-wrap">
-          <svg className="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-          </svg>
-          <input
-            className="input-field search-input"
-            type="text"
-            placeholder="Search by name or email..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            id="participants-search"
-          />
-        </div>
       </div>
 
       {/* Table */}
@@ -99,50 +110,59 @@ export default function Participants() {
             <p>No participants found.</p>
           </div>
         ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Event</th>
-                <th>Team</th>
-                <th>Attended</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p, idx) => (
-                <tr key={p.id}>
-                  <td style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{idx + 1}</td>
-                  <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{p.name}</td>
-                  <td style={{ fontSize: '0.8rem' }}>{p.username}</td>
-                  <td><span className="badge badge-accent">{p.eventName}</span></td>
-                  <td style={{ fontSize: '0.82rem' }}>{p.teamId || '—'}</td>
-                  <td>
-                    <span className={`badge ${p.isAttending ? 'badge-success' : 'badge-warning'}`}>
-                      {p.isAttending ? 'Yes' : 'No'}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${p.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
-                      {p.status === 'active' ? 'Participating' : 'Restricted'}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      id={`status-toggle-${p.id}`}
-                      className={`btn btn-sm ${p.status === 'active' ? 'btn-danger' : 'btn-success'}`}
-                      onClick={() => handleStatusToggle(p)}
-                    >
-                      {p.status === 'active' ? 'Restrict' : 'Restore'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <div className="table-responsive">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Event</th>
+                    <th>Team</th>
+                    <th>Attended</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedData.map((p, idx) => (
+                    <tr key={p.id}>
+                      <td style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{(currentPage - 1) * itemsPerPage + idx + 1}</td>
+                      <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{p.name}</td>
+                      <td style={{ fontSize: '0.8rem' }}>{p.username}</td>
+                      <td><span className="badge badge-accent">{p.eventName}</span></td>
+                      <td style={{ fontSize: '0.82rem' }}>{p.teamId || '—'}</td>
+                      <td>
+                        <span className={`badge ${p.isAttending ? 'badge-success' : 'badge-warning'}`}>
+                          {p.isAttending ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                      <td>
+                        <span className={`badge ${p.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
+                          {p.status === 'active' ? 'Participating' : 'Restricted'}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          id={`status-toggle-${p.id}`}
+                          className={`btn btn-sm ${p.status === 'active' ? 'btn-danger' : 'btn-success'}`}
+                          onClick={() => handleStatusToggle(p)}
+                        >
+                          {p.status === 'active' ? 'Restrict' : 'Restore'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination 
+              currentPage={currentPage} 
+              totalPages={totalPages} 
+              onPageChange={setCurrentPage} 
+            />
+          </>
         )}
       </div>
 

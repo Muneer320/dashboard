@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useData } from '../../context/DataContext'
+import Pagination from '../Pagination'
 import './ManageRegistrations.css'
 
 const GOOGLE_SCRIPT_URL =
@@ -45,7 +46,13 @@ export default function ManageRegistrations() {
   const [emailProgress, setEmailProgress] = useState({}) // { email: 'pending'|'sending'|'sent'|'failed' }
   const [isSending, setIsSending] = useState(false)
   const [showPassword, setShowPassword] = useState({})
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
   const fileInputRef = React.useRef(null)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [users])
 
   const handleFileChange = (e) => {
     if (e.target.files?.[0]) setFile(e.target.files[0])
@@ -165,6 +172,9 @@ export default function ManageRegistrations() {
 
   const sentCount   = Object.values(emailProgress).filter(v => v === 'sent').length
   const failedCount = Object.values(emailProgress).filter(v => v === 'failed').length
+
+  const totalPages = Math.ceil(users.length / itemsPerPage)
+  const paginatedUsers = users.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
   return (
     <div className="manage-registrations-page fade-in">
@@ -301,8 +311,8 @@ export default function ManageRegistrations() {
 
           <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
 
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <div className="table-responsive">
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
                   {['#', 'Name', 'Email', 'Password', 'Event', 'Account', 'Email Status'].map(h => (
@@ -313,15 +323,16 @@ export default function ManageRegistrations() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u, i) => {
+                {paginatedUsers.map((u, idx) => {
+                  const actualIndex = (currentPage - 1) * itemsPerPage + idx
                   const isNew   = u.Type === 'new'
                   const status  = emailProgress[u.Username]
                   return (
-                    <tr key={u.Username + i} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background .15s' }}
+                    <tr key={u.Username + actualIndex} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background .15s' }}
                       onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                      <td style={tdStyle}>{i + 1}</td>
+                      <td style={tdStyle}>{actualIndex + 1}</td>
                       <td style={{ ...tdStyle, fontWeight: 500 }}>{u.Name}</td>
                       <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{u.Username}</td>
                       <td style={tdStyle}>
@@ -365,6 +376,11 @@ export default function ManageRegistrations() {
               </tbody>
             </table>
           </div>
+          <Pagination 
+            currentPage={currentPage} 
+            totalPages={totalPages} 
+            onPageChange={setCurrentPage} 
+          />
         </div>
       )}
     </div>
