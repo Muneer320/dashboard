@@ -209,6 +209,7 @@ async def list_all_announcements(
                 "announcement": item.get("announcement", ""),
                 "time": item.get("time", ""),
                 "category": item_category,
+                "is_pinned": bool(item.get("is_pinned", False)),
             })
 
     # Sort by time desc (ISO strings sort correctly)

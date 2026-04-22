@@ -2,10 +2,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, ImgPlaceholder } from './shared';
+import { useUserAuth } from '../lib/UserAuthContext';
 
 export function Mirage() {
   const isMobile = useMobile();
   const navigate = useNavigate();
+  const { user } = useUserAuth();
+  const locked = !user?.is_attending;
   const cats = ['All', 'Hack Night', 'Circuit Rush', 'Keynote', 'Opening', 'Campus'];
   const [cat, setCat] = React.useState('All');
   const [lightbox, setLightbox] = React.useState(null);
@@ -21,6 +24,33 @@ export function Mirage() {
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="mirage" />
+
+      {/* ── Full-page lock overlay — starts below the navbar ── */}
+      {locked && (
+        <div style={{
+          position: 'fixed', top: 56, left: 0, right: 0, bottom: 0, zIndex: 10,
+          backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
+          background: 'rgba(8, 8, 14, 0.82)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 16,
+          textAlign: 'center', padding: 24,
+        }}>
+          <div style={{ fontSize: 48 }}>🔒</div>
+          <div style={{
+            fontFamily: 'var(--f-mono)', fontSize: isMobile ? 18 : 22,
+            letterSpacing: '0.12em', color: 'var(--ink)',
+            textTransform: 'uppercase', fontWeight: 700,
+          }}>
+            Unlocks at Round 2
+          </div>
+          <div style={{
+            fontSize: 14, color: 'var(--ink-mute)',
+            maxWidth: 320, lineHeight: 1.6,
+          }}>
+            Mirage opens its doors after Round 1. Come back for the full photo archive.
+          </div>
+        </div>
+      )}
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: 12 }}>
           <div>
@@ -80,29 +110,57 @@ export function Mirage() {
   );
 }
 
+// Broadcast categories — always show to every logged-in user
+const BROADCAST_CATEGORIES = new Set(['general', 'pinned', 'schedule', 'meal', 'alert', 'info']);
+
 export function Announcements() {
   const isMobile = useMobile();
-  const navigate = useNavigate();
-  const [posts, setPosts]     = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
+  const [posts, setPosts]         = React.useState([]);
+  const [loading, setLoading]     = React.useState(true);
+  // Set of lowercase event names the user is registered for
+  const [myEventNames, setMyEventNames] = React.useState(null); // null = still loading
+  // Set of all event names (lowercase) — used to detect event-targeted categories
+  const [allEventNames, setAllEventNames] = React.useState(null);
 
   React.useEffect(() => {
-    import('../lib/api').then(({ announcements: annApi }) => {
-      annApi.list(50)
-        .then(data => {
-          // Sort: pinned (category === 'pinned') first, then by time desc
-          const sorted = [...data].sort((a, b) => {
-            const aPin = a.category === 'pinned' ? 1 : 0;
-            const bPin = b.category === 'pinned' ? 1 : 0;
-            if (bPin !== aPin) return bPin - aPin;
-            return new Date(b.time) - new Date(a.time);
-          });
-          setPosts(sorted);
-        })
-        .catch(console.error)
-        .finally(() => setLoading(false));
+    import('../lib/api').then(({ announcements: annApi, users, events: eventsApi }) => {
+      Promise.all([
+        annApi.list(50),
+        users.myEvents().catch(() => []),    // user's registered events
+        eventsApi.list().catch(() => []),    // all events (to detect event-targeted categories)
+      ]).then(([data, myEvs, allEvs]) => {
+        // Build lookup sets (lowercase names for case-insensitive match)
+        const myNames  = new Set((myEvs  || []).map(e => e.name.trim().toLowerCase()));
+        const allNames = new Set((allEvs || []).map(e => e.name.trim().toLowerCase()));
+
+        // Sort: pinned first, then newest
+        const sorted = [...data].sort((a, b) => {
+          const aPin = a.category === 'pinned' ? 1 : 0;
+          const bPin = b.category === 'pinned' ? 1 : 0;
+          if (bPin !== aPin) return bPin - aPin;
+          return new Date(b.time) - new Date(a.time);
+        });
+
+        setMyEventNames(myNames);
+        setAllEventNames(allNames);
+        setPosts(sorted);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
     });
   }, []);
+
+  // Decide whether this announcement is visible to the current user
+  function isVisible(post) {
+    if (allEventNames === null || myEventNames === null) return false;
+    const cat = (post.category || 'general').trim().toLowerCase();
+    // If it's a broadcast category → always show
+    if (BROADCAST_CATEGORIES.has(cat)) return true;
+    // If the category matches a known event name → show only if user is registered
+    if (allEventNames.has(cat)) return myEventNames.has(cat);
+    // Unknown category → treat as broadcast (safe default)
+    return true;
+  }
 
   function relativeTime(isoStr) {
     if (!isoStr) return '';
@@ -114,6 +172,8 @@ export function Announcements() {
     if (hrs < 24)  return `${hrs}h ago`;
     return `${Math.floor(hrs / 24)}d ago`;
   }
+
+  const visible = posts.filter(isVisible);
 
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
@@ -129,11 +189,14 @@ export function Announcements() {
           {loading && (
             <div style={{ color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: 24, textAlign: 'center' }}>Loading…</div>
           )}
-          {!loading && posts.length === 0 && (
+          {!loading && visible.length === 0 && (
             <div style={{ color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: 24, textAlign: 'center' }}>No announcements yet.</div>
           )}
-          {posts.map((p, i) => {
+          {visible.map((p, i) => {
             const pin = p.category === 'pinned';
+            const cat = (p.category || '').trim().toLowerCase();
+            // Show event badge only when it's targeted at a specific event
+            const isEventTargeted = allEventNames?.has(cat) && !BROADCAST_CATEGORIES.has(cat);
             return (
               <div key={i} className="glass" style={{
                 padding: isMobile ? 16 : 22,
@@ -144,6 +207,11 @@ export function Announcements() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', flex: 1 }}>
                     {pin && <span className="chip violet" style={{ padding: '2px 8px', fontSize: 9, flexShrink: 0 }}>📌 PINNED</span>}
+                    {isEventTargeted && (
+                      <span className="chip" style={{ padding: '2px 8px', fontSize: 9, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        {p.category}
+                      </span>
+                    )}
                     <span style={{ fontFamily: 'var(--f-display)', fontSize: isMobile ? 15 : 18, fontWeight: 600, letterSpacing: '-0.01em' }}>{p.announcement}</span>
                   </div>
                   <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', whiteSpace: 'nowrap', flexShrink: 0 }}>{relativeTime(p.time)}</span>

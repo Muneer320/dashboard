@@ -28,6 +28,7 @@ class AnnouncementFeedItem(BaseModel):
     announcement: str
     time: str            # ISO-8601 datetime string
     category: str        # "general" | "schedule" | "meal" | "alert" | ...
+    is_pinned: bool = False
 
 
 class AddAnnouncementBody(BaseModel):

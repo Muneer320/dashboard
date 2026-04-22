@@ -3,6 +3,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, PosterPlaceholder } from './shared';
 import { events as eventsApi, schedule as scheduleApi, users } from '../lib/api';
+import { useUserAuth } from '../lib/UserAuthContext';
 
 // Deterministic tone picker so cards don't reshuffle colours on every render.
 const TONES = ['violet', 'teal', 'amber'];
@@ -285,6 +286,13 @@ export function Schedule() {
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ LIVE SCHEDULE</div>
         <h1 className="display" style={{ fontSize: isMobile ? 36 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>Every slot. Every stage.</h1>
+        <p style={{
+          marginTop: 14, fontSize: isMobile ? 13 : 15,
+          color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)',
+          letterSpacing: '0.06em', lineHeight: 1.7,
+        }}>
+          ✦ Clear Round 1 — and unlock something mind-blowing on the other side.
+        </p>
 
         {error && (
           <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
@@ -381,6 +389,8 @@ export function Schedule() {
 export function Leaderboard() {
   const isMobile = useMobile();
   const navigate = useNavigate();
+  const { user } = useUserAuth();
+  const locked = !user?.is_attending;
   const [tab, setTab] = React.useState('college');
   const colleges = [
     { r: 1, n: 'IIIT Bangalore', p: 1840, d: 'up' },
@@ -404,6 +414,33 @@ export function Leaderboard() {
   return (
     <PageBackground bgImage="uploads/dashboard_scene.png" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="leaderboard" />
+
+      {locked && (
+        <div style={{
+          position: 'fixed', top: 56, left: 0, right: 0, bottom: 0, zIndex: 10,
+          backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+          background: 'rgba(8, 8, 14, 0.82)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 16,
+          textAlign: 'center', padding: 24,
+        }}>
+          <div style={{ fontSize: 48 }}>🏆</div>
+          <div style={{
+            fontFamily: 'var(--f-mono)', fontSize: isMobile ? 18 : 22,
+            letterSpacing: '0.12em', color: 'var(--ink)',
+            textTransform: 'uppercase', fontWeight: 700,
+          }}>
+            Unlocks at Round 2
+          </div>
+          <div style={{
+            fontSize: 14, color: 'var(--ink-mute)',
+            maxWidth: 320, lineHeight: 1.6,
+          }}>
+            The leaderboard goes live once Round 1 wraps up. Check back after results.
+          </div>
+        </div>
+      )}
+
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ STANDINGS · LIVE</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>The climb.</h1>

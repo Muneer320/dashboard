@@ -104,28 +104,20 @@ export function Dashboard() {
           eventsApi.list(),
           users.meals(user.id),
           scheduleApi.byDate(today).catch(() => null), // 404 if no schedule today → null
-          annApi.list(6),
+          annApi.list(50),
         ]);
 
       if (profileData.status === "fulfilled") setProfile(profileData.value);
       if (mealsData.status === "fulfilled") setMeals(mealsData.value ?? []);
-      if (annsData.status === "fulfilled") {
-        const list = annsData.value ?? [];
-        setAnns(
-          [...list].sort(
-            (a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0),
-          ),
-        );
-      }
 
       // Cross-reference registered events
+      const allEvents = eventsData.status === "fulfilled" ? (eventsData.value ?? []) : [];
       if (
         profileData.status === "fulfilled" &&
         eventsData.status === "fulfilled"
       ) {
         const prof = profileData.value;
         const registered = prof.events || {}; // { eventId: { isAttending, submitted, ... } }
-        const allEvents = eventsData.value ?? [];
         const mine = allEvents
           .filter((ev) => registered[ev.id])
           .map((ev) => ({
@@ -134,6 +126,23 @@ export function Dashboard() {
             entry: registered[ev.id],
           }));
         setMyEvents(mine);
+      }
+
+      // Filter announcements: broadcast categories go to all, event-targeted only to registrants
+      if (annsData.status === "fulfilled") {
+        const BROADCAST = new Set(["general", "pinned", "schedule", "meal", "alert", "info"]);
+        const allEventNames = new Set(allEvents.map(e => e.name.trim().toLowerCase()));
+        const myEventNames = new Set(
+          (profileData.status === "fulfilled" ? allEvents.filter(ev => (profileData.value.events || {})[ev.id]) : [])
+            .map(e => e.name.trim().toLowerCase())
+        );
+        const filtered = (annsData.value ?? []).filter(a => {
+          const cat = (a.category || "general").trim().toLowerCase();
+          if (BROADCAST.has(cat)) return true;
+          if (allEventNames.has(cat)) return myEventNames.has(cat);
+          return true;
+        });
+        setAnns(filtered);
       }
 
       // Today's schedule — extract items
@@ -448,19 +457,7 @@ export function Dashboard() {
                     alignItems: "center",
                   }}
                 >
-                  <div className="eyebrow">§ TODAY'S TIMELINE</div>
-                  <a
-                    onClick={() => navigate("/schedule")}
-                    style={{
-                      fontSize: 11,
-                      color: "var(--violet)",
-                      cursor: "pointer",
-                      fontFamily: "var(--f-mono)",
-                      letterSpacing: "0.1em",
-                    }}
-                  >
-                    FULL →
-                  </a>
+                  <div className="eyebrow">§ SUBMISSIONS</div>
                 </div>
                 <div
                   style={{
@@ -469,7 +466,7 @@ export function Dashboard() {
                     flexDirection: "column",
                   }}
                 >
-                  {schedule.length === 0 ? (
+                  {myEvents.length === 0 ? (
                     <div
                       style={{
                         color: "var(--ink-mute)",
@@ -478,69 +475,74 @@ export function Dashboard() {
                         padding: "20px 0",
                       }}
                     >
-                      No schedule published for today.
+                      No events registered yet.
                     </div>
                   ) : (
-                    schedule.slice(0, 6).map((s, i) => {
-                      const myEventVenues = myEvents.flatMap(
-                        (ev) => ev.eventData.venue ?? [],
+                    myEvents.map((ev, i) => {
+                      const submission = ev.entry?.submission;
+                      const hasSubmitted =
+                        submission && typeof submission === "object"
+                          ? Object.values(submission).some(
+                              (p) => p?.submitted === true,
+                            )
+                          : !!submission;
+
+                      // Find the active phase label from rounds
+                      const rounds = ev.eventData?.rounds ?? {};
+                      const activePhase = Object.entries(rounds).find(
+                        ([, v]) => v?.is_active
                       );
-                      const mine = myEventVenues.some((v) =>
-                        s.venue?.toLowerCase().includes(v.toLowerCase()),
-                      );
+                      const phaseLabel = activePhase
+                        ? activePhase[1]?.title
+                        : Object.values(rounds)[0]?.title ?? "Phase 1";
+                      const venue = Array.isArray(ev.eventData.venue)
+                        ? ev.eventData.venue.join(" · ")
+                        : ev.eventData.venue || "";
+
                       return (
                         <div
-                          key={i}
+                          key={ev.eventId}
+                          onClick={() => navigate(`/event-detail/${ev.eventId}`)}
                           style={{
-                            display: "grid",
-                            gridTemplateColumns: "52px 1fr auto",
+                            display: "flex",
+                            justifyContent: "space-between",
                             alignItems: "center",
                             gap: 12,
-                            padding: "12px 0",
-                            borderTop:
-                              i === 0
-                                ? "none"
-                                : "1px solid var(--glass-border)",
+                            padding: "13px 0",
+                            borderTop: i === 0 ? "none" : "1px solid var(--glass-border)",
+                            cursor: "pointer",
                           }}
                         >
-                          <div
-                            style={{
-                              fontFamily: "var(--f-mono)",
-                              fontSize: 12,
-                              color: mine ? "var(--violet)" : "var(--ink-dim)",
-                            }}
-                          >
-                            {fmtTime(s.start_time)}
-                          </div>
                           <div>
-                            <div
-                              style={{
-                                fontSize: 13,
-                                color: "var(--ink)",
-                                fontWeight: 500,
-                              }}
-                            >
-                              {s.title}
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>
+                              {ev.eventData.name}
                             </div>
-                            <div
-                              style={{
-                                fontSize: 10,
-                                color: "var(--ink-mute)",
-                                fontFamily: "var(--f-mono)",
-                                marginTop: 2,
-                              }}
-                            >
-                              {s.venue}
+                            <div style={{
+                              fontSize: 10, color: "var(--ink-mute)",
+                              fontFamily: "var(--f-mono)", marginTop: 3,
+                              letterSpacing: "0.06em",
+                            }}>
+                              {phaseLabel}{venue ? ` · ${venue}` : ""}
                             </div>
                           </div>
-                          {mine && (
-                            <div
-                              className="chip violet"
-                              style={{ padding: "2px 7px", fontSize: 9 }}
-                            >
-                              MINE
-                            </div>
-                          )}
+                          <div style={{
+                            flexShrink: 0,
+                            fontSize: 10,
+                            fontFamily: "var(--f-mono)",
+                            fontWeight: 600,
+                            letterSpacing: "0.08em",
+                            padding: "4px 10px",
+                            borderRadius: 999,
+                            background: hasSubmitted
+                              ? "rgba(72, 199, 142, 0.12)"
+                              : "rgba(220, 80, 80, 0.1)",
+                            color: hasSubmitted ? "#48C78E" : "#E07070",
+                            border: hasSubmitted
+                              ? "1px solid rgba(72,199,142,0.35)"
+                              : "1px solid rgba(220,80,80,0.3)",
+                          }}>
+                            {hasSubmitted ? "✓ SUBMITTED" : "PENDING"}
+                          </div>
                         </div>
                       );
                     })
@@ -560,6 +562,40 @@ export function Dashboard() {
                   overflow: "hidden",
                 }}
               >
+                {/* ── Lock overlay — visible until user is checked in ── */}
+                {!profile?.is_attending && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      zIndex: 10,
+                      borderRadius: "inherit",
+                      backdropFilter: "blur(32px)",
+                      WebkitBackdropFilter: "blur(32px)",
+                      background: "rgba(10, 10, 16, 0.85)",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 12,
+                      border: "1px solid rgba(255, 255, 255, 0.08)",
+                    }}
+                  >
+                    <div style={{ fontSize: 32 }}>🔒</div>
+                    <div
+                      style={{
+                        fontFamily: "var(--f-mono)",
+                        fontSize: 15,
+                        letterSpacing: "0.14em",
+                        color: "var(--ink)",
+                        textTransform: "uppercase",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Unlock at Round 2
+                    </div>
+                  </div>
+                )}
                 <div
                   style={{
                     position: "absolute",
@@ -634,8 +670,10 @@ export function Dashboard() {
                     style={{
                       padding: 12,
                       borderRadius: 10,
-                      background: "#F1EFE8",
-                      border: "3px solid rgba(127,119,221,0.4)",
+                      background: "rgba(255, 255, 255, 0.03)",
+                      backdropFilter: "blur(12px)",
+                      WebkitBackdropFilter: "blur(12px)",
+                      border: "1px solid rgba(127,119,221,0.4)",
                       boxShadow: "0 0 40px rgba(127,119,221,0.25)",
                     }}
                   >
@@ -745,7 +783,7 @@ export function Dashboard() {
                       No announcements yet.
                     </div>
                   ) : (
-                    anns.slice(0, 4).map((a, i) => (
+                    anns.slice(0, 3).map((a, i) => (
                       <div
                         key={a.id || i}
                         style={{
@@ -775,7 +813,7 @@ export function Dashboard() {
                               PIN
                             </span>
                           )}
-                          {a.content}
+                          {a.announcement}
                         </div>
                         <span
                           style={{
@@ -785,7 +823,7 @@ export function Dashboard() {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {relTime(a.created_at)}
+                          {relTime(a.time)}
                         </span>
                       </div>
                     ))
