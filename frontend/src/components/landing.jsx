@@ -437,8 +437,8 @@ function FAQList() {
     { q: 'How do I get credentials?', a: 'Fill out the request form on the Get Credentials page. Our organizers verify your college ID and email, then send your login within 24 hours.' },
     { q: 'Is there a participation fee?', a: 'Entry to the campus and most events is free. A handful of premium events (Hack Night, Robo Wars) carry a small registration fee that covers kits, food, and prizes.' },
     { q: 'Can I form my own team?', a: "Yes. Most events allow teams of 2–4. We also run a matchmaking thread on our Discord if you're flying solo." },
-    { q: 'Where does the fest happen?', a: 'Across the main campus — block C for coding tracks, the robotics lab for hardware events, and the auditorium for finals. A full map ships with your credentials.' },
-    { q: 'What about food and stay?', a: 'All meals are covered by your Food QR. Outstation participants get a hostel bed (limited, first-come, first-served — request on the form).' },
+    { q: 'Where does the fest happen?', a: 'Across the main campus of Scaler School of Technology, Bengaluru.' },
+    { q: 'What about food and stay?', a: 'All meals are covered by your Food QR.' },
   ];
   const [open, setOpen] = React.useState(0);
   return (
