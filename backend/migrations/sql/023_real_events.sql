@@ -17,46 +17,20 @@
 BEGIN;
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 1. REMOVE OLD TEST EVENTS (cascade to teams via FK, wipe participants JSONB)
+-- EXECUTION ORDER (avoids FK violations):
+--
+--   Step 1 → INSERT new events
+--   Step 2 → INSERT new placeholder teams (FK → events, now satisfied)
+--   Step 3 → Reassign users.team_id to a new placeholder team
+--             (team_id is NOT NULL — we cannot null it, must point somewhere valid)
+--   Step 4 → DELETE old teams (FK from users now cleared)
+--   Step 5 → DELETE old events
+--   Step 6 → Strip old event keys from users.events JSONB
 -- ═══════════════════════════════════════════════════════════════════════════
-
-DELETE FROM teams WHERE event_id IN (
-    '6a36f54b-61e5-41ce-b0bf-80f5c0022e10',  -- Hacker's Quest
-    '8c6746fa-1474-4091-9cbd-9e0c75aa5b9e',  -- Design Sprint
-    'e32cc54b-3720-4a48-bff1-5fedb8d73e05',  -- Algo Rumble
-    '2a64e34b-eea3-4f56-b910-1c2a39c9ee39',  -- Pitch Perfect
-    '65bbb00e-182d-4825-9b4c-3009ff90022b'   -- Capture The Flag
-);
-
-DELETE FROM events WHERE id IN (
-    '6a36f54b-61e5-41ce-b0bf-80f5c0022e10',
-    '8c6746fa-1474-4091-9cbd-9e0c75aa5b9e',
-    'e32cc54b-3720-4a48-bff1-5fedb8d73e05',
-    '2a64e34b-eea3-4f56-b910-1c2a39c9ee39',
-    '65bbb00e-182d-4825-9b4c-3009ff90022b'
-);
-
--- Strip test event keys from every user's events JSONB
-UPDATE users
-SET events = (
-    events
-        - '6a36f54b-61e5-41ce-b0bf-80f5c0022e10'
-        - '8c6746fa-1474-4091-9cbd-9e0c75aa5b9e'
-        - 'e32cc54b-3720-4a48-bff1-5fedb8d73e05'
-        - '2a64e34b-eea3-4f56-b910-1c2a39c9ee39'
-        - '65bbb00e-182d-4825-9b4c-3009ff90022b'
-)
-WHERE events ?| ARRAY[
-    '6a36f54b-61e5-41ce-b0bf-80f5c0022e10',
-    '8c6746fa-1474-4091-9cbd-9e0c75aa5b9e',
-    'e32cc54b-3720-4a48-bff1-5fedb8d73e05',
-    '2a64e34b-eea3-4f56-b910-1c2a39c9ee39',
-    '65bbb00e-182d-4825-9b4c-3009ff90022b'
-];
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 2. INSERT REAL EVENTS
+-- 1. INSERT REAL EVENTS
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Stable UUIDs for all 9 events:
 --
@@ -1102,10 +1076,11 @@ INSERT INTO events (
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 3. PLACEHOLDER TEAMS (one per event — real team structure TBD)
+-- 2. INSERT PLACEHOLDER TEAMS (one per new event)
 -- ═══════════════════════════════════════════════════════════════════════════
--- Note: Robo events are team-based. CP/CTF events may be individual or team.
--- These are placeholder teams. Real teams are created on registration.
+-- These must be inserted BEFORE we touch users.team_id, because the FK
+-- points at teams.id and team_id is NOT NULL — we need a valid target to
+-- move users to before we can remove the old teams.
 -- NEEDS_INFO: confirm team size limits per event.
 
 INSERT INTO teams (id, name, event_id) VALUES
@@ -1119,5 +1094,73 @@ INSERT INTO teams (id, name, event_id) VALUES
 ('b0000001-0008-4000-8000-000000000008', 'Impulse Placeholder Team',         'a1b2c3d4-0008-4000-8000-000000000008'),
 ('b0000001-0009-4000-8000-000000000009', 'Invariant Placeholder Team',       'a1b2c3d4-0009-4000-8000-000000000009')
 ON CONFLICT (id) DO NOTHING;
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 3. REASSIGN USERS OFF THE OLD TEST TEAMS
+-- ═══════════════════════════════════════════════════════════════════════════
+-- team_id is NOT NULL on this database (migration 009 was not applied).
+-- We cannot null it — we must point every user at a valid new team first.
+-- Using the Robo Race placeholder as the default holding team.
+-- Real team assignments happen at event registration time.
+
+UPDATE users
+SET team_id = 'b0000001-0001-4000-8000-000000000001'  -- Robo Race placeholder
+WHERE team_id IN (
+    '913b836c-e27b-444d-bd82-546df86306f2',  -- Team Hacker's Quest
+    'c300c8d9-7dbd-4933-b3f9-477a2ff07705',  -- Team Design Sprint
+    '59c3aee6-e94b-413e-89e0-c8772a5e58bf',  -- Team Algo Rumble
+    '23609666-a4f0-43c2-95c3-de6c113e705a',  -- Team Pitch Perfect
+    '31fde588-6eba-4665-b377-05789d7e146f'   -- Team Capture The Flag
+);
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 4. DELETE OLD TEAMS (FK from users is now cleared)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+DELETE FROM teams WHERE id IN (
+    '913b836c-e27b-444d-bd82-546df86306f2',
+    'c300c8d9-7dbd-4933-b3f9-477a2ff07705',
+    '59c3aee6-e94b-413e-89e0-c8772a5e58bf',
+    '23609666-a4f0-43c2-95c3-de6c113e705a',
+    '31fde588-6eba-4665-b377-05789d7e146f'
+);
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 5. DELETE OLD EVENTS (teams referencing them are now gone)
+-- ═══════════════════════════════════════════════════════════════════════════
+
+DELETE FROM events WHERE id IN (
+    '6a36f54b-61e5-41ce-b0bf-80f5c0022e10',  -- Hacker's Quest
+    '8c6746fa-1474-4091-9cbd-9e0c75aa5b9e',  -- Design Sprint
+    'e32cc54b-3720-4a48-bff1-5fedb8d73e05',  -- Algo Rumble
+    '2a64e34b-eea3-4f56-b910-1c2a39c9ee39',  -- Pitch Perfect
+    '65bbb00e-182d-4825-9b4c-3009ff90022b'   -- Capture The Flag
+);
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 6. STRIP OLD EVENT KEYS FROM users.events JSONB
+-- ═══════════════════════════════════════════════════════════════════════════
+
+UPDATE users
+SET events = (
+    events
+        - '6a36f54b-61e5-41ce-b0bf-80f5c0022e10'
+        - '8c6746fa-1474-4091-9cbd-9e0c75aa5b9e'
+        - 'e32cc54b-3720-4a48-bff1-5fedb8d73e05'
+        - '2a64e34b-eea3-4f56-b910-1c2a39c9ee39'
+        - '65bbb00e-182d-4825-9b4c-3009ff90022b'
+)
+WHERE events ?| ARRAY[
+    '6a36f54b-61e5-41ce-b0bf-80f5c0022e10',
+    '8c6746fa-1474-4091-9cbd-9e0c75aa5b9e',
+    'e32cc54b-3720-4a48-bff1-5fedb8d73e05',
+    '2a64e34b-eea3-4f56-b910-1c2a39c9ee39',
+    '65bbb00e-182d-4825-9b4c-3009ff90022b'
+];
+
 
 COMMIT;
