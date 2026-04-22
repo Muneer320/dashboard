@@ -15,13 +15,13 @@ const BASE = (import.meta.env.VITE_API_BASE || '/api/v1').replace(/\/$/, '');
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
 export const token = {
-  getUser:  () => localStorage.getItem('ascent_token'),
-  setUser:  (t) => localStorage.setItem('ascent_token', t),
-  clearUser:() => localStorage.removeItem('ascent_token'),
+  getUser: () => localStorage.getItem('ascent_token'),
+  setUser: (t) => localStorage.setItem('ascent_token', t),
+  clearUser: () => localStorage.removeItem('ascent_token'),
 
-  getAdmin:  () => localStorage.getItem('ascent_admin_token'),
-  setAdmin:  (t) => localStorage.setItem('ascent_admin_token', t),
-  clearAdmin:() => localStorage.removeItem('ascent_admin_token'),
+  getAdmin: () => localStorage.getItem('ascent_admin_token'),
+  setAdmin: (t) => localStorage.setItem('ascent_admin_token', t),
+  clearAdmin: () => localStorage.removeItem('ascent_admin_token'),
 };
 
 // ─── Core fetch wrapper ───────────────────────────────────────────────────────
@@ -59,16 +59,16 @@ export class ApiError extends Error {
 
 // ─── Convenience methods ──────────────────────────────────────────────────────
 
-const get  = (path, opts) => request(path, { ...opts, method: 'GET' });
+const get = (path, opts) => request(path, { ...opts, method: 'GET' });
 const post = (path, body, opts) => request(path, { ...opts, method: 'POST', body });
-const patch= (path, body, opts) => request(path, { ...opts, method: 'PATCH', body });
-const put  = (path, body, opts) => request(path, { ...opts, method: 'PUT', body });
-const del  = (path, opts) => request(path, { ...opts, method: 'DELETE' });
+const patch = (path, body, opts) => request(path, { ...opts, method: 'PATCH', body });
+const put = (path, body, opts) => request(path, { ...opts, method: 'PUT', body });
+const del = (path, opts) => request(path, { ...opts, method: 'DELETE' });
 
 // ─── Auth — User ──────────────────────────────────────────────────────────────
 
 export const auth = {
-  login:  ({ email, password }) =>
+  login: ({ email, password }) =>
     post('/auth/login', { email, password }),
 
   me: () => get('/auth/me'),
@@ -86,38 +86,60 @@ export const adminAuth = {
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export const users = {
-  get:    (id) => get(`/users/${id}`),
-  patch:  (id, body) => patch(`/users/${id}`, body),
+  get: (id) => get(`/users/${id}`),
+  patch: (id, body) => patch(`/users/${id}`, body),
   events: (id) => get(`/users/${id}/events`),
-  meals:  (id) => get(`/users/${id}/meals`),
+  meals: (id) => get(`/users/${id}/meals`),
   myEvents: () => get('/users/me/my-events'),
 };
 
 // ─── Events ───────────────────────────────────────────────────────────────────
 
 export const events = {
-  list:     () => get('/events'),
-  get:      (id) => get(`/events/${id}`),
+  list: () => get('/events'),
+  get: (id) => get(`/events/${id}`),
   register: (id) => post(`/events/${id}/register`, {}),
-  myTeam:   (id) => get(`/events/${id}/my-team`),
+  myTeam: (id) => get(`/events/${id}/my-team`),
 
-  submit: (id, { phase, repo_link, deploy_link }) =>
-    post(`/events/${id}/submit`, { phase, repo_link, deploy_link }),
+  /**
+ * POST /events/{id}/submit
+ * body: { phase: number, answers: [{ question_id, answer }] }
+ */
+  submit: (id, { phase, answers }) =>
+    post(`/events/${id}/submit`, { phase, answers }),
 
+  /**
+   * GET /events/{id}/submission?phase=N
+   * Returns: { event_id, phase, phase_key, has_submission, submitted_at, answers }
+   */
   submission: (id, phase) =>
     get(`/events/${id}/submission?phase=${phase}`),
 
-  rating:        (id, { value, feedback }) => post(`/events/${id}/rating`, { value, feedback }),
-  myRating:      (id) => get(`/events/${id}/rating/me`),
+  /**
+   * GET /events/{id}/questions?phase=N
+   * Returns: { event_id, phase, phase_key, questions: QuestionDefinition[] }
+   */
+  questions: (id, phase) =>
+    get(`/events/${id}/questions?phase=${phase}`),
+
+  /**
+   * PUT /events/{id}/questions  (admin / event manager only)
+   * body: { questions: { phase1: [...], phase2: [...] } }
+   */
+  setQuestions: (id, body) =>
+    put(`/events/${id}/questions`, body, { adminAuth: true }),
+
+  rating: (id, { value, feedback }) => post(`/events/${id}/rating`, { value, feedback }),
+  myRating: (id) => get(`/events/${id}/rating/me`),
   ratingSummary: (id) => get(`/events/${id}/rating/summary`),
 };
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
 export const schedule = {
-  global:    ()    => get('/schedule/global'),
-  byDate:    (date) => get(`/schedule/global/${date}`),   // "YYYY-MM-DD"
-  forEvent:  (id)  => get(`/schedule/events/${id}`),
+  global: () => get('/schedule/global'),
+  byDate: (date) => get(`/schedule/global/${date}`),   // "YYYY-MM-DD"
+  forEvent: (id) => get(`/schedule/events/${id}`),
 };
 
 // ─── Announcements ────────────────────────────────────────────────────────────
@@ -152,10 +174,10 @@ export const credentials = {
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
 
 export const adminPanel = {
-  stats:        () => get('/admin-panel/stats', { adminAuth: true }),
+  stats: () => get('/admin-panel/stats', { adminAuth: true }),
 
   // Per-event breakdown (used by Overview + DataContext)
-  eventsStats:  () => get('/admin-panel/events/stats', { adminAuth: true }),
+  eventsStats: () => get('/admin-panel/events/stats', { adminAuth: true }),
 
   participants: (eventId) =>
     get(`/admin-panel/participants${eventId ? `?event_id=${eventId}` : ''}`, { adminAuth: true }),
@@ -165,7 +187,7 @@ export const adminPanel = {
     return get(`/admin-panel/participants/lookup?${q}`, { adminAuth: true });
   },
 
-  myEvents:      () => get('/admin-panel/my-events', { adminAuth: true }),
+  myEvents: () => get('/admin-panel/my-events', { adminAuth: true }),
   eventManagers: () => get('/admin-panel/event-managers', { adminAuth: true }),
 
   // PATCH /admin-panel/participants/{user_id}/restrict
@@ -173,7 +195,7 @@ export const adminPanel = {
   restrictParticipant: (userId, eventId, restricted) =>
     patch(`/admin-panel/participants/${userId}/restrict`, { event_id: eventId, restricted }, { adminAuth: true }),
 
-  addEM:    (body) => post('/admin-panel/event-managers', body, { adminAuth: true }),
+  addEM: (body) => post('/admin-panel/event-managers', body, { adminAuth: true }),
   updateEM: (uid, body) => patch(`/admin-panel/event-managers/${uid}`, body, { adminAuth: true }),
   deleteEM: (uid) => del(`/admin-panel/event-managers/${uid}`, { adminAuth: true }),
 

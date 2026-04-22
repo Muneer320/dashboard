@@ -32,6 +32,8 @@ class Event:
     max_participants: int = 500
     meals_count: int = DEFAULT_EVENT_MEALS_COUNT
     registration_deadline: datetime | None = None
+    # Keyed by phase: { "phase1": [ <QuestionDefinition dict>, ... ], ... }
+    questions: dict = field(default_factory=dict)
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -50,12 +52,19 @@ class Event:
             schedule=row.get("schedule") or [],
             rules=row.get("rules") or "",
             max_participants=int(row.get("max_participants") or 500),
+
             meals_count=int(
                 row.get("meals_count")
                 if row.get("meals_count") is not None
                 else DEFAULT_EVENT_MEALS_COUNT
             ),
-            registration_deadline=coerce_datetime(row.get("registration_deadline")),
+
+            registration_deadline=coerce_datetime(
+                row.get("registration_deadline")
+            ),
+
+            questions=row.get("questions") or {},
+
             created_at=coerce_datetime(row.get("created_at")),
             updated_at=coerce_datetime(row.get("updated_at")),
         )

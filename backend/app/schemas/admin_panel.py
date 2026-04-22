@@ -41,9 +41,7 @@ class ParticipantItem(BaseModel):
     isAttending: bool            # event-level gate
     foodClaimed: bool
     entryScanned: bool           # campus-level gate (user.is_attending)
-    submitted: bool
-    submissionURL: Optional[str]
-    submissionFile: Optional[str]
+    submitted: bool              # True once ANY phase has a completed submission
 
 
 class RestrictRequest(BaseModel):
@@ -64,10 +62,8 @@ class MyEventParticipant(BaseModel):
     name: str
     teamId: Optional[str]
     status: str
-    submitted: bool
+    submitted: bool              # True once ANY phase has a completed submission
     isAttending: bool
-    submissionURL: Optional[str]
-    submissionFile: Optional[str]
 
 
 class MyEventItem(BaseModel):
@@ -102,7 +98,8 @@ class EventManagerCreate(BaseModel):
     password: str                # plain-text; will be hashed server-side
     mail: str
     phone: Optional[str] = None
-    events: list[str] = []       # list of event ID strings to assign immediately
+    # list of event ID strings to assign immediately
+    events: list[str] = []
 
 
 class EventManagerUpdate(BaseModel):

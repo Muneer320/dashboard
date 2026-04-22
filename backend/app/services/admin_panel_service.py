@@ -4,10 +4,10 @@ admin_panel_service.py
 Business logic for all /admin-panel/* endpoints. Supabase-backed.
 
 Scoping rules
-─────────────
-  admin        → sees / can modify everything
-  eventManager → scoped to event IDs listed in admin.events JSONB
-  Scanner      → no data-read access (403) except lookup_participant
+-------------
+  admin        -> sees / can modify everything
+  eventManager -> scoped to event IDs listed in admin.events JSONB
+  Scanner      -> no data-read access (403) except lookup_participant
 """
 
 from __future__ import annotations
@@ -28,7 +28,9 @@ from app.models.user import User
 _MEAL_KEY_RE = re.compile(r"^meal(\d+)$")
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _get_scoped_event_ids(
     admin: Admin,
@@ -55,7 +57,7 @@ def _get_scoped_event_ids(
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Access denied — insufficient role",
+        detail="Access denied -- insufficient role",
     )
 
 
@@ -79,22 +81,31 @@ def _parse_event_uuid(event_id: str) -> uuid.UUID:
         ) from exc
 
 
+def _has_any_submission(entry: dict) -> bool:
+    """
+    Return True if the user has at least one completed phase submission for
+    this event entry.
+
+    New shape:  entry['submission'] = { 'phase1': { 'submitted': True, ... }, ... }
+    Legacy shapes (bool / None / old link-pair object) are treated as False.
+    """
+    sub = entry.get("submission")
+    if not isinstance(sub, dict):
+        return False
+    return any(
+        isinstance(phase_data, dict) and bool(phase_data.get("submitted"))
+        for phase_data in sub.values()
+    )
+
+
 def _build_participant_dict(
     user: User,
     event_id: str,
     event_name: str,
     entry: dict,
 ) -> dict:
-    """Build the ParticipantItem dict from a user + one event entry.
-
-    submission shape (new): { repoLink, deployLink, submittedAt } | None
-    Old shape (pre-migration): False | True — handled gracefully.
-    """
+    """Build the ParticipantItem dict from a user + one event entry."""
     food = user.food or {}
-    sub = entry.get("submission")  # None, False, or dict
-    is_submitted = bool(sub)       # False/None → False, non-empty dict → True
-    repo_link = sub.get("repoLink") if isinstance(sub, dict) else None
-    deploy_link = sub.get("deployLink") if isinstance(sub, dict) else None
     return {
         "id": str(user.id),
         "name": user.name,
@@ -106,9 +117,7 @@ def _build_participant_dict(
         "isAttending": bool(entry.get("isAttending", False)),
         "foodClaimed": any(food.values()),
         "entryScanned": bool(user.is_attending),
-        "submitted": is_submitted,
-        "submissionURL": deploy_link,    # deploy link maps to "URL" field for admin UI
-        "submissionFile": repo_link,     # repo link maps to "File" field for admin UI
+        "submitted": _has_any_submission(entry),
     }
 
 
@@ -122,7 +131,9 @@ async def _all_users(supabase: AsyncClient) -> list[User]:
     return [User.from_row(r) for r in rows(resp)]
 
 
-# ── Service functions ─────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Service functions
+# ---------------------------------------------------------------------------
 
 async def get_overview_stats(supabase: AsyncClient, admin: Admin) -> dict:
     """Aggregate stats cards for the Overview tab."""
@@ -152,7 +163,7 @@ async def get_overview_stats(supabase: AsyncClient, admin: Admin) -> dict:
                 attending += 1
             if entry.get("restricted"):
                 restricted += 1
-            if entry.get("submission"):
+            if _has_any_submission(entry):
                 submitted += 1
 
         if user_in_scope:
@@ -198,7 +209,7 @@ async def get_events_with_stats(
             registered += 1
             if entry.get("isAttending"):
                 attended += 1
-            if entry.get("submission"):
+            if _has_any_submission(entry):
                 submitted_count += 1
             if entry.get("restricted"):
                 restricted_count += 1
@@ -206,7 +217,7 @@ async def get_events_with_stats(
         result.append({
             "id": eid,
             "name": event.name,
-            "category": "",          # no category column in schema
+            "category": "",
             "date": event.start_date.date().isoformat() if event.start_date else None,
             "venue": event.venue or [],
             "maxParticipants": event.max_participants,
@@ -233,7 +244,6 @@ async def get_participants_list(
 
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
 
-    # Narrow to a specific event if requested
     if event_id is not None:
         if event_id not in scoped_ids:
             raise HTTPException(
@@ -246,7 +256,6 @@ async def get_participants_list(
 
     result: list[dict] = []
     for user in all_users:
-        # Name / username search (client-side ilike equivalent)
         if search:
             s = search.lower()
             if s not in user.name.lower() and s not in user.username.lower():
@@ -260,7 +269,6 @@ async def get_participants_list(
 
             is_restricted = bool(entry.get("restricted", False))
 
-            # Status filter
             if status_filter == "restricted" and not is_restricted:
                 continue
             if status_filter == "active" and is_restricted:
@@ -285,7 +293,6 @@ async def restrict_participant(
     Also syncs event.participants[user_id]["status"] for consistency.
     eventManager must own the event.
     """
-    # eventManager scope check
     if admin.role == AdminRole.EVENT_MANAGER:
         assigned = [str(e) for e in (admin.events or [])]
         if event_id not in assigned:
@@ -319,7 +326,6 @@ async def restrict_participant(
             detail="User is not registered for this event",
         )
 
-    # Update user.events JSONB
     user_events[event_id]["restricted"] = restricted
     await (
         supabase.table("users")
@@ -328,7 +334,6 @@ async def restrict_participant(
         .execute()
     )
 
-    # Sync event.participants status for consistency
     event_uuid = _parse_event_uuid(event_id)
     event_resp = await (
         supabase.table("events")
@@ -375,7 +380,6 @@ async def lookup_participant(
 
     users: list[User] = []
 
-    # ── Exact UUID lookup ──
     if user_id is not None:
         user_uuid = _parse_user_uuid(user_id)
         resp = await (
@@ -392,9 +396,7 @@ async def lookup_participant(
             )
         users = [User.from_row(row)]
 
-    # ── Name / username search ──
     elif q:
-        # Prefer PostgREST `or` filter with ilike on both columns.
         pattern = f"%{q}%"
         try:
             resp = await (
@@ -405,7 +407,6 @@ async def lookup_participant(
             )
             found = rows(resp)
         except Exception:
-            # Fallback: pull everything and filter in Python.
             all_resp = await supabase.table("users").select("*").execute()
             needle = q.lower()
             found = [
@@ -465,8 +466,7 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
                 continue
 
             registered += 1
-            sub = entry.get("submission")  # None, False, or dict
-            is_submitted = bool(sub)
+            is_submitted = _has_any_submission(entry)
             is_attending = bool(entry.get("isAttending", False))
             if is_submitted:
                 submitted_count += 1
@@ -480,8 +480,6 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
                 "status": "restricted" if entry.get("restricted") else "active",
                 "submitted": is_submitted,
                 "isAttending": is_attending,
-                "submissionURL": sub.get("deployLink") if isinstance(sub, dict) else None,
-                "submissionFile": sub.get("repoLink") if isinstance(sub, dict) else None,
             })
 
         result.append({
@@ -500,7 +498,7 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
 
 
 async def get_event_managers(supabase: AsyncClient) -> list[dict]:
-    """All eventManager rows — admin-only Contact Info tab."""
+    """All eventManager rows -- admin-only Contact Info tab."""
     resp = await (
         supabase.table("admins")
         .select("*")
@@ -534,7 +532,6 @@ async def create_event_manager(
     Create a new Admin row with role=eventManager.
     Raises 409 if username or mail is already taken.
     """
-    # Uniqueness checks
     u_resp = await (
         supabase.table("admins")
         .select("uid")
@@ -599,7 +596,6 @@ async def update_event_manager(
     """
     Update an eventManager's profile fields.
     Only fields provided (non-None) are changed.
-    Passing events=[...] fully replaces the assigned events list.
     """
     resp = await (
         supabase.table("admins")
@@ -620,7 +616,6 @@ async def update_event_manager(
     if name is not None:
         patch["name"] = name
     if mail is not None:
-        # Check mail uniqueness against other admins
         conflict = await (
             supabase.table("admins")
             .select("uid")
@@ -894,9 +889,7 @@ async def delete_event_manager(supabase: AsyncClient, uid: int) -> dict:
     """
     Delete an eventManager account.
 
-    Restriction: if this EM is the SOLE manager of any event (i.e. no other EM
-    has that event in their events list), the deletion is blocked until the admin
-    assigns a replacement.
+    Blocked (409) if this EM is the sole manager of any event.
     """
     resp = await (
         supabase.table("admins")
@@ -917,7 +910,6 @@ async def delete_event_manager(supabase: AsyncClient, uid: int) -> dict:
     my_events: list[str] = [str(e) for e in (em.events or [])]
 
     if my_events:
-        # Load all OTHER event managers
         others_resp = await (
             supabase.table("admins")
             .select("events")
@@ -927,26 +919,21 @@ async def delete_event_manager(supabase: AsyncClient, uid: int) -> dict:
         )
         other_rows = rows(others_resp)
 
-        # Build a set of event IDs covered by at least one other EM
         covered_by_others: set[str] = set()
         for other in other_rows:
             for eid in (other.get("events") or []):
                 covered_by_others.add(str(eid))
 
-        # Find events where this EM is the sole manager
         sole_managed = [eid for eid in my_events if eid not in covered_by_others]
 
         if sole_managed:
-            # Look up event names for a helpful error message
             ev_resp = await (
                 supabase.table("events")
                 .select("id, name")
                 .execute()
             )
             all_events_map = {str(e["id"]): e["name"] for e in rows(ev_resp)}
-            event_names = [
-                all_events_map.get(eid, eid) for eid in sole_managed
-            ]
+            event_names = [all_events_map.get(eid, eid) for eid in sole_managed]
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
