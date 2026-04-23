@@ -26,10 +26,21 @@ const _BANNER_MAP = {
 
 export function getEventBannerUrl(name) {
   if (!name) return null;
-  const key = name.toLowerCase().trim();
-  const file = _BANNER_MAP[key];
-  if (!file) return null;
-  return file;
+  const normalized = name.toLowerCase().trim();
+  
+  // First try an exact match
+  if (_BANNER_MAP[normalized]) {
+    return _BANNER_MAP[normalized];
+  }
+  
+  // Then try a fuzzy match: see if the event name contains any of the keys
+  for (const [key, url] of Object.entries(_BANNER_MAP)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      return url;
+    }
+  }
+  
+  return null;
 }
 
 // Deterministic tone picker so cards don't reshuffle colours on every render.
