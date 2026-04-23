@@ -97,6 +97,7 @@ export const users = {
 
 export const events = {
   list: () => get('/events'),
+  publicList: () => get('/events/public'),
   get: (id) => get(`/events/${id}`),
   register: (id) => post(`/events/${id}/register`, {}),
   myTeam: (id) => get(`/events/${id}/my-team`),

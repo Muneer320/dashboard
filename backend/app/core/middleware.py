@@ -32,6 +32,8 @@ PUBLIC_PATHS = {
     # real list of events as selectable chips. Returns only {id, name}.
     "/api/v1/credentials-requests/events",
     "/api/v1/credentials-requests/events/",
+    "/api/v1/events/public",
+    "/api/v1/events/public/",
 }
 
 

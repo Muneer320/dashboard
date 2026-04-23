@@ -108,7 +108,7 @@ export function NavBar({ active, variant = "app" }) {
     "Mirage",
     "Announcements",
   ];
-  const publicItems = ["Overview", "Events", "FAQ"];
+  const publicItems = ["Overview","Schedule", "Events", "FAQ"];
   const items = variant === "app" ? appItems : publicItems;
 
   const navClick = (key) => {
@@ -843,6 +843,16 @@ export function PageBackground({
 // ─────────────────────────────────────────────────────────────
 export function Footer() {
   const isMobile = useMobile();
+  const navigate = useNavigate();
+
+  const handleNav = (to) => {
+    if (!to) return;
+    if (to.startsWith('mailto:')) {
+      window.location.href = to;
+    } else {
+      navigate(to);
+    }
+  };
   return (
     <footer
       style={{
@@ -911,11 +921,21 @@ export function Footer() {
             {[
               {
                 h: "Fest",
-                items: ["Overview", "Events", "Schedule", "Sponsors"],
+                items: [
+                  { label: "Overview", to: "/login" },
+                  { label: "Events", to: "/events" },
+                  { label: "Schedule", to: "/schedule" },
+                  { label: "Sponsors", to: null },
+                ],
               },
               {
                 h: "Participate",
-                items: ["Register", "Login", "FAQ", "Code of Conduct"],
+                items: [
+                  { label: "Register", to: "/credentials" },
+                  { label: "Login", to: "/login" },
+                  { label: "FAQ", to: "/faq" },
+                  { label: "Code of Conduct", to: null },
+                ],
               },
             ].map((col) => (
               <div key={col.h}>
@@ -924,15 +944,17 @@ export function Footer() {
                 </div>
                 {col.items.map((it) => (
                   <div
-                    key={it}
+                    key={it.label}
+                    onClick={() => handleNav(it.to)}
                     style={{
                       color: "var(--ink-dim)",
                       fontSize: 13,
                       marginBottom: 8,
-                      cursor: "pointer",
+                      cursor: it.to ? "pointer" : "default",
+                      opacity: it.to ? 1 : 0.6,
                     }}
                   >
-                    {it}
+                    {it.label}
                   </div>
                 ))}
               </div>
@@ -940,9 +962,23 @@ export function Footer() {
           </div>
         ) : (
           [
-            { h: 'Fest', items: ['Overview','Events','Schedule'] },
-            { h: 'Participate', items: ['Get Credentials','Login','FAQ'] },
-            { h: 'Contact', items: ['archived-559b490477@example.invalid','14, 3rd cross, Parappana Agrahar, Electronic City Rd, Electronic City Phase I, Electronic City, Bengaluru, Karnataka 560100, India'] },
+            { h: 'Fest', items: [
+                { label: 'Overview', to: '/login' },
+                { label: 'Events', to: '/events' },
+                { label: 'Schedule', to: '/schedule' },
+              ] 
+            },
+            { h: 'Participate', items: [
+                { label: 'Register', to: '/credentials' },
+                { label: 'Login', to: '/login' },
+                { label: 'FAQ', to: '/faq' },
+              ] 
+            },
+            { h: 'Contact', items: [
+                { label: 'archived-559b490477@example.invalid', to: 'mailto:archived-559b490477@example.invalid' },
+                { label: '14, 3rd cross, Parappana Agrahar, Electronic City Rd, Electronic City Phase I, Electronic City, Bengaluru, Karnataka 560100, India', to: null },
+              ] 
+            },
           ].map(col => (
             <div key={col.h}>
               <div className="eyebrow" style={{ marginBottom: 14 }}>
@@ -950,15 +986,17 @@ export function Footer() {
               </div>
               {col.items.map((it) => (
                 <div
-                  key={it}
+                  key={it.label}
+                  onClick={() => handleNav(it.to)}
                   style={{
                     color: "var(--ink-dim)",
                     fontSize: 13,
                     marginBottom: 8,
-                    cursor: "pointer",
+                    cursor: it.to ? "pointer" : "default",
+                    opacity: it.to ? 1 : 0.6,
                   }}
                 >
-                  {it}
+                  {it.label}
                 </div>
               ))}
             </div>
