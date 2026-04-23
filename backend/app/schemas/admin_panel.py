@@ -88,10 +88,15 @@ class EventUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     venue: Optional[list[str]] = None
-    date: Optional[str] = None          # ISO date string YYYY-MM-DD
+    date: Optional[str] = None               # maps to start_date  (ISO date)
+    end_date: Optional[str] = None           # maps to end_date    (ISO datetime)
+    registration_deadline: Optional[str] = None  # ISO datetime
     category: Optional[str] = None
     maxParticipants: Optional[int] = None
     communityLink: Optional[str] = None
+    rules: Optional[str] = None
+    judges: Optional[list[str]] = None
+    rounds: Optional[dict] = None            # full rounds JSONB replacement
 
 
 class EventDetailResponse(BaseModel):
@@ -100,7 +105,9 @@ class EventDetailResponse(BaseModel):
     name: str
     description: Optional[str] = None
     category: str
-    date: Optional[str]
+    date: Optional[str]                      # start_date
+    end_date: Optional[str] = None
+    registration_deadline: Optional[str] = None
     venue: list[str]
     maxParticipants: int
     registered: int
@@ -108,6 +115,9 @@ class EventDetailResponse(BaseModel):
     submitted: int
     restricted: int
     communityLink: Optional[str] = None
+    rules: Optional[str] = None
+    judges: list[str] = []
+    rounds: dict = {}
     participants: list[MyEventParticipant]
 
 

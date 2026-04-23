@@ -1,59 +1,214 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { createPortal } from 'react-dom'
-import { useAuth } from '../../context/AuthContext'
-import { useData } from '../../context/DataContext'
-import { adminPanel } from '../../../lib/api'
-import Pagination from '../Pagination'
-import ConfirmModal from '../ConfirmModal'
-import './EventDetail.css'
+
+function toLocalDatetimeInput(iso) {
+  if (!iso) return ''
+  // Supabase returns ISO with tz — convert to local YYYY-MM-DDTHH:MM for input[type=datetime-local]
+  const d = new Date(iso)
+  if (isNaN(d)) return ''
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function toLocalDateInput(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d)) return ''
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+}
 
 // ── Sub-tab: Event Details ────────────────────────────────────────────────────
 
-function EventDetailsTab({ event, canEdit, onSaved }) {
-  const [form, setForm] = useState({
-    name: event.name || '',
-    description: event.description || '',
-    category: event.category || '',
-    date: event.date || '',
-    venue: Array.isArray(event.venue) ? event.venue.join(', ') : (event.venue || ''),
-    maxParticipants: event.maxParticipants ?? '',
-    communityLink: event.communityLink || '',
-  })
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState('')
-  const [success, setSuccess] = useState('')
+const SUBMISSION_TYPES = ['url', 'file', 'text', 'none']
+const FILE_TYPE_OPTIONS = ['.pdf', '.zip', '.docx', '.pptx', '.xlsx', '.jpg', '.png', '.mp4']
 
+function buildInitialForm(event) {
+  return {
+    name:                  event.name || '',
+    description:           event.description || '',
+    category:              event.category || '',
+    date:                  toLocalDateInput(event.date),
+    end_date:              toLocalDatetimeInput(event.end_date),
+    registration_deadline: toLocalDatetimeInput(event.registration_deadline),
+    venue:                 Array.isArray(event.venue) ? event.venue.join(', ') : (event.venue || ''),
+    maxParticipants:       event.maxParticipants ?? '',
+    communityLink:         event.communityLink || '',
+    rules:                 event.rules || '',
+    judges:                Array.isArray(event.judges) ? event.judges.join(', ') : (event.judges || ''),
+  }
+}
+
+function buildInitialPhases(rounds) {
+  return Object.entries(rounds || {}).map(([key, data]) => ({
+    key,
+    title:           data.title || '',
+    venue:           Array.isArray(data.venue) ? data.venue.join(', ') : (data.venue || ''),
+    start_time:      toLocalDatetimeInput(data.start_time),
+    end_time:        toLocalDatetimeInput(data.end_time),
+    description:     data.description || '',
+    problemStatement:data.problemStatement || '',
+    submissionType:  data.submissionType || 'url',
+    allowedFileTypes:Array.isArray(data.allowedFileTypes) ? data.allowedFileTypes : [],
+    is_active:       !!data.is_active,
+    is_locked:       !!data.is_locked,
+  }))
+}
+
+function PhaseEditor({ phase, idx, onChange, onRemove, canEdit }) {
+  function set(field, value) { onChange(idx, { ...phase, [field]: value }) }
+
+  function toggleFileType(ft) {
+    const cur = phase.allowedFileTypes || []
+    set('allowedFileTypes', cur.includes(ft) ? cur.filter(x => x !== ft) : [...cur, ft])
+  }
+
+  return (
+    <div className="ed-phase-card">
+      <div className="ed-phase-header">
+        <div className="ed-phase-badge">{phase.key}</div>
+        <span className="ed-phase-title-preview">{phase.title || 'Untitled Phase'}</span>
+        <div className="ed-phase-toggles">
+          <label className="ed-toggle-label">
+            <input type="checkbox" checked={phase.is_active} onChange={e => set('is_active', e.target.checked)} disabled={!canEdit} />
+            Active
+          </label>
+          <label className="ed-toggle-label">
+            <input type="checkbox" checked={phase.is_locked} onChange={e => set('is_locked', e.target.checked)} disabled={!canEdit} />
+            Locked
+          </label>
+        </div>
+        {canEdit && (
+          <button className="ed-phase-remove" onClick={() => onRemove(idx)} title="Remove phase">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        )}
+      </div>
+
+      <div className="ed-form-grid" style={{marginTop: 14}}>
+        <div className="ed-field">
+          <label className="ed-label">Title</label>
+          <input className="input-field" value={phase.title} onChange={e => set('title', e.target.value)} disabled={!canEdit} placeholder="e.g. Qualifier Round" />
+        </div>
+        <div className="ed-field">
+          <label className="ed-label">Venue <span className="ed-hint">(comma-sep)</span></label>
+          <input className="input-field" value={phase.venue} onChange={e => set('venue', e.target.value)} disabled={!canEdit} placeholder="e.g. Online, Hall A" />
+        </div>
+        <div className="ed-field">
+          <label className="ed-label">Start Time</label>
+          <input className="input-field" type="datetime-local" value={phase.start_time} onChange={e => set('start_time', e.target.value)} disabled={!canEdit} />
+        </div>
+        <div className="ed-field">
+          <label className="ed-label">End Time</label>
+          <input className="input-field" type="datetime-local" value={phase.end_time} onChange={e => set('end_time', e.target.value)} disabled={!canEdit} />
+        </div>
+        <div className="ed-field">
+          <label className="ed-label">Submission Type</label>
+          <select className="input-field" value={phase.submissionType} onChange={e => set('submissionType', e.target.value)} disabled={!canEdit}>
+            {SUBMISSION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div className="ed-field">
+          <label className="ed-label">Allowed File Types</label>
+          <div className="ed-filetypes">
+            {FILE_TYPE_OPTIONS.map(ft => (
+              <label key={ft} className={`ed-filetype-chip ${(phase.allowedFileTypes||[]).includes(ft) ? 'active' : ''}`}>
+                <input type="checkbox" checked={(phase.allowedFileTypes||[]).includes(ft)} onChange={() => toggleFileType(ft)} disabled={!canEdit} style={{display:'none'}} />
+                {ft}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="ed-field ed-field-full">
+          <label className="ed-label">Description</label>
+          <textarea className="input-field ed-textarea" rows={3} value={phase.description} onChange={e => set('description', e.target.value)} disabled={!canEdit} placeholder="Phase description…" />
+        </div>
+        <div className="ed-field ed-field-full">
+          <label className="ed-label">Problem Statement</label>
+          <textarea className="input-field ed-textarea" rows={3} value={phase.problemStatement} onChange={e => set('problemStatement', e.target.value)} disabled={!canEdit} placeholder="Problem statement for this phase…" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EventDetailsTab({ event, canEdit, onSaved }) {
+  const [form,   setFormState] = useState(() => buildInitialForm(event))
+  const [phases, setPhases]    = useState(() => buildInitialPhases(event.rounds))
+  const [saving, setSaving]    = useState(false)
+  const [err,    setErr]       = useState('')
+  const [success,setSuccess]   = useState('')
+
+  // Sync when navigating between events
   useEffect(() => {
-    setForm({
-      name: event.name || '',
-      description: event.description || '',
-      category: event.category || '',
-      date: event.date || '',
-      venue: Array.isArray(event.venue) ? event.venue.join(', ') : (event.venue || ''),
-      maxParticipants: event.maxParticipants ?? '',
-      communityLink: event.communityLink || '',
-    })
+    setFormState(buildInitialForm(event))
+    setPhases(buildInitialPhases(event.rounds))
+    setErr(''); setSuccess('')
   }, [event.id])
 
-  function set(field, value) {
-    setForm(f => ({ ...f, [field]: value }))
+  function setField(field, value) {
+    setFormState(f => ({ ...f, [field]: value }))
     setErr(''); setSuccess('')
+  }
+
+  function handlePhaseChange(idx, updated) {
+    setPhases(prev => prev.map((p, i) => i === idx ? updated : p))
+    setErr(''); setSuccess('')
+  }
+
+  function handleAddPhase() {
+    const nextNum = phases.length + 1
+    setPhases(prev => [...prev, {
+      key: `phase${nextNum}`,
+      title: '', venue: '', start_time: '', end_time: '',
+      description: '', problemStatement: '',
+      submissionType: 'url', allowedFileTypes: [],
+      is_active: false, is_locked: false,
+    }])
+  }
+
+  function handleRemovePhase(idx) {
+    setPhases(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  function phasesToRounds(phaseList) {
+    const out = {}
+    phaseList.forEach(p => {
+      out[p.key] = {
+        title:            p.title,
+        venue:            p.venue.split(',').map(v => v.trim()).filter(Boolean),
+        start_time:       p.start_time ? new Date(p.start_time).toISOString() : null,
+        end_time:         p.end_time   ? new Date(p.end_time).toISOString()   : null,
+        description:      p.description,
+        problemStatement: p.problemStatement,
+        submissionType:   p.submissionType,
+        allowedFileTypes: p.allowedFileTypes || [],
+        is_active:        p.is_active,
+        is_locked:        p.is_locked,
+      }
+    })
+    return out
   }
 
   async function handleSave() {
     if (!form.name.trim()) { setErr('Event name is required.'); return }
     setSaving(true); setErr(''); setSuccess('')
     try {
-      const venueArr = form.venue.split(',').map(v => v.trim()).filter(Boolean)
+      const venueArr  = form.venue.split(',').map(v => v.trim()).filter(Boolean)
+      const judgesArr = form.judges.split(',').map(j => j.trim()).filter(Boolean)
+
       const body = {
-        name: form.name.trim(),
-        description: form.description.trim() || undefined,
-        category: form.category.trim() || undefined,
-        date: form.date || undefined,
-        venue: venueArr.length ? venueArr : undefined,
-        maxParticipants: form.maxParticipants !== '' ? Number(form.maxParticipants) : undefined,
-        communityLink: form.communityLink.trim() || undefined,
+        name:                  form.name.trim(),
+        description:           form.description.trim() || undefined,
+        category:              form.category.trim()    || undefined,
+        date:                  form.date               || undefined,
+        end_date:              form.end_date           || undefined,
+        registration_deadline: form.registration_deadline || undefined,
+        venue:                 venueArr.length ? venueArr : undefined,
+        maxParticipants:       form.maxParticipants !== '' ? Number(form.maxParticipants) : undefined,
+        communityLink:         form.communityLink.trim() || undefined,
+        rules:                 form.rules.trim()       || undefined,
+        judges:                judgesArr.length ? judgesArr : undefined,
+        rounds:                phasesToRounds(phases),
       }
       Object.keys(body).forEach(k => body[k] === undefined && delete body[k])
       const updated = await adminPanel.updateEvent(event.id, body)
@@ -68,36 +223,75 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
 
   return (
     <div className="ed-details-tab">
+      {/* ── Core fields ── */}
+      <div className="ed-section-label">Core Details</div>
       <div className="ed-form-grid">
         <div className="ed-field">
           <label className="ed-label">Event Name *</label>
-          <input className="input-field" value={form.name} onChange={e => set('name', e.target.value)} disabled={!canEdit} />
+          <input className="input-field" value={form.name} onChange={e => setField('name', e.target.value)} disabled={!canEdit} />
         </div>
         <div className="ed-field">
           <label className="ed-label">Category</label>
-          <input className="input-field" value={form.category} onChange={e => set('category', e.target.value)} disabled={!canEdit} placeholder="e.g. Technical" />
+          <input className="input-field" value={form.category} onChange={e => setField('category', e.target.value)} disabled={!canEdit} placeholder="e.g. Technical" />
         </div>
         <div className="ed-field">
-          <label className="ed-label">Date</label>
-          <input className="input-field" type="date" value={form.date} onChange={e => set('date', e.target.value)} disabled={!canEdit} />
+          <label className="ed-label">Start Date</label>
+          <input className="input-field" type="date" value={form.date} onChange={e => setField('date', e.target.value)} disabled={!canEdit} />
+        </div>
+        <div className="ed-field">
+          <label className="ed-label">End Date / Time</label>
+          <input className="input-field" type="datetime-local" value={form.end_date} onChange={e => setField('end_date', e.target.value)} disabled={!canEdit} />
+        </div>
+        <div className="ed-field">
+          <label className="ed-label">Registration Deadline</label>
+          <input className="input-field" type="datetime-local" value={form.registration_deadline} onChange={e => setField('registration_deadline', e.target.value)} disabled={!canEdit} />
         </div>
         <div className="ed-field">
           <label className="ed-label">Max Participants</label>
-          <input className="input-field" type="number" min="1" value={form.maxParticipants} onChange={e => set('maxParticipants', e.target.value)} disabled={!canEdit} />
+          <input className="input-field" type="number" min="1" value={form.maxParticipants} onChange={e => setField('maxParticipants', e.target.value)} disabled={!canEdit} />
         </div>
         <div className="ed-field ed-field-full">
           <label className="ed-label">Venue <span className="ed-hint">(comma-separated)</span></label>
-          <input className="input-field" value={form.venue} onChange={e => set('venue', e.target.value)} disabled={!canEdit} placeholder="e.g. Hall A, Room 101" />
+          <input className="input-field" value={form.venue} onChange={e => setField('venue', e.target.value)} disabled={!canEdit} placeholder="e.g. Hall A, Room 101" />
+        </div>
+        <div className="ed-field ed-field-full">
+          <label className="ed-label">Judges <span className="ed-hint">(comma-separated names)</span></label>
+          <input className="input-field" value={form.judges} onChange={e => setField('judges', e.target.value)} disabled={!canEdit} placeholder="e.g. Dr. Smith, Prof. Rao" />
         </div>
         <div className="ed-field ed-field-full">
           <label className="ed-label">Community Link</label>
-          <input className="input-field" value={form.communityLink} onChange={e => set('communityLink', e.target.value)} disabled={!canEdit} placeholder="https://..." />
+          <input className="input-field" value={form.communityLink} onChange={e => setField('communityLink', e.target.value)} disabled={!canEdit} placeholder="https://..." />
+        </div>
+        <div className="ed-field ed-field-full">
+          <label className="ed-label">Rules</label>
+          <textarea className="input-field ed-textarea" value={form.rules} onChange={e => setField('rules', e.target.value)} disabled={!canEdit} rows={4} placeholder="Event rules and guidelines…" />
         </div>
         <div className="ed-field ed-field-full">
           <label className="ed-label">Description</label>
-          <textarea className="input-field ed-textarea" value={form.description} onChange={e => set('description', e.target.value)} disabled={!canEdit} rows={4} placeholder="Event description…" />
+          <textarea className="input-field ed-textarea" value={form.description} onChange={e => setField('description', e.target.value)} disabled={!canEdit} rows={4} placeholder="Event description…" />
         </div>
       </div>
+
+      {/* ── Phases editor ── */}
+      <div className="ed-section-label" style={{marginTop: 28}}>
+        Phases / Rounds
+        {canEdit && (
+          <button className="btn btn-ghost ed-add-phase-btn" onClick={handleAddPhase}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Phase
+          </button>
+        )}
+      </div>
+
+      {phases.length === 0 ? (
+        <div className="ed-phases-empty">No phases defined yet.{canEdit ? ' Click "Add Phase" to create one.' : ''}</div>
+      ) : (
+        <div className="ed-phases-list">
+          {phases.map((ph, idx) => (
+            <PhaseEditor key={ph.key + idx} phase={ph} idx={idx} onChange={handlePhaseChange} onRemove={handleRemovePhase} canEdit={canEdit} />
+          ))}
+        </div>
+      )}
 
       {err     && <div className="ed-alert ed-alert-err">{err}</div>}
       {success && <div className="ed-alert ed-alert-ok">{success}</div>}
@@ -105,7 +299,7 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
       {canEdit && (
         <div className="ed-form-actions">
           <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save Changes'}
+            {saving ? 'Saving…' : 'Save All Changes'}
           </button>
         </div>
       )}
@@ -118,6 +312,15 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
     </div>
   )
 }
+
+import { useParams, useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
+import { useAuth } from '../../context/AuthContext'
+import { useData } from '../../context/DataContext'
+import { adminPanel } from '../../../lib/api'
+import Pagination from '../Pagination'
+import ConfirmModal from '../ConfirmModal'
+import './EventDetail.css'
 
 // ── Submission Modal ──────────────────────────────────────────────────────────
 

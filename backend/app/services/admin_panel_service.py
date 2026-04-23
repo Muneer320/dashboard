@@ -1074,6 +1074,8 @@ async def get_event_detail(
         "description": event.description,
         "category": event.category or "Other",
         "date": event.start_date.date().isoformat() if event.start_date else None,
+        "end_date": event.end_date.isoformat() if event.end_date else None,
+        "registration_deadline": event.registration_deadline.isoformat() if event.registration_deadline else None,
         "venue": event.venue or [],
         "maxParticipants": event.max_participants,
         "registered": registered,
@@ -1081,6 +1083,9 @@ async def get_event_detail(
         "submitted": submitted_count,
         "restricted": restricted_count,
         "communityLink": event.community_link,
+        "rules": event.rules or "",
+        "judges": event.judges or [],
+        "rounds": event.rounds or {},
         "participants": participants,
     }
 
@@ -1120,12 +1125,22 @@ async def update_event_details(
         db_patch["venue"] = patch_data["venue"]
     if patch_data.get("date") is not None:
         db_patch["start_date"] = patch_data["date"]   # stored as start_date in DB
+    if patch_data.get("end_date") is not None:
+        db_patch["end_date"] = patch_data["end_date"]
+    if patch_data.get("registration_deadline") is not None:
+        db_patch["registration_deadline"] = patch_data["registration_deadline"]
     if patch_data.get("category") is not None:
         db_patch["category"] = patch_data["category"]
     if patch_data.get("maxParticipants") is not None:
         db_patch["max_participants"] = patch_data["maxParticipants"]
     if patch_data.get("communityLink") is not None:
         db_patch["community_link"] = patch_data["communityLink"]
+    if patch_data.get("rules") is not None:
+        db_patch["rules"] = patch_data["rules"]
+    if patch_data.get("judges") is not None:
+        db_patch["judges"] = patch_data["judges"]
+    if patch_data.get("rounds") is not None:
+        db_patch["rounds"] = patch_data["rounds"]
 
     if not db_patch:
         raise HTTPException(

@@ -254,6 +254,133 @@
 .meal-chip.out-of-scope { opacity: 0.3; cursor: not-allowed; }
 .meal-chip:not(:disabled):hover { border-color: var(--border-accent); color: var(--accent-light); }
 
+/* ── Phases Editor ──────────────────────────────────────────────────────────── */
+
+.ed-section-label {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ed-add-phase-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  padding: 6px 12px;
+}
+
+.ed-phases-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg-elevated);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.ed-phases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ed-phase-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+}
+
+.ed-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ed-phase-badge {
+  background: rgba(124, 58, 237, 0.15);
+  color: var(--accent-light);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.ed-phase-title-preview {
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.ed-phase-toggles {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ed-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.ed-phase-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.ed-phase-remove:hover {
+  color: var(--danger);
+  background: var(--danger-dim);
+}
+
+.ed-filetypes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.ed-filetype-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s;
+}
+
+.ed-filetype-chip.active {
+  border-color: var(--accent-light);
+  background: rgba(124, 58, 237, 0.1);
+  color: var(--accent-light);
+}
+
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 768px) {
