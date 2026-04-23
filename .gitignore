@@ -33,3 +33,6 @@ build/
 # Backend local env
 backend/.venv/
 backend/__pycache__/
+
+# Stress Test logs
+loadtest*
