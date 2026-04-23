@@ -320,19 +320,6 @@ export default function Landing() {
         {/* <SponsorStrip isMobile={isMobile} /> */}
       </section>
 
-      {/* ─────────────── FAQ ─────────────── */}
-      <section style={{ padding: isMobile ? '60px 20px 40px' : '100px 48px 40px', position: 'relative' }}>
-        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-          <div className="eyebrow">§ 04 · FAQ</div>
-          <h2 className="display" style={{ fontSize: isMobile ? 32 : 44, marginTop: 16, letterSpacing: '-0.02em' }}>
-            Questions, answered.
-          </h2>
-          <div style={{ marginTop: 40 }}>
-            <FAQList />
-          </div>
-        </div>
-      </section>
-
       <Footer />
     </PageBackground>
   );
@@ -431,66 +418,3 @@ function SponsorStrip({ isMobile }) {
   );
 }
 
-function FAQList() {
-  const faqs = [
-    { q: 'Who can participate?', a: 'Any undergraduate or postgraduate student with a valid college ID. We also run a short open track for first-year students and a couple of invite-only finals.' },
-    { q: 'How do I get credentials?', a: 'Fill out the request form on the Get Credentials page. Our organizers verify your college ID and email, then send your login within 24 hours.' },
-    { q: 'Is there a participation fee?', a: 'Entry to the campus and most events is free. A handful of premium events (Hack Night, Robo Wars) carry a small registration fee that covers kits, food, and prizes.' },
-    { q: 'Can I form my own team?', a: "Yes. Most events allow teams of 2–4. We also run a matchmaking thread on our Discord if you're flying solo." },
-    { q: 'Where does the fest happen?', a: 'Across the main campus of Scaler School of Technology, Bengaluru.' },
-    { q: 'What about food and stay?', a: 'All meals are covered by your Food QR.' },
-  ];
-  const [open, setOpen] = React.useState(0);
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {faqs.map((f, i) => {
-        const isOpen = open === i;
-        return (
-          <div key={i} style={{ borderTop: '1px solid var(--glass-border)' }}>
-            <div
-              onClick={() => setOpen(isOpen ? -1 : i)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '22px 4px',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', flexShrink: 0 }}>
-                  0{i+1}
-                </span>
-                <span style={{
-                  fontFamily: 'var(--f-display)',
-                  fontSize: 17, fontWeight: 500,
-                  letterSpacing: '-0.01em',
-                  color: isOpen ? 'var(--ink)' : 'var(--ink-dim)',
-                  transition: 'color .2s',
-                }}>{f.q}</span>
-              </div>
-              <div style={{
-                width: 28, height: 28, borderRadius: '50%',
-                border: '1px solid var(--glass-border-strong)',
-                display: 'grid', placeItems: 'center',
-                color: 'var(--ink-dim)', flexShrink: 0, marginLeft: 12,
-                transform: isOpen ? 'rotate(45deg)' : 'rotate(0)',
-                transition: 'transform .3s',
-              }}>+</div>
-            </div>
-            <div style={{
-              overflow: 'hidden',
-              maxHeight: isOpen ? 200 : 0,
-              transition: 'max-height .4s ease',
-            }}>
-              <div style={{
-                padding: '0 4px 22px 32px',
-                color: 'var(--ink-dim)',
-                fontSize: 14, lineHeight: 1.6, maxWidth: 700,
-              }}>{f.a}</div>
-            </div>
-          </div>
-        );
-      })}
-      <div style={{ borderTop: '1px solid var(--glass-border)' }}/>
-    </div>
-  );
-}

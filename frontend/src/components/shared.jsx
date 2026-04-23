@@ -78,7 +78,7 @@ export function NavBar({ active, variant = 'app' }) {
     const routes = {
       dashboard: '/dashboard', schedule: '/schedule', explore: '/explore',
       leaderboard: '/leaderboard', mirage: '/mirage', announcements: '/announcements',
-      landing: '/', overview: '/', events: '/explore', sponsors: '/', faq: '/',
+      landing: '/', overview: '/', events: '/explore', sponsors: '/', faq: '/faq',
       login: '/login', credentials: '/credentials', 'event-detail': '/event-detail',
     };
     navigate(routes[key] ?? `/${key}`);
