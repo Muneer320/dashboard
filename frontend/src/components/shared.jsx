@@ -876,9 +876,15 @@ export function Footer() {
             repeat.
           </div>
           <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
-            {["IG", "X", "IN", "YT", "GH"].map((s) => (
-              <div
-                key={s}
+            {[
+              { label: "IG", url: "https://www.instagram.com/ascent.sst/" },
+              { label: "UN", url: "https://unstop.com/college-fests/ascent-scaler-school-of-technology-bengaluru-karnataka-454762" }
+            ].map((link) => (
+              <a
+                key={link.label}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
                 style={{
                   width: 34,
                   height: 34,
@@ -890,10 +896,11 @@ export function Footer() {
                   fontSize: 10,
                   color: "var(--ink-dim)",
                   cursor: "pointer",
+                  textDecoration: "none"
                 }}
               >
-                {s}
-              </div>
+                {link.label}
+              </a>
             ))}
           </div>
         </div>

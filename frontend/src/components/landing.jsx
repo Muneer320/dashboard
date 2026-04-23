@@ -291,7 +291,7 @@ export default function Landing() {
                 Our Flagships
               </h2>
             </div>
-            <a onClick={() => navigate('/explore')} className="btn sm">See all 24 events →</a>
+            <a href="https://unstop.com/college-fests/ascent-scaler-school-of-technology-bengaluru-karnataka-454762" target="_blank" rel="noopener noreferrer" className="btn sm">See all events →</a>
           </div>
           <div style={{
             display: 'grid',
@@ -299,12 +299,20 @@ export default function Landing() {
             gap: 16,
           }}>
             {[
-              { title: 'Anvil', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Anvil_poydj2.png' },
-              { title: 'Ship to Scaler', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png' },
-              { title: 'Impulse', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Impulse_fhczet.png' },
-              { title: 'Launchpad', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Launchpad_dixz7h.png' },
-            ].map(({ title, imgUrl }) => (
-              <PosterPlaceholder key={title} title={title} imgUrl={imgUrl} w="100%" h={isMobile ? 200 : 340} />
+              { title: 'Anvil', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Anvil_poydj2.png', linkUrl: 'https://unstop.com/hackathons/the-anvil-hackathon-ascent-scaler-school-of-technology-bengaluru-karnataka-1669632' },
+              { title: 'Ship to Scaler', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png', linkUrl: '' },
+              { title: 'Impulse', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Impulse_fhczet.png', linkUrl: 'https://unstop.com/hackathons/impulse-cp-team-contest-ascent-scaler-school-of-technology-bengaluru-karnataka-1669639' },
+              { title: 'Launchpad', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Launchpad_dixz7h.png', linkUrl: 'https://unstop.com/events/launchpad-from-idea-to-impact-ascent-scaler-school-of-technology-bengaluru-karnataka-1669644' },
+            ].map(({ title, imgUrl, linkUrl }) => (
+              linkUrl ? (
+                <a key={title} href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
+                  <PosterPlaceholder title={title} imgUrl={imgUrl} w="100%" h={isMobile ? 200 : 340} />
+                </a>
+              ) : (
+                <div key={title}>
+                  <PosterPlaceholder title={title} imgUrl={imgUrl} w="100%" h={isMobile ? 200 : 340} />
+                </div>
+              )
             ))}
           </div>
         </div>
