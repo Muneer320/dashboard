@@ -142,7 +142,7 @@ export default function Landing() {
           position: 'relative', zIndex: 2,
         }}>
           <a onClick={() => navigate('/credentials')} className="btn primary" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
-            Get Credentials
+            Register
             <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, opacity: 0.7 }}>→</span>
           </a>
           <a onClick={() => navigate('/login')} className="btn" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
