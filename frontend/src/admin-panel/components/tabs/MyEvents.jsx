@@ -1,567 +1,119 @@
-import React, { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
+import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useData } from '../../context/DataContext'
-import Pagination from '../Pagination'
 import './MyEvents.css'
-
-// ── Submission Modal (rendered via portal onto document.body) ──────────────────
-// Using createPortal bypasses ALL parent stacking contexts (overflow, transform,
-// filter, will-change) that would otherwise clip a position:fixed overlay.
-
-function SubmissionModal({ participant, onClose }) {
-  const { name, username, eventName, submissionData } = participant
-
-  // Collect submitted phases only
-  const phases = Object.entries(submissionData || {})
-    .filter(([, phaseData]) => typeof phaseData === 'object' && phaseData !== null && phaseData?.submitted)
-    .sort(([a], [b]) => a.localeCompare(b))
-
-  function fmtDate(iso) {
-    if (!iso) return '—'
-    return new Date(iso).toLocaleString('en-IN', {
-      day: 'numeric', month: 'short', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    })
-  }
-
-  function fmtLabel(qid) {
-    return (qid || '')
-      .replace(/[-_]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase())
-  }
-
-  function renderAnswer(answer) {
-    if (answer === null || answer === undefined) return <span style={{ color: 'var(--text-muted)' }}>—</span>
-    if (Array.isArray(answer)) {
-      return (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {answer.map((v, i) => (
-            <span key={i} style={chipStyle}>{String(v)}</span>
-          ))}
-        </div>
-      )
-    }
-    const str = String(answer)
-    if (/^https?:\/\//i.test(str)) {
-      return (
-        <a href={str} target="_blank" rel="noopener noreferrer" style={linkStyle}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
-            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-          </svg>
-          {str.length > 60 ? str.slice(0, 60) + '…' : str}
-        </a>
-      )
-    }
-    return <span style={{ color: 'var(--text-primary)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{str}</span>
-  }
-
-  const modal = (
-    <div style={overlayStyle} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={modalStyle}>
-        {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <div style={avatarStyle}>{(name || '?').charAt(0).toUpperCase()}</div>
-              <div>
-                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#f0f0f8' }}>{name}</h2>
-                <p style={{ margin: 0, fontSize: 12, color: '#60607a' }}>{username}</p>
-              </div>
-            </div>
-            <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-              <span style={infoBadgeStyle}>{eventName}</span>
-              <span style={successBadgeStyle}>✓ {phases.length} phase{phases.length !== 1 ? 's' : ''} submitted</span>
-            </div>
-          </div>
-          <button onClick={onClose} style={closeBtnStyle} aria-label="Close">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* Phase sections */}
-        {phases.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px 0', color: '#60607a' }}>
-            No submitted phases found.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20, overflowY: 'auto', maxHeight: 'calc(80vh - 160px)', paddingRight: 4 }}>
-            {phases.map(([phaseKey, phaseData]) => {
-              const phaseNum = phaseKey.replace('phase', '')
-              const answers = Array.isArray(phaseData.answers) ? phaseData.answers : []
-              return (
-                <div key={phaseKey} style={phaseCardStyle}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={phaseNumStyle}>P{phaseNum}</div>
-                      <span style={{ fontWeight: 600, fontSize: 14, color: '#f0f0f8' }}>Phase {phaseNum}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#60607a', textAlign: 'right' }}>
-                      <div>Submitted</div>
-                      <div style={{ color: '#a0a0b8', marginTop: 2 }}>{fmtDate(phaseData.submitted_at)}</div>
-                    </div>
-                  </div>
-
-                  {answers.length === 0 ? (
-                    <p style={{ margin: 0, fontSize: 13, color: '#60607a' }}>No answers recorded.</p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                      {answers.map((a, i) => (
-                        <div key={i} style={qaRowStyle}>
-                          <div style={qLabelStyle}>{fmtLabel(a.question_id)}</div>
-                          <div style={{ fontSize: 13 }}>{renderAnswer(a.answer)}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-
-  // Portal onto document.body — completely escapes any parent stacking context
-  return createPortal(modal, document.body)
-}
-
-// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function MyEvents() {
   const { user, isAdmin } = useAuth()
   const { events, participants } = useData()
-
-  const [modalParticipant, setModalParticipant] = useState(null)
-  const [activeEventId, setActiveEventId]       = useState(null)
+  const navigate = useNavigate()
 
   const visibleEvents = isAdmin
     ? events
     : events.filter(ev => user?.events?.includes(ev.id))
 
-  // Auto-select first event if nothing is selected yet
-  const selectedId    = activeEventId ?? visibleEvents[0]?.id
-  const selectedEvent = visibleEvents.find(ev => ev.id === selectedId)
+  function handleCardClick(eventId) {
+    navigate(`/admin/dashboard/events/${eventId}`)
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return null
+    return new Date(iso).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric',
+    })
+  }
 
   return (
     <div className="myevents-page fade-in">
       <div className="section-header">
         <span className="section-title">{isAdmin ? 'All Events' : 'My Events'}</span>
-        <span className="badge badge-accent">{visibleEvents.length} events</span>
+        <span className="badge badge-accent">{visibleEvents.length} event{visibleEvents.length !== 1 ? 's' : ''}</span>
       </div>
 
       {visibleEvents.length === 0 ? (
         <div className="empty-state">
           <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-            <line x1="16" y1="2" x2="16" y2="6"/>
-            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
             <line x1="3" y1="10" x2="21" y2="10"/>
           </svg>
           <p>No events assigned.</p>
         </div>
       ) : (
-        <>
-          {/* ── Event tab bar ──────────────────────────────────────────────── */}
-          <div className="event-tab-bar">
-            {visibleEvents.map(ev => {
-              const evParticipants = participants.filter(p => p.eventId === ev.id)
-              const submittedCount = evParticipants.filter(p => p.submitted).length
-              return (
-                <button
-                  key={ev.id}
-                  className={`event-tab-btn ${ev.id === selectedId ? 'active' : ''}`}
-                  onClick={() => setActiveEventId(ev.id)}
-                >
-                  <span className="etb-name">{ev.name}</span>
-                  <span className="etb-chips">
-                    <span className="etb-chip">{evParticipants.length} reg</span>
-                    {submittedCount > 0 && (
-                      <span className="etb-chip etb-chip-submitted">{submittedCount} sub</span>
+        <div className="events-card-grid">
+          {visibleEvents.map(ev => {
+            const evParticipants = participants.filter(p => p.eventId === ev.id)
+            const registeredCount = ev.registered ?? evParticipants.length
+            const submittedCount  = ev.submitted  ?? evParticipants.filter(p => p.submitted).length
+            const attendedCount   = ev.attended   ?? evParticipants.filter(p => p.isAttending).length
+
+            return (
+              <button
+                key={ev.id}
+                className="event-card"
+                onClick={() => handleCardClick(ev.id)}
+                aria-label={`Open event: ${ev.name}`}
+              >
+                {/* Card header */}
+                <div className="ec-header">
+                  <div className="ec-title-row">
+                    <h3 className="ec-title">{ev.name}</h3>
+                    <svg className="ec-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                      <polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                  </div>
+                  <div className="ec-meta">
+                    {ev.category && (
+                      <span className="badge badge-accent ec-badge">{ev.category}</span>
                     )}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* ── Selected event block ───────────────────────────────────────── */}
-          {selectedEvent && (
-            <EventBlock
-              event={selectedEvent}
-              participants={participants}
-              onViewSubmission={setModalParticipant}
-            />
-          )}
-        </>
-      )}
-
-      {/* Modal via portal — renders on document.body, no stacking context issues */}
-      {modalParticipant && (
-        <SubmissionModal
-          participant={modalParticipant}
-          onClose={() => setModalParticipant(null)}
-        />
-      )}
-    </div>
-  )
-}
-
-// ── CSV export ────────────────────────────────────────────────────────────────
-
-function csvCell(val) {
-  if (val === null || val === undefined) return ''
-  const str = Array.isArray(val) ? val.join('; ') : String(val)
-  // Wrap in quotes if the value contains commas, quotes, or newlines
-  if (/[",\n\r]/.test(str)) return '"' + str.replace(/"/g, '""') + '"'
-  return str
-}
-
-function exportSubmissionsCSV(event, evParticipants) {
-  const submitted = evParticipants.filter(p => p.submitted && p.submissionData)
-
-  if (submitted.length === 0) {
-    alert('No submissions to export for this event.')
-    return
-  }
-
-  // ── Discover all phases and question IDs across every submission ──────────
-  // Structure: { phase1: Set<question_id>, phase2: Set<question_id>, ... }
-  const phaseQMap = {}
-
-  for (const p of submitted) {
-    const sub = p.submissionData || {}
-    for (const [phaseKey, phaseData] of Object.entries(sub)) {
-      if (typeof phaseData !== 'object' || !phaseData?.submitted) continue
-      if (!phaseQMap[phaseKey]) phaseQMap[phaseKey] = []
-      const answers = Array.isArray(phaseData.answers) ? phaseData.answers : []
-      for (const a of answers) {
-        if (a.question_id && !phaseQMap[phaseKey].includes(a.question_id)) {
-          phaseQMap[phaseKey].push(a.question_id)
-        }
-      }
-    }
-  }
-
-  const phases = Object.keys(phaseQMap).sort()  // ['phase1', 'phase2', ...]
-
-  // ── Build header row ──────────────────────────────────────────────────────
-  const staticCols = ['Name', 'Username', 'Status', 'Attended']
-  const phaseCols  = []  // ['phase1 » project_link', 'phase1 » submitted_at', ...]
-
-  for (const ph of phases) {
-    phaseCols.push(`${ph} » submitted_at`)
-    for (const qid of phaseQMap[ph]) {
-      phaseCols.push(`${ph} » ${qid}`)
-    }
-  }
-
-  const headers = [...staticCols, ...phaseCols]
-
-  // ── Build data rows ───────────────────────────────────────────────────────
-  const rows = submitted.map(p => {
-    const sub = p.submissionData || {}
-    const row = [
-      csvCell(p.name),
-      csvCell(p.username),
-      csvCell(p.status),
-      csvCell(p.isAttending ? 'Yes' : 'No'),
-    ]
-
-    for (const ph of phases) {
-      const phaseData = sub[ph]
-      const isSubmitted = typeof phaseData === 'object' && phaseData?.submitted
-
-      // submitted_at column
-      row.push(csvCell(isSubmitted ? phaseData.submitted_at : ''))
-
-      // one column per question
-      const answerMap = {}
-      if (isSubmitted && Array.isArray(phaseData.answers)) {
-        for (const a of phaseData.answers) answerMap[a.question_id] = a.answer
-      }
-      for (const qid of phaseQMap[ph]) {
-        row.push(csvCell(answerMap[qid] ?? ''))
-      }
-    }
-
-    return row.join(',')
-  })
-
-  // ── Assemble and trigger download ─────────────────────────────────────────
-  const csv     = [headers.join(','), ...rows].join('\r\n')
-  const blob    = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url     = URL.createObjectURL(blob)
-  const link    = document.createElement('a')
-  const safeName = event.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()
-  link.href     = url
-  link.download = `${safeName}_submissions.csv`
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
-// ── Event block ────────────────────────────────────────────────────────────────
-
-function EventBlock({ event, participants, onViewSubmission }) {
-  const evParticipants = participants.filter(p => p.eventId === event.id)
-  const submittedCount = evParticipants.filter(p => p.submitted).length
-
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 10
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [event.id])
-
-  const totalPages = Math.ceil(evParticipants.length / itemsPerPage)
-  const paginatedParticipants = evParticipants.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
-
-  return (
-    <div className="event-block">
-      {/* Event heading */}
-      <div className="event-block-header">
-        <div className="event-meta">
-          <h3 className="event-block-title">{event.name}</h3>
-          <div className="event-chips">
-            {event.category && <span className="badge badge-accent">{event.category}</span>}
-            <span className="badge badge-info">
-              {event.date ? new Date(event.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
-            </span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              {Array.isArray(event.venue) ? event.venue.join(', ') : event.venue}
-            </span>
-          </div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {/* Export CSV button */}
-          <button
-            onClick={() => exportSubmissionsCSV(event, evParticipants)}
-            style={exportBtnStyle}
-            title={submittedCount === 0 ? 'No submissions yet' : `Export ${submittedCount} submission${submittedCount !== 1 ? 's' : ''} as CSV`}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export CSV
-            {submittedCount > 0 && (
-              <span style={exportCountStyle}>{submittedCount}</span>
-            )}
-          </button>
-          <div className="event-mini-stats">
-            <div className="mini-stat">
-              <span className="mini-val">{evParticipants.length}</span>
-              <span className="mini-label">Registered</span>
-            </div>
-            <div className="mini-stat">
-              <span className="mini-val">{submittedCount}</span>
-              <span className="mini-label">Submitted</span>
-            </div>
-            <div className="mini-stat">
-              <span className="mini-val" style={{ color: 'var(--success)' }}>
-                {evParticipants.filter(p => p.isAttending).length}
-              </span>
-              <span className="mini-label">Attended</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Participants table */}
-      {evParticipants.length === 0 ? (
-        <p style={{ padding: '20px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-          No participants registered yet.
-        </p>
-      ) : (
-        <>
-          <div className="table-responsive">
-            <table className="data-table submissions-table">
-              <thead>
-                <tr>
-                  <th>Participant</th>
-                  <th>Team</th>
-                  <th>Status</th>
-                  <th>Attended</th>
-                  <th>Submission</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedParticipants.map(p => (
-              <tr key={p.id} className="submission-row">
-                <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
-                  <div>{p.name}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 2 }}>{p.username}</div>
-                </td>
-                <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                  {p.teamId ? p.teamId.slice(0, 8) + '…' : '—'}
-                </td>
-                <td>
-                  <span className={`badge ${p.status === 'active' ? 'badge-success' : 'badge-danger'}`}>
-                    {p.status === 'active' ? 'Active' : 'Restricted'}
-                  </span>
-                </td>
-                <td>
-                  <span className={`badge ${p.isAttending ? 'badge-success' : 'badge-warning'}`}>
-                    {p.isAttending ? 'Yes' : 'No'}
-                  </span>
-                </td>
-                <td>
-                  {p.submitted ? (
-                    <button
-                      onClick={() => onViewSubmission({ ...p, eventName: event.name })}
-                      style={viewBtnStyle}
-                    >
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                        <line x1="16" y1="13" x2="8" y2="13"/>
-                        <line x1="16" y1="17" x2="8" y2="17"/>
-                        <polyline points="10 9 9 9 8 9"/>
+                    {fmtDate(ev.date) && (
+                      <span className="badge badge-info ec-badge">{fmtDate(ev.date)}</span>
+                    )}
+                  </div>
+                  {(Array.isArray(ev.venue) ? ev.venue.length > 0 : !!ev.venue) && (
+                    <div className="ec-venue">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                        <circle cx="12" cy="10" r="3"/>
                       </svg>
-                      View Submission
-                    </button>
-                  ) : (
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Not submitted</span>
+                      {Array.isArray(ev.venue) ? ev.venue.join(', ') : ev.venue}
+                    </div>
                   )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-            </table>
-          </div>
-          <Pagination 
-            currentPage={currentPage} 
-            totalPages={totalPages} 
-            onPageChange={setCurrentPage} 
-          />
-        </>
+                </div>
+
+                {/* Stats row */}
+                <div className="ec-stats">
+                  <div className="ec-stat">
+                    <span className="ec-stat-val">{registeredCount}</span>
+                    <span className="ec-stat-label">Registered</span>
+                  </div>
+                  <div className="ec-stat-divider"/>
+                  <div className="ec-stat">
+                    <span className="ec-stat-val ec-stat-attended">{attendedCount}</span>
+                    <span className="ec-stat-label">Attended</span>
+                  </div>
+                  <div className="ec-stat-divider"/>
+                  <div className="ec-stat">
+                    <span className="ec-stat-val ec-stat-submitted">{submittedCount}</span>
+                    <span className="ec-stat-label">Submitted</span>
+                  </div>
+                </div>
+
+                {/* Footer hint */}
+                <div className="ec-footer">
+                  <span>View details</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                  </svg>
+                </div>
+              </button>
+            )
+          })}
+        </div>
       )}
     </div>
   )
-}
-
-// ── Inline styles (use hardcoded hex values so they work outside .admin-theme) ──
-
-const overlayStyle = {
-  position: 'fixed', inset: 0, zIndex: 99999,
-  background: 'rgba(0, 0, 0, 0.75)',
-  backdropFilter: 'blur(6px)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  padding: 20,
-  fontFamily: '"Inter", system-ui, sans-serif',
-}
-
-const modalStyle = {
-  background: '#1c1c28',
-  border: '1px solid rgba(124, 58, 237, 0.3)',
-  borderRadius: 16,
-  width: '100%',
-  maxWidth: 700,
-  maxHeight: '88vh',
-  padding: '28px 30px',
-  position: 'relative',
-  boxShadow: '0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.06)',
-  overflowY: 'auto',
-  color: '#f0f0f8',
-}
-
-const avatarStyle = {
-  width: 38, height: 38, borderRadius: '50%',
-  background: '#7c3aed',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  fontSize: 16, fontWeight: 700, color: '#fff', flexShrink: 0,
-}
-
-const closeBtnStyle = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  color: '#60607a', padding: 6, borderRadius: 8,
-  display: 'flex', alignItems: 'center',
-  transition: 'color .15s, background .15s',
-}
-
-const infoBadgeStyle = {
-  display: 'inline-flex', alignItems: 'center',
-  padding: '3px 10px', borderRadius: 999,
-  background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)',
-  color: '#93c5fd', fontSize: 11, fontWeight: 600,
-}
-
-const successBadgeStyle = {
-  display: 'inline-flex', alignItems: 'center',
-  padding: '3px 10px', borderRadius: 999,
-  background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)',
-  color: '#6ee7b7', fontSize: 11, fontWeight: 600,
-}
-
-const phaseCardStyle = {
-  background: '#16161f',
-  border: '1px solid rgba(255,255,255,0.07)',
-  borderRadius: 12,
-  padding: '18px 20px',
-}
-
-const phaseNumStyle = {
-  width: 28, height: 28, borderRadius: '50%',
-  background: '#7c3aed',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  fontSize: 11, fontWeight: 700, color: '#fff',
-}
-
-const qaRowStyle = {
-  paddingBottom: 12,
-  borderBottom: '1px solid rgba(255,255,255,0.07)',
-}
-
-const qLabelStyle = {
-  fontSize: 11, fontWeight: 600,
-  color: '#60607a',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  marginBottom: 5,
-}
-
-const chipStyle = {
-  fontSize: 12, padding: '3px 10px', borderRadius: 999,
-  background: 'rgba(255,255,255,0.08)',
-  border: '1px solid rgba(255,255,255,0.07)',
-  color: '#a0a0b8',
-}
-
-const linkStyle = {
-  display: 'inline-flex', alignItems: 'center', gap: 5,
-  fontSize: 13, color: '#9d5af0',
-  textDecoration: 'none', wordBreak: 'break-all',
-}
-
-const viewBtnStyle = {
-  display: 'inline-flex', alignItems: 'center', gap: 6,
-  padding: '5px 12px', borderRadius: 8,
-  background: 'rgba(124, 58, 237, 0.12)',
-  border: '1px solid rgba(124, 58, 237, 0.3)',
-  color: '#9d5af0',
-  fontSize: 12, fontWeight: 600, cursor: 'pointer',
-  transition: 'background .15s, border-color .15s',
-}
-
-const exportBtnStyle = {
-  display: 'inline-flex', alignItems: 'center', gap: 6,
-  padding: '7px 14px', borderRadius: 8,
-  background: 'rgba(16, 185, 129, 0.1)',
-  border: '1px solid rgba(16, 185, 129, 0.3)',
-  color: '#6ee7b7',
-  fontSize: 12, fontWeight: 600, cursor: 'pointer',
-  transition: 'background .15s, border-color .15s',
-  whiteSpace: 'nowrap',
-}
-
-const exportCountStyle = {
-  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  minWidth: 18, height: 18, borderRadius: 999,
-  background: 'rgba(16, 185, 129, 0.2)',
-  color: '#6ee7b7',
-  fontSize: 10, fontWeight: 700, padding: '0 4px',
 }

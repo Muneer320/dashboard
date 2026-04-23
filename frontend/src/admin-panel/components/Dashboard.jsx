@@ -7,6 +7,7 @@ import Overview from './tabs/Overview'
 import Participants from './tabs/Participants'
 import Scanner from './tabs/Scanner'
 import MyEvents from './tabs/MyEvents'
+import EventDetail from './tabs/EventDetail'
 import ContactInfo from './tabs/ContactInfo'
 import Meals from './tabs/Meals'
 import ManageRegistrations from './tabs/ManageRegistrations'
@@ -39,7 +40,8 @@ export default function Dashboard() {
             <Route path="overview"     element={canAccess('overview')     ? <Overview />     : <Forbidden />} />
             <Route path="participants" element={canAccess('participants') ? <Participants />  : <Forbidden />} />
             <Route path="scanner/*"    element={canAccess('scanner')     ? <Scanner />      : <Forbidden />} />
-            <Route path="events"       element={canAccess('myEvents')    ? <MyEvents />     : <Forbidden />} />
+            <Route path="events"           element={canAccess('myEvents')    ? <MyEvents />     : <Forbidden />} />
+            <Route path="events/:eventId"   element={canAccess('myEvents')    ? <EventDetail />  : <Forbidden />} />
             <Route path="contact"      element={canAccess('contactInfo') ? <ContactInfo />  : <Forbidden />} />
             <Route path="admins"       element={canAccess('adminUsers')  ? <AdminUsers />   : <Forbidden />} />
             <Route path="meals"        element={canAccess('meals')       ? <Meals />        : <Forbidden />} />

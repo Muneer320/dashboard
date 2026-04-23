@@ -81,6 +81,36 @@ class MyEventItem(BaseModel):
     communityLink: Optional[str] = None
 
 
+# ── Event Detail (single event with full data) ────────────────────────────────
+
+class EventUpdateRequest(BaseModel):
+    """Body for PATCH /admin-panel/events/{event_id} — all fields optional."""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    venue: Optional[list[str]] = None
+    date: Optional[str] = None          # ISO date string YYYY-MM-DD
+    category: Optional[str] = None
+    maxParticipants: Optional[int] = None
+    communityLink: Optional[str] = None
+
+
+class EventDetailResponse(BaseModel):
+    """Full event detail returned by GET /admin-panel/events/{event_id}."""
+    id: str
+    name: str
+    description: Optional[str] = None
+    category: str
+    date: Optional[str]
+    venue: list[str]
+    maxParticipants: int
+    registered: int
+    attended: int
+    submitted: int
+    restricted: int
+    communityLink: Optional[str] = None
+    participants: list[MyEventParticipant]
+
+
 # ── Contact Info & Admins ─────────────────────────────────────────────────────
 
 class AdminUserItem(BaseModel):
