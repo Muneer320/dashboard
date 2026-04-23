@@ -27,7 +27,7 @@ const _BANNER_MAP = {
 export function getEventBannerUrl(name) {
   if (!name) return null;
   const key = name.toLowerCase().trim();
-  const file = BANNER_MAP[key];
+  const file = _BANNER_MAP[key];
   if (!file) return null;
   return file;
 }

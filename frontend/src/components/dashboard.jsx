@@ -1768,15 +1768,6 @@ export function EventDetail() {
                 </div>
               </div>
             )}
-
-
-
-            <a
-              onClick={() => navigate(`/rating?event_id=${eventId}`)}
-              className="btn sm ghost"
-            >
-              Rate this event →
-            </a>
           </div>
         </div>
       </div>

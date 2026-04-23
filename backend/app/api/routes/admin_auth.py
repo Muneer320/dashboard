@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from supabase import AsyncClient
+from app.core.limiter import limiter
 
 from app.api.deps import get_current_admin
 from app.db.supabase_client import get_supabase
@@ -16,7 +17,8 @@ class AdminMeResponse(BaseModel):
     username: str
     name: str
     role: str
-    mail: str
+    mail: str | None
+    events: list[str] = []
 
 
 class AdminLoginRequest(BaseModel):
@@ -26,7 +28,9 @@ class AdminLoginRequest(BaseModel):
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def admin_login_endpoint(
+    request: Request,
     payload: AdminLoginRequest,
     supabase: AsyncClient = Depends(get_supabase),
 ) -> TokenResponse:
@@ -46,4 +50,5 @@ async def admin_me(
         name=current_admin.name,
         role=current_admin.role.value,
         mail=current_admin.mail,
+        events=current_admin.events or [],
     )

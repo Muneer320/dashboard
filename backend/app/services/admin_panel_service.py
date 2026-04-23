@@ -501,12 +501,11 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
     return result
 
 
-async def get_event_managers(supabase: AsyncClient) -> list[dict]:
-    """All eventManager rows -- admin-only Contact Info tab."""
+async def get_admin_users(supabase: AsyncClient) -> list[dict]:
+    """All admin rows -- admin-only Admins tab."""
     resp = await (
         supabase.table("admins")
         .select("*")
-        .eq("role", AdminRole.EVENT_MANAGER.value)
         .execute()
     )
     managers = [Admin.from_row(r) for r in rows(resp)]
@@ -515,6 +514,7 @@ async def get_event_managers(supabase: AsyncClient) -> list[dict]:
             "uid": m.uid,
             "username": m.username,
             "name": m.name,
+            "role": m.role.value,
             "phone": m.phone,
             "mail": m.mail,
             "events": m.events or [],
@@ -523,17 +523,18 @@ async def get_event_managers(supabase: AsyncClient) -> list[dict]:
     ]
 
 
-async def create_event_manager(
+async def create_admin_user(
     supabase: AsyncClient,
     username: str,
     name: str,
+    role: str,
     password: str,
-    mail: str,
+    mail: str | None,
     phone: str | None,
     events: list[str],
 ) -> dict:
     """
-    Create a new Admin row with role=eventManager.
+    Create a new Admin row.
     Raises 409 if username or mail is already taken.
     """
     u_resp = await (
@@ -549,21 +550,22 @@ async def create_event_manager(
             detail=f"Username '{username}' is already taken",
         )
 
-    m_resp = await (
-        supabase.table("admins")
-        .select("uid")
-        .eq("mail", mail)
-        .limit(1)
-        .execute()
-    )
-    if first_row(m_resp) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Email '{mail}' is already registered",
+    if mail:
+        m_resp = await (
+            supabase.table("admins")
+            .select("uid")
+            .eq("mail", mail)
+            .limit(1)
+            .execute()
         )
+        if first_row(m_resp) is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Email '{mail}' is already registered",
+            )
 
     payload = {
-        "role": AdminRole.EVENT_MANAGER.value,
+        "role": role,
         "username": username,
         "name": name,
         "password_hash": get_password_hash(password),
@@ -582,30 +584,32 @@ async def create_event_manager(
         "uid": row.get("uid"),
         "username": row["username"],
         "name": row["name"],
+        "role": row["role"],
         "phone": row.get("phone"),
         "mail": row["mail"],
         "events": row.get("events") or [],
-        "message": "Event manager created successfully",
+        "message": "Admin created successfully",
     }
 
 
-async def update_event_manager(
+async def update_admin_user(
     supabase: AsyncClient,
     uid: int,
     name: str | None,
+    role: str | None,
+    password: str | None,
     mail: str | None,
     phone: str | None,
     events: list[str] | None,
 ) -> dict:
     """
-    Update an eventManager's profile fields.
+    Update an admin's profile fields.
     Only fields provided (non-None) are changed.
     """
     resp = await (
         supabase.table("admins")
         .select("*")
         .eq("uid", uid)
-        .eq("role", AdminRole.EVENT_MANAGER.value)
         .limit(1)
         .execute()
     )
@@ -613,26 +617,31 @@ async def update_event_manager(
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Event manager not found",
+            detail="Admin not found",
         )
 
     patch: dict = {}
     if name is not None:
         patch["name"] = name
+    if role is not None:
+        patch["role"] = role
+    if password is not None and password.strip():
+        patch["password_hash"] = get_password_hash(password)
     if mail is not None:
-        conflict = await (
-            supabase.table("admins")
-            .select("uid")
-            .eq("mail", mail)
-            .neq("uid", uid)
-            .limit(1)
-            .execute()
-        )
-        if first_row(conflict) is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Email '{mail}' is already registered",
+        if mail:
+            conflict = await (
+                supabase.table("admins")
+                .select("uid")
+                .eq("mail", mail)
+                .neq("uid", uid)
+                .limit(1)
+                .execute()
             )
+            if first_row(conflict) is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Email '{mail}' is already registered",
+                )
         patch["mail"] = mail
     if phone is not None:
         patch["phone"] = phone
@@ -654,10 +663,48 @@ async def update_event_manager(
         "uid": updated["uid"],
         "username": updated["username"],
         "name": updated["name"],
+        "role": updated["role"],
         "phone": updated.get("phone"),
         "mail": updated["mail"],
         "events": updated.get("events") or [],
-        "message": "Event manager updated successfully",
+        "message": "Admin updated successfully",
+    }
+
+async def delete_admin_user(supabase: AsyncClient, uid: int, current_admin_uid: int) -> dict:
+    """
+    Remove an admin account.
+    """
+    if uid == current_admin_uid:
+        raise HTTPException(status_code=409, detail="Cannot delete your own account")
+
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", uid)
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Admin not found")
+        
+    # Prevent deleting the last admin
+    if row["role"] == AdminRole.ADMIN.value:
+        admins_resp = await supabase.table("admins").select("uid").eq("role", AdminRole.ADMIN.value).execute()
+        if len(rows(admins_resp)) <= 1:
+            raise HTTPException(status_code=409, detail="Cannot delete the last super admin")
+
+    await supabase.table("admins").delete().eq("uid", uid).execute()
+    
+    return {
+        "uid": row["uid"],
+        "username": row["username"],
+        "name": row["name"],
+        "role": row["role"],
+        "phone": row.get("phone"),
+        "mail": row["mail"],
+        "events": row.get("events") or [],
+        "message": "Admin deleted successfully",
     }
 
 
@@ -964,3 +1011,154 @@ async def delete_event_manager(supabase: AsyncClient, uid: int) -> dict:
         .execute()
     )
     return saved
+
+
+# ── Event Detail / Update ────────────────────────────────────────────────────
+
+
+async def get_event_detail(
+    supabase: AsyncClient,
+    admin: Admin,
+    event_id: str,
+) -> dict:
+    """
+    Return full detail for a single event including participant list.
+    admin → any event; eventManager → assigned events only.
+    """
+    all_events = await _all_events(supabase)
+    all_event_ids = [str(e.id) for e in all_events]
+    scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
+
+    if event_id not in scoped_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this event",
+        )
+
+    event = next((e for e in all_events if str(e.id) == event_id), None)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    all_users = await _all_users(supabase)
+
+    participants: list[dict] = []
+    registered = attended = submitted_count = restricted_count = 0
+
+    for user in all_users:
+        entry = (user.events or {}).get(event_id)
+        if entry is None:
+            continue
+        registered += 1
+        is_submitted = _has_any_submission(entry)
+        is_attending = bool(entry.get("isAttending", False))
+        is_restricted = bool(entry.get("restricted", False))
+        if is_submitted:
+            submitted_count += 1
+        if is_attending:
+            attended += 1
+        if is_restricted:
+            restricted_count += 1
+
+        participants.append({
+            "id": str(user.id),
+            "name": user.name,
+            "teamId": entry.get("teamId"),
+            "status": "restricted" if is_restricted else "active",
+            "submitted": is_submitted,
+            "isAttending": is_attending,
+        })
+
+    return {
+        "id": event_id,
+        "name": event.name,
+        "description": event.description,
+        "category": event.category or "Other",
+        "date": event.start_date.date().isoformat() if event.start_date else None,
+        "end_date": event.end_date.isoformat() if event.end_date else None,
+        "registration_deadline": event.registration_deadline.isoformat() if event.registration_deadline else None,
+        "venue": event.venue or [],
+        "maxParticipants": event.max_participants,
+        "registered": registered,
+        "attended": attended,
+        "submitted": submitted_count,
+        "restricted": restricted_count,
+        "communityLink": event.community_link,
+        "rules": event.rules or "",
+        "judges": event.judges or [],
+        "rounds": event.rounds or {},
+        "questions": event.questions or {},
+        "participants": participants,
+    }
+
+
+async def update_event_details(
+    supabase: AsyncClient,
+    admin: Admin,
+    event_id: str,
+    patch_data: dict,
+) -> dict:
+    """
+    Update core event fields.
+    admin       → any event
+    eventManager → must be assigned to this event
+    """
+    all_events = await _all_events(supabase)
+    all_event_ids = [str(e.id) for e in all_events]
+    scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
+
+    if event_id not in scoped_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this event",
+        )
+
+    event = next((e for e in all_events if str(e.id) == event_id), None)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    # Build DB patch — only include explicitly provided (non-None) fields
+    db_patch: dict = {}
+    if patch_data.get("name") is not None:
+        db_patch["name"] = patch_data["name"]
+    if patch_data.get("description") is not None:
+        db_patch["description"] = patch_data["description"]
+    if patch_data.get("venue") is not None:
+        db_patch["venue"] = patch_data["venue"]
+    if patch_data.get("date") is not None:
+        db_patch["start_date"] = patch_data["date"]   # stored as start_date in DB
+    if patch_data.get("end_date") is not None:
+        db_patch["end_date"] = patch_data["end_date"]
+    if patch_data.get("registration_deadline") is not None:
+        db_patch["registration_deadline"] = patch_data["registration_deadline"]
+    if patch_data.get("category") is not None:
+        db_patch["category"] = patch_data["category"]
+    if patch_data.get("maxParticipants") is not None:
+        db_patch["max_participants"] = patch_data["maxParticipants"]
+    if patch_data.get("communityLink") is not None:
+        db_patch["community_link"] = patch_data["communityLink"]
+    if patch_data.get("rules") is not None:
+        db_patch["rules"] = patch_data["rules"]
+    if patch_data.get("judges") is not None:
+        db_patch["judges"] = patch_data["judges"]
+    if patch_data.get("rounds") is not None:
+        db_patch["rounds"] = patch_data["rounds"]
+    if patch_data.get("questions") is not None:
+        db_patch["questions"] = patch_data["questions"]
+
+    if not db_patch:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields provided to update",
+        )
+
+    event_uuid = _parse_event_uuid(event_id)
+    update_resp = await (
+        supabase.table("events")
+        .update(db_patch)
+        .eq("id", str(event_uuid))
+        .execute()
+    )
+    updated_row = first_row(update_resp)
+
+    # Re-fetch for a consistent return shape
+    return await get_event_detail(supabase, admin, event_id)

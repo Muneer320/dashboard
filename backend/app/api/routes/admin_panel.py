@@ -5,6 +5,7 @@ import re
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from supabase import AsyncClient
+from fastapi_cache.decorator import cache
 
 # Maximum accepted upload size (10 MB).
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -16,13 +17,15 @@ from app.api.deps import get_admin_only, get_admin_or_em, get_current_admin, get
 from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.schemas.admin_panel import (
-    EventManagerCreate,
-    EventManagerItem,
-    EventManagerResponse,
-    EventManagerUpdate,
+    AdminUserCreate,
+    AdminUserItem,
+    AdminUserResponse,
+    AdminUserUpdate,
+    EventDetailResponse,
     EventMealsItem,
     EventMealsUpdate,
     EventStatsItem,
+    EventUpdateRequest,
     MealEntryResponse,
     MyEventItem,
     ParticipantItem,
@@ -34,20 +37,22 @@ from app.schemas.admin_panel import (
     UserMealsResponse,
 )
 from app.services.admin_panel_service import (
-    create_event_manager,
-    delete_event_manager,
-    get_event_managers,
+    create_admin_user,
+    delete_admin_user,
+    get_admin_users,
+    get_event_detail,
     get_events_meals_counts,
     get_events_with_stats,
     get_my_events,
-    get_overview_stats,
     get_participants_list,
     list_user_meals,
     lookup_participant,
     restrict_participant,
     set_user_meal_entry,
-    update_event_manager,
+    update_admin_user,
+    update_event_details,
     update_event_meals_count,
+    get_overview_stats,
 )
 from app.services.bulk_enroll_service import bulk_enroll, parse_upload
 from app.services.credentials_service import (
@@ -134,6 +139,7 @@ async def handle_bulk_registration(
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)
+@cache(expire=30)
 async def overview_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -235,84 +241,114 @@ async def my_events(
     return [MyEventItem(**r) for r in rows]
 
 
-# ── Contact Info ──────────────────────────────────────────────────────────────
+# ── Individual Event Detail ────────────────────────────────────────────────────
 
-@router.get("/event-managers", response_model=list[EventManagerItem])
-async def event_managers(
+@router.get("/events/{event_id}", response_model=EventDetailResponse)
+async def event_detail(
+    event_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+) -> EventDetailResponse:
+    """
+    Full detail for a single event (with participant list).
+    admin → any event; eventManager → assigned events only.
+    """
+    data = await get_event_detail(supabase, admin, event_id)
+    return EventDetailResponse(**data)
+
+
+@router.patch("/events/{event_id}", response_model=EventDetailResponse)
+async def patch_event(
+    event_id: str,
+    body: EventUpdateRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+) -> EventDetailResponse:
+    """
+    Update core event fields.
+    admin → any event; eventManager → assigned events only.
+    """
+    data = await update_event_details(
+        supabase, admin, event_id, body.model_dump(exclude_none=True)
+    )
+    return EventDetailResponse(**data)
+
+
+# ── Admins ──────────────────────────────────────────────────────────────
+
+@router.get("/admin-users", response_model=list[AdminUserItem])
+async def admin_users(
     supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
-) -> list[EventManagerItem]:
+) -> list[AdminUserItem]:
     """
-    All eventManager accounts with contact info and assigned events.
+    All admin accounts.
     Admin role only.
     """
-    rows = await get_event_managers(supabase)
-    return [EventManagerItem(**r) for r in rows]
+    rows = await get_admin_users(supabase)
+    return [AdminUserItem(**r) for r in rows]
 
 
-@router.post("/event-managers", response_model=EventManagerResponse, status_code=201)
-async def create_em(
-    body: EventManagerCreate,
+@router.post("/admin-users", response_model=AdminUserResponse, status_code=201)
+async def create_admin(
+    body: AdminUserCreate,
     supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
-) -> EventManagerResponse:
+) -> AdminUserResponse:
     """
-    Create a new event manager account.
-    Provide username, name, password, mail, and optionally phone + events list.
+    Create a new admin account.
     Returns 409 if username or mail already exists.
     Admin role only.
     """
-    data = await create_event_manager(
+    data = await create_admin_user(
         supabase,
         username=body.username,
         name=body.name,
+        role=body.role,
         password=body.password,
         mail=body.mail,
         phone=body.phone,
         events=body.events,
     )
-    return EventManagerResponse(**data)
+    return AdminUserResponse(**data)
 
 
-@router.patch("/event-managers/{uid}", response_model=EventManagerResponse)
-async def update_em(
+@router.patch("/admin-users/{uid}", response_model=AdminUserResponse)
+async def update_admin(
     uid: int,
-    body: EventManagerUpdate,
+    body: AdminUserUpdate,
     supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
-) -> EventManagerResponse:
+) -> AdminUserResponse:
     """
-    Update an event manager's profile or reassign their events.
-    All body fields are optional — only provided fields are changed.
-    Send events=[...] to fully replace the assigned events list.
+    Update an admin's profile or reassign their events.
     Admin role only.
     """
-    data = await update_event_manager(
+    data = await update_admin_user(
         supabase,
         uid=uid,
         name=body.name,
+        role=body.role,
+        password=body.password,
         mail=body.mail,
         phone=body.phone,
         events=body.events,
     )
-    return EventManagerResponse(**data)
+    return AdminUserResponse(**data)
 
 
-@router.delete("/event-managers/{uid}", response_model=EventManagerResponse)
-async def delete_em(
+@router.delete("/admin-users/{uid}", response_model=AdminUserResponse)
+async def delete_admin(
     uid: int,
     supabase: AsyncClient = Depends(get_supabase),
-    _: Admin = Depends(get_admin_only),
-) -> EventManagerResponse:
+    current_admin: Admin = Depends(get_admin_only),
+) -> AdminUserResponse:
     """
-    Remove an event manager account.
-
-    Blocked (409) if this EM is the sole manager of any event.
-    Assign a replacement first, then retry.
+    Remove an admin account.
     Admin role only.
     """
-    data = await delete_event_manager(supabase, uid)
-    return EventManagerResponse(**data)
+    data = await delete_admin_user(supabase, uid, current_admin.uid)
+    return AdminUserResponse(**data)
 
 
 # ── Meals management ──────────────────────────────────────────────────────────

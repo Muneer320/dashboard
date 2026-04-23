@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from supabase import AsyncClient
+from app.core.limiter import limiter
 
 from app.api.deps import get_admin_or_em, get_current_user
 from app.db.supabase_client import get_supabase
@@ -13,7 +14,9 @@ router = APIRouter()
 
 
 @router.post("/{event_id}/submit", response_model=SubmissionResponse, status_code=201)
+@limiter.limit("10/minute")
 async def submit_event(
+    request: Request,
     event_id: str,
     payload: SubmissionRequest,
     supabase: AsyncClient = Depends(get_supabase),
