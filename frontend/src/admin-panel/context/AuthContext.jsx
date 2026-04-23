@@ -46,12 +46,12 @@ export function AuthProvider({ children }) {
     if (!user) return false
     const matrix = {
       overview:    ['admin', 'eventManager'],
-      participants:['admin', 'eventManager'],
+      participants:['admin'],                         // EM accesses via event detail page
       scanner:     ['admin', 'Scanner', 'eventManager'],
       myEvents:    ['admin', 'eventManager'],
       contactInfo: ['admin'],
       adminUsers:  ['admin'],
-      meals:          ['admin'],
+      meals:          ['admin'],                      // EM accesses via event detail page
       scanEntry:      ['admin', 'Scanner'],
       scanAttendance: ['admin', 'eventManager'],
       scanFood:       ['admin', 'Scanner'],

@@ -5,6 +5,7 @@ import re
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from supabase import AsyncClient
+from fastapi_cache.decorator import cache
 
 # Maximum accepted upload size (10 MB).
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -20,9 +21,11 @@ from app.schemas.admin_panel import (
     AdminUserItem,
     AdminUserResponse,
     AdminUserUpdate,
+    EventDetailResponse,
     EventMealsItem,
     EventMealsUpdate,
     EventStatsItem,
+    EventUpdateRequest,
     MealEntryResponse,
     MyEventItem,
     ParticipantItem,
@@ -35,6 +38,7 @@ from app.services.admin_panel_service import (
     create_admin_user,
     delete_admin_user,
     get_admin_users,
+    get_event_detail,
     get_events_meals_counts,
     get_events_with_stats,
     get_my_events,
@@ -44,6 +48,7 @@ from app.services.admin_panel_service import (
     restrict_participant,
     set_user_meal_entry,
     update_admin_user,
+    update_event_details,
     update_event_meals_count,
     get_overview_stats,
 )
@@ -128,6 +133,7 @@ async def handle_bulk_registration(
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)
+@cache(expire=30)
 async def overview_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -227,6 +233,39 @@ async def my_events(
     """
     rows = await get_my_events(supabase, admin)
     return [MyEventItem(**r) for r in rows]
+
+
+# ── Individual Event Detail ────────────────────────────────────────────────────
+
+@router.get("/events/{event_id}", response_model=EventDetailResponse)
+async def event_detail(
+    event_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+) -> EventDetailResponse:
+    """
+    Full detail for a single event (with participant list).
+    admin → any event; eventManager → assigned events only.
+    """
+    data = await get_event_detail(supabase, admin, event_id)
+    return EventDetailResponse(**data)
+
+
+@router.patch("/events/{event_id}", response_model=EventDetailResponse)
+async def patch_event(
+    event_id: str,
+    body: EventUpdateRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+) -> EventDetailResponse:
+    """
+    Update core event fields.
+    admin → any event; eventManager → assigned events only.
+    """
+    data = await update_event_details(
+        supabase, admin, event_id, body.model_dump(exclude_none=True)
+    )
+    return EventDetailResponse(**data)
 
 
 # ── Admins ──────────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from supabase import AsyncClient
+from app.core.limiter import limiter
 
 from app.api.deps import get_current_user
 from app.db.supabase_client import get_supabase
@@ -11,7 +12,9 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     payload: LoginRequest,
     supabase: AsyncClient = Depends(get_supabase),
 ) -> TokenResponse:
@@ -21,7 +24,9 @@ async def login(
 
 
 @router.post("/register", response_model=RegisterResponse)
+@limiter.limit("5/minute")
 async def register(
+    request: Request,
     payload: RegisterRequest,
     supabase: AsyncClient = Depends(get_supabase),
 ) -> RegisterResponse:

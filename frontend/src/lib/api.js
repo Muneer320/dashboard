@@ -199,6 +199,12 @@ export const adminPanel = {
   updateAdminUser: (uid, body) => patch(`/admin-panel/admin-users/${uid}`, body, { adminAuth: true }),
   deleteAdminUser: (uid) => del(`/admin-panel/admin-users/${uid}`, { adminAuth: true }),
 
+  // ── Single event detail + update ────────────────────────────────────────
+  getEvent: (eventId) =>
+    get(`/admin-panel/events/${eventId}`, { adminAuth: true }),
+  updateEvent: (eventId, body) =>
+    patch(`/admin-panel/events/${eventId}`, body, { adminAuth: true }),
+
   // ── Meals (per-event meals_count + per-user claim matrix) ────────────────
   eventsMealsCount: () =>
     get('/admin-panel/events/meals-count', { adminAuth: true }),
