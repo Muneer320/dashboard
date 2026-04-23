@@ -1011,3 +1011,154 @@ async def delete_event_manager(supabase: AsyncClient, uid: int) -> dict:
         .execute()
     )
     return saved
+
+
+# ── Event Detail / Update ────────────────────────────────────────────────────
+
+
+async def get_event_detail(
+    supabase: AsyncClient,
+    admin: Admin,
+    event_id: str,
+) -> dict:
+    """
+    Return full detail for a single event including participant list.
+    admin → any event; eventManager → assigned events only.
+    """
+    all_events = await _all_events(supabase)
+    all_event_ids = [str(e.id) for e in all_events]
+    scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
+
+    if event_id not in scoped_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this event",
+        )
+
+    event = next((e for e in all_events if str(e.id) == event_id), None)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    all_users = await _all_users(supabase)
+
+    participants: list[dict] = []
+    registered = attended = submitted_count = restricted_count = 0
+
+    for user in all_users:
+        entry = (user.events or {}).get(event_id)
+        if entry is None:
+            continue
+        registered += 1
+        is_submitted = _has_any_submission(entry)
+        is_attending = bool(entry.get("isAttending", False))
+        is_restricted = bool(entry.get("restricted", False))
+        if is_submitted:
+            submitted_count += 1
+        if is_attending:
+            attended += 1
+        if is_restricted:
+            restricted_count += 1
+
+        participants.append({
+            "id": str(user.id),
+            "name": user.name,
+            "teamId": entry.get("teamId"),
+            "status": "restricted" if is_restricted else "active",
+            "submitted": is_submitted,
+            "isAttending": is_attending,
+        })
+
+    return {
+        "id": event_id,
+        "name": event.name,
+        "description": event.description,
+        "category": event.category or "Other",
+        "date": event.start_date.date().isoformat() if event.start_date else None,
+        "end_date": event.end_date.isoformat() if event.end_date else None,
+        "registration_deadline": event.registration_deadline.isoformat() if event.registration_deadline else None,
+        "venue": event.venue or [],
+        "maxParticipants": event.max_participants,
+        "registered": registered,
+        "attended": attended,
+        "submitted": submitted_count,
+        "restricted": restricted_count,
+        "communityLink": event.community_link,
+        "rules": event.rules or "",
+        "judges": event.judges or [],
+        "rounds": event.rounds or {},
+        "questions": event.questions or {},
+        "participants": participants,
+    }
+
+
+async def update_event_details(
+    supabase: AsyncClient,
+    admin: Admin,
+    event_id: str,
+    patch_data: dict,
+) -> dict:
+    """
+    Update core event fields.
+    admin       → any event
+    eventManager → must be assigned to this event
+    """
+    all_events = await _all_events(supabase)
+    all_event_ids = [str(e.id) for e in all_events]
+    scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
+
+    if event_id not in scoped_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this event",
+        )
+
+    event = next((e for e in all_events if str(e.id) == event_id), None)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    # Build DB patch — only include explicitly provided (non-None) fields
+    db_patch: dict = {}
+    if patch_data.get("name") is not None:
+        db_patch["name"] = patch_data["name"]
+    if patch_data.get("description") is not None:
+        db_patch["description"] = patch_data["description"]
+    if patch_data.get("venue") is not None:
+        db_patch["venue"] = patch_data["venue"]
+    if patch_data.get("date") is not None:
+        db_patch["start_date"] = patch_data["date"]   # stored as start_date in DB
+    if patch_data.get("end_date") is not None:
+        db_patch["end_date"] = patch_data["end_date"]
+    if patch_data.get("registration_deadline") is not None:
+        db_patch["registration_deadline"] = patch_data["registration_deadline"]
+    if patch_data.get("category") is not None:
+        db_patch["category"] = patch_data["category"]
+    if patch_data.get("maxParticipants") is not None:
+        db_patch["max_participants"] = patch_data["maxParticipants"]
+    if patch_data.get("communityLink") is not None:
+        db_patch["community_link"] = patch_data["communityLink"]
+    if patch_data.get("rules") is not None:
+        db_patch["rules"] = patch_data["rules"]
+    if patch_data.get("judges") is not None:
+        db_patch["judges"] = patch_data["judges"]
+    if patch_data.get("rounds") is not None:
+        db_patch["rounds"] = patch_data["rounds"]
+    if patch_data.get("questions") is not None:
+        db_patch["questions"] = patch_data["questions"]
+
+    if not db_patch:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields provided to update",
+        )
+
+    event_uuid = _parse_event_uuid(event_id)
+    update_resp = await (
+        supabase.table("events")
+        .update(db_patch)
+        .eq("id", str(event_uuid))
+        .execute()
+    )
+    updated_row = first_row(update_resp)
+
+    # Re-fetch for a consistent return shape
+    return await get_event_detail(supabase, admin, event_id)
