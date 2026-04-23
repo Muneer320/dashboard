@@ -26,6 +26,8 @@ from app.schemas.admin_panel import (
     MealEntryResponse,
     MyEventItem,
     ParticipantItem,
+    RequestedMemberItem,
+    RequestedMemberStatusUpdate,
     RestrictRequest,
     RestrictResponse,
     StatsResponse,
@@ -48,6 +50,10 @@ from app.services.admin_panel_service import (
     update_event_meals_count,
 )
 from app.services.bulk_enroll_service import bulk_enroll, parse_upload
+from app.services.credentials_service import (
+    list_requested_members,
+    update_requested_member_status,
+)
 from app.services.schedule_service import list_all_announcements
 
 router = APIRouter()
@@ -406,3 +412,43 @@ async def admin_list_announcements(
 ) -> list[dict]:
     """Return all announcements — admin only, uses admin JWT."""
     return await list_all_announcements(supabase, limit=limit)
+
+
+# ── Requested Members (credentials-request review) ────────────────────────────
+#
+# The public ``POST /credentials-requests`` endpoint writes into the
+# ``requested_members`` table. Admins review and approve/reject entries here.
+# No eventManager / Scanner access — this is pure admin workflow.
+
+
+@router.get("/requested-members", response_model=list[RequestedMemberItem])
+async def requested_members_list(
+    status_filter: str | None = None,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> list[RequestedMemberItem]:
+    """
+    All credential requests, newest first.
+    Optional ``?status_filter=pending|approved|rejected`` for bucketing.
+    Admin role only.
+    """
+    data = await list_requested_members(supabase, status_filter)
+    return [RequestedMemberItem(**r) for r in data]
+
+
+@router.patch(
+    "/requested-members/{request_id}",
+    response_model=RequestedMemberItem,
+)
+async def requested_members_update_status(
+    request_id: str,
+    body: RequestedMemberStatusUpdate,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> RequestedMemberItem:
+    """
+    Move a request between pending → approved / rejected (or back to pending
+    if the admin changes their mind). Admin role only.
+    """
+    data = await update_requested_member_status(supabase, request_id, body.status)
+    return RequestedMemberItem(**data)

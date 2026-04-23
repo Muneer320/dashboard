@@ -106,6 +106,20 @@ const NAV_ITEMS = [
         <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
     )
+  },
+  {
+    key: 'requestedMembers',
+    label: 'Requested Members',
+    path: '/admin/dashboard/requested-members',
+    access: ['admin'],
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+        <line x1="19" y1="3" x2="19" y2="9"/>
+        <line x1="22" y1="6" x2="16" y2="6"/>
+      </svg>
+    )
   }
 ]
 

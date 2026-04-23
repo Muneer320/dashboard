@@ -169,6 +169,14 @@ export const credentials = {
       if (!r.ok) throw new ApiError(d?.detail ?? 'Request failed', r.status, d);
       return d;
     }),
+
+  // Public name-only event list for the pre-login form. Returns [{id, name}].
+  events: () =>
+    fetch(`${BASE}/credentials-requests/events`).then(async (r) => {
+      const d = await r.json().catch(() => ([]));
+      if (!r.ok) throw new ApiError(d?.detail ?? 'Could not load events', r.status, d);
+      return Array.isArray(d) ? d : [];
+    }),
 };
 
 // ─── Admin Panel ──────────────────────────────────────────────────────────────
@@ -209,6 +217,16 @@ export const adminPanel = {
     post(`/admin-panel/meals/users/${userId}/${mealId}`, {}, { adminAuth: true }),
   removeUserMeal:   (userId, mealId) =>
     del(`/admin-panel/meals/users/${userId}/${mealId}`, { adminAuth: true }),
+
+  // ── Requested members (credential-request review) ───────────────────────
+  //   GET  /admin-panel/requested-members?status_filter=pending|approved|rejected
+  //   PATCH /admin-panel/requested-members/{id}   body: { status }
+  requestedMembers: (statusFilter) => {
+    const q = statusFilter ? `?status_filter=${encodeURIComponent(statusFilter)}` : '';
+    return get(`/admin-panel/requested-members${q}`, { adminAuth: true });
+  },
+  setRequestedMemberStatus: (id, newStatus) =>
+    patch(`/admin-panel/requested-members/${id}`, { status: newStatus }, { adminAuth: true }),
 };
 
 // ─── QR Scan ──────────────────────────────────────────────────────────────────

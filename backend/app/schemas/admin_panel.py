@@ -229,3 +229,25 @@ class BulkEnrollResponse(BaseModel):
     added_to_existing: list[BulkEnrollExistingRow]
     duplicates_detail: list[BulkEnrollDuplicate]
     errors_detail: list[BulkEnrollError]
+
+
+# ── Requested Members (credentials-request admin review) ──────────────────────
+
+class RequestedMemberItem(BaseModel):
+    """One row from requested_members, shaped for the admin panel table."""
+    id: str
+    ticket_id: str
+    name: str
+    college: str
+    email: str
+    phone: str
+    areas_of_interest: list[str]
+    description: Optional[str] = None
+    status: str                 # pending | approved | rejected
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class RequestedMemberStatusUpdate(BaseModel):
+    """Body for PATCH /admin-panel/requested-members/{id}."""
+    status: str                 # pending | approved | rejected

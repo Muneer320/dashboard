@@ -142,7 +142,7 @@ export default function Landing() {
           position: 'relative', zIndex: 2,
         }}>
           <a onClick={() => navigate('/credentials')} className="btn primary" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
-            Get Credentials
+            Register
             <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, opacity: 0.7 }}>→</span>
           </a>
           <a onClick={() => navigate('/login')} className="btn" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
@@ -434,7 +434,7 @@ function SponsorStrip({ isMobile }) {
 function FAQList() {
   const faqs = [
     { q: 'Who can participate?', a: 'Any undergraduate or postgraduate student with a valid college ID. We also run a short open track for first-year students and a couple of invite-only finals.' },
-    { q: 'How do I get credentials?', a: 'Fill out the request form on the Get Credentials page. Our organizers verify your college ID and email, then send your login within 24 hours.' },
+    { q: 'How do I get credentials?', a: 'Fill out the request form on the Register page. Our organizers verify your college ID and email, then send your login within 24 hours.' },
     { q: 'Is there a participation fee?', a: 'Entry to the campus and most events is free. A handful of premium events (Hack Night, Robo Wars) carry a small registration fee that covers kits, food, and prizes.' },
     { q: 'Can I form my own team?', a: "Yes. Most events allow teams of 2–4. We also run a matchmaking thread on our Discord if you're flying solo." },
     { q: 'Where does the fest happen?', a: 'Across the main campus of Scaler School of Technology, Bengaluru.' },
