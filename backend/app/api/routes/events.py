@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from supabase import AsyncClient
+from fastapi_cache.decorator import cache
 
 from app.api.deps import get_current_user, get_scanner_or_above
 from app.db.supabase_client import get_supabase
@@ -19,6 +20,7 @@ router = APIRouter()
 
 
 @router.get("", response_model=list[EventResponse])
+@cache(expire=60)
 async def get_events(
     supabase: AsyncClient = Depends(get_supabase),
     _: User = Depends(get_current_user),
