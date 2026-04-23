@@ -19,9 +19,6 @@ function toLocalDateInput(iso) {
 
 // ── Sub-tab: Event Details ────────────────────────────────────────────────────
 
-const SUBMISSION_TYPES = ['url', 'file', 'text', 'none']
-const FILE_TYPE_OPTIONS = ['.pdf', '.zip', '.docx', '.pptx', '.xlsx', '.jpg', '.png', '.mp4']
-
 function buildInitialForm(event) {
   return {
     name:                  event.name || '',
@@ -47,8 +44,6 @@ function buildInitialPhases(rounds, questions) {
     end_time:        toLocalDatetimeInput(data.end_time),
     description:     data.description || '',
     problemStatement:data.problemStatement || '',
-    submissionType:  data.submissionType || 'url',
-    allowedFileTypes:Array.isArray(data.allowedFileTypes) ? data.allowedFileTypes : [],
     is_active:       !!data.is_active,
     is_locked:       !!data.is_locked,
     questions:       (questions || {})[key] || [],
@@ -108,11 +103,6 @@ function PhaseQuestionsEditor({ questions, onChange, canEdit }) {
 function PhaseEditor({ phase, idx, onChange, onRemove, canEdit }) {
   function set(field, value) { onChange(idx, { ...phase, [field]: value }) }
 
-  function toggleFileType(ft) {
-    const cur = phase.allowedFileTypes || []
-    set('allowedFileTypes', cur.includes(ft) ? cur.filter(x => x !== ft) : [...cur, ft])
-  }
-
   return (
     <div className="ed-phase-card">
       <div className="ed-phase-header">
@@ -151,23 +141,6 @@ function PhaseEditor({ phase, idx, onChange, onRemove, canEdit }) {
         <div className="ed-field">
           <label className="ed-label">End Time</label>
           <input className="input-field" type="datetime-local" value={phase.end_time} onChange={e => set('end_time', e.target.value)} disabled={!canEdit} />
-        </div>
-        <div className="ed-field">
-          <label className="ed-label">Submission Type</label>
-          <select className="input-field" value={phase.submissionType} onChange={e => set('submissionType', e.target.value)} disabled={!canEdit}>
-            {SUBMISSION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div className="ed-field">
-          <label className="ed-label">Allowed File Types</label>
-          <div className="ed-filetypes">
-            {FILE_TYPE_OPTIONS.map(ft => (
-              <label key={ft} className={`ed-filetype-chip ${(phase.allowedFileTypes||[]).includes(ft) ? 'active' : ''}`}>
-                <input type="checkbox" checked={(phase.allowedFileTypes||[]).includes(ft)} onChange={() => toggleFileType(ft)} disabled={!canEdit} style={{display:'none'}} />
-                {ft}
-              </label>
-            ))}
-          </div>
         </div>
         <div className="ed-field ed-field-full">
           <label className="ed-label">Description</label>
@@ -214,7 +187,6 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
       key: `phase${nextNum}`,
       title: '', venue: '', start_time: '', end_time: '',
       description: '', problemStatement: '',
-      submissionType: 'url', allowedFileTypes: [],
       is_active: false, is_locked: false,
       questions: [],
     }])
@@ -235,8 +207,6 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
         end_time:         p.end_time   ? new Date(p.end_time).toISOString()   : null,
         description:      p.description,
         problemStatement: p.problemStatement,
-        submissionType:   p.submissionType,
-        allowedFileTypes: p.allowedFileTypes || [],
         is_active:        p.is_active,
         is_locked:        p.is_locked,
       }
