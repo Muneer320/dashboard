@@ -5,6 +5,7 @@ import re
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from supabase import AsyncClient
+from fastapi_cache.decorator import cache
 
 # Maximum accepted upload size (10 MB).
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -132,6 +133,7 @@ async def handle_bulk_registration(
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)
+@cache(expire=30)
 async def overview_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked

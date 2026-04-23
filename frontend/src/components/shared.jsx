@@ -573,7 +573,7 @@ export function Footer() {
           [
             { h: 'Fest', items: ['Overview','Events','Schedule','Sponsors'] },
             { h: 'Participate', items: ['Get Credentials','Login','FAQ','Code of Conduct'] },
-            { h: 'Contact', items: ['archived-2ea3bd8b35@example.invalid','+91 98XXX XXXXX','Block C, CS Dept','Map'] },
+            { h: 'Contact', items: ['archived-559b490477@example.invalid','Block C, CS Dept','Map'] },
           ].map(col => (
             <div key={col.h}>
               <div className="eyebrow" style={{ marginBottom: 14 }}>{col.h}</div>
