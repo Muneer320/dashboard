@@ -38,7 +38,7 @@ function buildInitialForm(event) {
   }
 }
 
-function buildInitialPhases(rounds) {
+function buildInitialPhases(rounds, questions) {
   return Object.entries(rounds || {}).map(([key, data]) => ({
     key,
     title:           data.title || '',
@@ -51,7 +51,58 @@ function buildInitialPhases(rounds) {
     allowedFileTypes:Array.isArray(data.allowedFileTypes) ? data.allowedFileTypes : [],
     is_active:       !!data.is_active,
     is_locked:       !!data.is_locked,
+    questions:       (questions || {})[key] || [],
   }))
+}
+
+const QUESTION_TYPES = ['text', 'text-long', 'url', 'file', 'number']
+
+function PhaseQuestionsEditor({ questions, onChange, canEdit }) {
+  function addQuestion() {
+    onChange([...questions, { question_id: `q${Date.now()}`, question_text: '', question_type: 'text', required: true }])
+  }
+  
+  function update(idx, field, val) {
+    const updated = [...questions]
+    updated[idx] = { ...updated[idx], [field]: val }
+    onChange(updated)
+  }
+
+  function remove(idx) {
+    onChange(questions.filter((_, i) => i !== idx))
+  }
+
+  return (
+    <div className="ed-questions" style={{marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)'}}>
+      <div className="ed-questions-header" style={{display: 'flex', justifyContent: 'space-between', marginBottom: 12}}>
+        <label className="ed-label">Submission Questions</label>
+        {canEdit && <button className="btn btn-ghost ed-add-q-btn" onClick={addQuestion} style={{padding: '4px 8px', fontSize: '0.75rem'}}>+ Add Question</button>}
+      </div>
+      {questions.length === 0 ? (
+        <div className="ed-hint" style={{fontSize: '0.8rem'}}>No questions defined for this phase.</div>
+      ) : (
+        <div className="ed-q-list" style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+          {questions.map((q, i) => (
+            <div key={i} className="ed-q-card" style={{background: 'var(--bg-card)', padding: 12, borderRadius: 8, border: '1px solid var(--border)'}}>
+              <div className="ed-q-row" style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+                <input className="input-field" placeholder="ID (e.g. q1)" value={q.question_id||''} onChange={e=>update(i,'question_id',e.target.value)} disabled={!canEdit} style={{width: 90, fontSize: '0.8rem'}} />
+                <input className="input-field" placeholder="Question Text" value={q.question_text||''} onChange={e=>update(i,'question_text',e.target.value)} disabled={!canEdit} style={{flex: 1, fontSize: '0.8rem'}} />
+                <select className="input-field" value={q.question_type||'text'} onChange={e=>update(i,'question_type',e.target.value)} disabled={!canEdit} style={{width: 100, fontSize: '0.8rem', padding: '6px 8px'}}>
+                  {QUESTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <label className="ed-toggle-label" style={{fontSize: '0.75rem'}}><input type="checkbox" checked={!!q.required} onChange={e=>update(i,'required',e.target.checked)} disabled={!canEdit} /> Req</label>
+                {canEdit && <button className="ed-phase-remove" onClick={()=>remove(i)}>✕</button>}
+              </div>
+              <div className="ed-q-row" style={{display: 'flex', gap: 8, marginTop: 8}}>
+                <input className="input-field" placeholder="Placeholder text..." value={q.placeholder||''} onChange={e=>update(i,'placeholder',e.target.value)} disabled={!canEdit} style={{flex: 1, fontSize: '0.8rem'}} />
+                <input className="input-field" type="number" placeholder="Word Limit" value={q.word_limit||''} onChange={e=>update(i,'word_limit',e.target.value!==''?Number(e.target.value):undefined)} disabled={!canEdit} style={{width: 100, fontSize: '0.8rem'}} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function PhaseEditor({ phase, idx, onChange, onRemove, canEdit }) {
@@ -127,13 +178,15 @@ function PhaseEditor({ phase, idx, onChange, onRemove, canEdit }) {
           <textarea className="input-field ed-textarea" rows={3} value={phase.problemStatement} onChange={e => set('problemStatement', e.target.value)} disabled={!canEdit} placeholder="Problem statement for this phase…" />
         </div>
       </div>
+
+      <PhaseQuestionsEditor questions={phase.questions || []} onChange={qs => set('questions', qs)} canEdit={canEdit} />
     </div>
   )
 }
 
 function EventDetailsTab({ event, canEdit, onSaved }) {
   const [form,   setFormState] = useState(() => buildInitialForm(event))
-  const [phases, setPhases]    = useState(() => buildInitialPhases(event.rounds))
+  const [phases, setPhases]    = useState(() => buildInitialPhases(event.rounds, event.questions))
   const [saving, setSaving]    = useState(false)
   const [err,    setErr]       = useState('')
   const [success,setSuccess]   = useState('')
@@ -141,7 +194,7 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
   // Sync when navigating between events
   useEffect(() => {
     setFormState(buildInitialForm(event))
-    setPhases(buildInitialPhases(event.rounds))
+    setPhases(buildInitialPhases(event.rounds, event.questions))
     setErr(''); setSuccess('')
   }, [event.id])
 
@@ -163,6 +216,7 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
       description: '', problemStatement: '',
       submissionType: 'url', allowedFileTypes: [],
       is_active: false, is_locked: false,
+      questions: [],
     }])
   }
 
@@ -170,10 +224,11 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
     setPhases(prev => prev.filter((_, i) => i !== idx))
   }
 
-  function phasesToRounds(phaseList) {
-    const out = {}
+  function getPayloadData(phaseList) {
+    const roundsOut = {}
+    const questionsOut = {}
     phaseList.forEach(p => {
-      out[p.key] = {
+      roundsOut[p.key] = {
         title:            p.title,
         venue:            p.venue.split(',').map(v => v.trim()).filter(Boolean),
         start_time:       p.start_time ? new Date(p.start_time).toISOString() : null,
@@ -185,8 +240,11 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
         is_active:        p.is_active,
         is_locked:        p.is_locked,
       }
+      if (p.questions && p.questions.length > 0) {
+        questionsOut[p.key] = p.questions
+      }
     })
-    return out
+    return { rounds: roundsOut, questions: questionsOut }
   }
 
   async function handleSave() {
@@ -195,6 +253,8 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
     try {
       const venueArr  = form.venue.split(',').map(v => v.trim()).filter(Boolean)
       const judgesArr = form.judges.split(',').map(j => j.trim()).filter(Boolean)
+
+      const payloadData = getPayloadData(phases)
 
       const body = {
         name:                  form.name.trim(),
@@ -208,7 +268,8 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
         communityLink:         form.communityLink.trim() || undefined,
         rules:                 form.rules.trim()       || undefined,
         judges:                judgesArr.length ? judgesArr : undefined,
-        rounds:                phasesToRounds(phases),
+        rounds:                payloadData.rounds,
+        questions:             payloadData.questions,
       }
       Object.keys(body).forEach(k => body[k] === undefined && delete body[k])
       const updated = await adminPanel.updateEvent(event.id, body)

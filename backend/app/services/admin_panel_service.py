@@ -1086,6 +1086,7 @@ async def get_event_detail(
         "rules": event.rules or "",
         "judges": event.judges or [],
         "rounds": event.rounds or {},
+        "questions": event.questions or {},
         "participants": participants,
     }
 
@@ -1141,6 +1142,8 @@ async def update_event_details(
         db_patch["judges"] = patch_data["judges"]
     if patch_data.get("rounds") is not None:
         db_patch["rounds"] = patch_data["rounds"]
+    if patch_data.get("questions") is not None:
+        db_patch["questions"] = patch_data["questions"]
 
     if not db_patch:
         raise HTTPException(

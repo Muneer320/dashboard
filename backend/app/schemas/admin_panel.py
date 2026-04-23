@@ -97,6 +97,7 @@ class EventUpdateRequest(BaseModel):
     rules: Optional[str] = None
     judges: Optional[list[str]] = None
     rounds: Optional[dict] = None            # full rounds JSONB replacement
+    questions: Optional[dict] = None         # full questions JSONB replacement
 
 
 class EventDetailResponse(BaseModel):
@@ -118,6 +119,7 @@ class EventDetailResponse(BaseModel):
     rules: Optional[str] = None
     judges: list[str] = []
     rounds: dict = {}
+    questions: dict = {}
     participants: list[MyEventParticipant]
 
 
