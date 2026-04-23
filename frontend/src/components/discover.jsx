@@ -387,6 +387,32 @@ export function Schedule() {
           ✦ Clear Round 1 — and unlock something mind-blowing on the other side.
         </p>
 
+        {!user && (
+          <div style={{
+            position: 'fixed', top: 56, left: 0, right: 0, bottom: 0, zIndex: 10,
+            backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+            background: 'rgba(8, 8, 14, 0.75)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 16,
+            textAlign: 'center', padding: 24,
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 8 }}>⏳</div>
+            <div style={{
+              fontFamily: 'var(--f-display)', fontSize: isMobile ? 28 : 36,
+              letterSpacing: '-0.02em', color: 'var(--ink)',
+              fontWeight: 600,
+            }}>
+              Coming Soon
+            </div>
+            <div style={{
+              fontSize: 14, color: 'var(--ink-mute)',
+              maxWidth: 320, lineHeight: 1.6,
+            }}>
+              The event schedule is being finalized. Log in to get updates when it goes live.
+            </div>
+          </div>
+        )}
+
         {error && (
           <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
             {error}

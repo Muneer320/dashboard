@@ -46,7 +46,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         if path in PUBLIC_PATHS:
             return await call_next(request)
 
-        if path.startswith("/api/v1/files/"):
+        if path.startswith("/api/v1/files/") or path.startswith("/api/v1/schedule/global"):
             return await call_next(request)
 
         token = self._extract_token(request)
