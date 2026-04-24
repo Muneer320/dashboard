@@ -1625,11 +1625,23 @@ export function EventDetail() {
                       This event runs on an external platform
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--ink-dim)', maxWidth: 400, lineHeight: 1.65 }}>
-                      {event.name === 'Invariant'
-                        ? 'Invariant was hosted on Codeforces / HackerRank. Your score is tracked directly on the platform scoreboard.'
-                        : event.name === 'Impulse'
-                        ? 'Impulse is hosted live on Codeforces / HackerRank. Head there to participate—your team\'s submission is tracked on the contest platform.'
-                        : 'Override.exe is a live CTF event. The platform link will be shared before the event starts. Submit your flags directly on the CTF platform.'}
+                      {event.name === 'Invariant' ? (
+                        <span>
+                          🔗 Contest Link:{' '}
+                          <a
+                            href="https://codeforces.com/contestInvitation/c3e58e74ce68fc59dac43d185f50f2c38320adef"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: 'var(--violet)', textDecoration: 'underline', textUnderlineOffset: 2, wordBreak: 'break-all' }}
+                          >
+                            https://codeforces.com/contestInvitation/c3e58e74ce68fc59dac43d185f50f2c38320adef
+                          </a>
+                        </span>
+                      ) : event.name === 'Impulse' ? (
+                        'Impulse is hosted live on Codeforces / HackerRank. Head there to participate—your team\'s submission is tracked on the contest platform.'
+                      ) : (
+                        'Override.exe is a live CTF event. The platform link will be shared before the event starts. Submit your flags directly on the CTF platform.'
+                      )}
                     </div>
                     <div style={{
                       fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--violet)',
