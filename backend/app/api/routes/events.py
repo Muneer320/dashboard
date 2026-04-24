@@ -40,6 +40,26 @@ async def get_events(
     ]
 
 
+@router.get("/public", response_model=list[EventResponse])
+@cache(expire=60)
+async def get_public_events(
+    supabase: AsyncClient = Depends(get_supabase),
+) -> list[EventResponse]:
+    events = await list_events(supabase)
+    return [
+        EventResponse(
+            id=str(event.id),
+            name=event.name,
+            description=event.description,
+            venue=event.venue or [],
+            rounds=event.rounds or {},
+            participants_count=len(event.participants or {}),
+            community_link=event.community_link,
+        )
+        for event in events
+    ]
+
+
 @router.get("/{event_id}", response_model=EventResponse)
 async def get_single_event(
     event_id: str,

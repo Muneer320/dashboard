@@ -9,6 +9,7 @@ import { Explore, Schedule, Leaderboard } from './components/discover';
 import { Mirage, Announcements, LostFound } from './components/community';
 import { Rating, Feedback, Report } from './components/forms';
 import AdminApp from './admin-panel/App';
+import FAQ from './components/faq';
 
 /** Blocks access to protected user pages — redirects to /login if not authed. */
 function RequireAuth({ children }) {
@@ -40,12 +41,14 @@ export default function App() {
         <Route path="/"              element={<GuestOnly><Landing /></GuestOnly>} />
         <Route path="/login"         element={<GuestOnly><Login /></GuestOnly>} />
         <Route path="/credentials"   element={<Credentials />} />
+        <Route path="/faq"           element={<FAQ />} />
+        <Route path="/schedule"      element={<Schedule />}/>
+        <Route path="/explore"       element={<Explore />}/>
+
 
         {/* Protected user app */}
         <Route path="/dashboard"     element={<RequireAuth><Dashboard /></RequireAuth>} />
         <Route path="/event-detail/:eventId" element={<RequireAuth><EventDetail /></RequireAuth>} />
-        <Route path="/explore"       element={<RequireAuth><Explore /></RequireAuth>} />
-        <Route path="/schedule"      element={<RequireAuth><Schedule /></RequireAuth>} />
         <Route path="/leaderboard"   element={<RequireAuth><Leaderboard /></RequireAuth>} />
         <Route path="/mirage"        element={<RequireAuth><Mirage /></RequireAuth>} />
         <Route path="/announcements" element={<RequireAuth><Announcements /></RequireAuth>} />

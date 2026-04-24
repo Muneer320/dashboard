@@ -26,10 +26,21 @@ const _BANNER_MAP = {
 
 export function getEventBannerUrl(name) {
   if (!name) return null;
-  const key = name.toLowerCase().trim();
-  const file = _BANNER_MAP[key];
-  if (!file) return null;
-  return file;
+  const normalized = name.toLowerCase().trim();
+  
+  // First try an exact match
+  if (_BANNER_MAP[normalized]) {
+    return _BANNER_MAP[normalized];
+  }
+  
+  // Then try a fuzzy match: see if the event name contains any of the keys
+  for (const [key, url] of Object.entries(_BANNER_MAP)) {
+    if (normalized.includes(key) || key.includes(normalized)) {
+      return url;
+    }
+  }
+  
+  return null;
 }
 
 // Deterministic tone picker so cards don't reshuffle colours on every render.
@@ -43,7 +54,7 @@ function toneFor(id) {
 
 // ── Shared Event Card ─────────────────────────────────────────────────────────
 
-function EventCard({ ev, index, navigate, isMobile, showStatus }) {
+function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
   const tone = toneFor(ev.id);
   const venue = Array.isArray(ev.venue) && ev.venue.length ? ev.venue[0] : '';
   const teamsCount = ev.participants_count ?? 0;
@@ -61,12 +72,40 @@ function EventCard({ ev, index, navigate, isMobile, showStatus }) {
 
   const bannerUrl = getEventBannerUrl(ev.name);
 
+  const unstopUrls = {
+    'impulse': 'https://unstop.com/hackathons/impulse-cp-team-contest-ascent-scaler-school-of-technology-bengaluru-karnataka-1669639',
+    'launchpad': 'https://unstop.com/events/launchpad-from-idea-to-impact-ascent-scaler-school-of-technology-bengaluru-karnataka-1669644',
+    'genesis': 'https://unstop.com/hackathons/genesis-the-ai-buildathon-ascent-scaler-school-of-technology-bengaluru-karnataka-1669635',
+    'robo run': 'https://unstop.com/events/robo-run-ascent-scaler-school-of-technology-bengaluru-karnataka-1669663',
+    'robo race': 'https://unstop.com/competitions/robo-race-ascent-scaler-school-of-technology-bengaluru-karnataka-1669647',
+    'rethesis': 'https://unstop.com/events/rethesis-ai-research-blitz-ascent-scaler-school-of-technology-bengaluru-karnataka-1669640',
+    'robo soccer': 'https://unstop.com/events/robo-soccer-ascent-scaler-school-of-technology-bengaluru-karnataka-1669646',
+    'invariant': 'https://unstop.com/hackathons/invariant-cp-individual-contest-ascent-scaler-school-of-technology-bengaluru-karnataka-1669642',
+    'synapse': 'https://unstop.com/hackathons/synapse-the-kaggle-competition-ascent-scaler-school-of-technology-bengaluru-karnataka-1669636',
+    'override.exe': 'https://unstop.com/hackathons/overrideexe-ascent-scaler-school-of-technology-bengaluru-karnataka-1669645',
+  };
+
+  const handleCardClick = (e) => {
+    if (e) e.stopPropagation();
+    if (user) {
+      navigate(`/event-detail/${ev.id}`);
+    } else {
+      const nameKey = (ev.name || '').toLowerCase().trim();
+      const url = unstopUrls[nameKey];
+      if (url) {
+        window.open(url, '_blank');
+      } else {
+        window.open('https://unstop.com/college-fests/ascent-scaler-school-of-technology-bengaluru-karnataka-454762', '_blank');
+      }
+    }
+  };
+
   return (
     <div
       key={ev.id}
       className="glass"
       style={{ padding: 0, overflow: 'hidden', transition: 'all .3s', cursor: 'pointer' }}
-      onClick={() => navigate(`/event-detail/${ev.id}`)}
+      onClick={handleCardClick}
       onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(127,119,221,0.45)'; e.currentTarget.style.boxShadow = '0 0 30px rgba(127,119,221,0.15)'; }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--glass-border)'; e.currentTarget.style.boxShadow = 'none'; }}
     >
@@ -124,11 +163,11 @@ function EventCard({ ev, index, navigate, isMobile, showStatus }) {
         <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <a
             className="btn sm"
-            onClick={(e) => { e.stopPropagation(); navigate(`/event-detail/${ev.id}`); }}
-          >Details</a>
+            onClick={handleCardClick}
+          >{user ? 'Details' : 'Register'}</a>
           <a
             className="btn sm primary"
-            href={`https://unstop.com/search?q=${encodeURIComponent(ev.name || '')}`}
+            href={unstopUrls[(ev.name || '').toLowerCase().trim()] || 'https://unstop.com/college-fests/ascent-scaler-school-of-technology-bengaluru-karnataka-454762'}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
@@ -144,16 +183,23 @@ function EventCard({ ev, index, navigate, isMobile, showStatus }) {
 export function Explore() {
   const isMobile = useMobile();
   const navigate = useNavigate();
+  const { user } = useUserAuth();
 
-  const [tab, setTab] = React.useState('my'); // 'my' | 'all'
+  const [tab, setTab] = React.useState(user ? 'my' : 'all'); // 'my' | 'all'
+  
+  React.useEffect(() => {
+    if (!user) setTab('all');
+  }, [user]);
+
   const [allEvents, setAllEvents] = React.useState([]);
   const [myEvents, setMyEvents] = React.useState([]);
   const [loadingAll, setLoadingAll] = React.useState(false);
   const [loadingMy, setLoadingMy] = React.useState(true);
   const [error, setError] = React.useState('');
 
-  // Fetch my events on mount (default tab)
+  // Fetch my events on mount (default tab for logged-in users)
   React.useEffect(() => {
+    if (!user) return;
     let cancelled = false;
     setLoadingMy(true);
     users.myEvents()
@@ -161,19 +207,20 @@ export function Explore() {
       .catch((e) => { if (!cancelled) setError(e?.message || 'Failed to load your events.'); })
       .finally(() => { if (!cancelled) setLoadingMy(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [user]);
 
   // Fetch all events lazily when tab switches (or on mount if we want to pre-load)
   React.useEffect(() => {
     if (allEvents.length > 0) return; // already fetched
     let cancelled = false;
     setLoadingAll(true);
-    eventsApi.list()
+    const fetchFn = user ? eventsApi.list : eventsApi.publicList;
+    fetchFn()
       .then((list) => { if (!cancelled) setAllEvents(list ?? []); })
       .catch((e) => { if (!cancelled && !error) setError(e?.message || 'Failed to load events.'); })
       .finally(() => { if (!cancelled) setLoadingAll(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [user]);
 
   const activeEvents = tab === 'my' ? myEvents : allEvents;
   const isLoading = tab === 'my' ? loadingMy : loadingAll;
@@ -184,7 +231,7 @@ export function Explore() {
 
   return (
     <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="explore" />
+      <NavBar variant={user ? "app" : "public"} active="explore" />
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">{tabLabel}</div>
         <h1 className="display" style={{ fontSize: isMobile ? 40 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>Pick your fights.</h1>
@@ -195,18 +242,20 @@ export function Explore() {
         </div>
 
         {/* Tab switcher — same pill-toggle style as Leaderboard */}
-        <div style={{ marginTop: 24, display: 'flex', gap: 6, padding: 4, borderRadius: 999, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', width: 'fit-content' }}>
-          {[['my', 'My Events'], ['all', 'All Events']].map(([k, l]) => (
-            <div key={k} onClick={() => setTab(k)} style={{
-              padding: '8px 18px', borderRadius: 999, cursor: 'pointer',
-              fontSize: 12.5, fontWeight: 500,
-              background: tab === k ? 'rgba(127,119,221,0.2)' : 'transparent',
-              color: tab === k ? 'var(--ink)' : 'var(--ink-dim)',
-              border: tab === k ? '1px solid rgba(127,119,221,0.5)' : '1px solid transparent',
-              transition: 'all .2s',
-            }}>{l}</div>
-          ))}
-        </div>
+        {user && (
+          <div style={{ marginTop: 24, display: 'flex', gap: 6, padding: 4, borderRadius: 999, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', width: 'fit-content' }}>
+            {[['my', 'My Events'], ['all', 'All Events']].map(([k, l]) => (
+              <div key={k} onClick={() => setTab(k)} style={{
+                padding: '8px 18px', borderRadius: 999, cursor: 'pointer',
+                fontSize: 12.5, fontWeight: 500,
+                background: tab === k ? 'rgba(127,119,221,0.2)' : 'transparent',
+                color: tab === k ? 'var(--ink)' : 'var(--ink-dim)',
+                border: tab === k ? '1px solid rgba(127,119,221,0.5)' : '1px solid transparent',
+                transition: 'all .2s',
+              }}>{l}</div>
+            ))}
+          </div>
+        )}
 
         {error && (
           <div style={{ marginTop: 24, padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>
@@ -245,6 +294,7 @@ export function Explore() {
                 navigate={navigate}
                 isMobile={isMobile}
                 showStatus={tab === 'my'}
+                user={user}
               />
             ))}
           </div>
@@ -275,6 +325,7 @@ const DAY_TONES = ['violet', 'teal', 'amber'];
 
 export function Schedule() {
   const isMobile = useMobile();
+  const { user } = useUserAuth();
 
   const [days, setDays] = React.useState([]); // GlobalScheduleItem[] — each has {id, date, schedule, announcements}
   const [activeDate, setActiveDate] = React.useState(null);
@@ -324,7 +375,7 @@ export function Schedule() {
 
   return (
     <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
-      <NavBar variant="app" active="schedule" />
+      <NavBar variant={user ? "app" : "public"} active="schedule" />
       <div style={{ maxWidth: 1280, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div className="eyebrow">§ LIVE SCHEDULE</div>
         <h1 className="display" style={{ fontSize: isMobile ? 36 : 64, marginTop: 14, letterSpacing: '-0.02em' }}>Every slot. Every stage.</h1>
@@ -335,6 +386,32 @@ export function Schedule() {
         }}>
           ✦ Clear Round 1 — and unlock something mind-blowing on the other side.
         </p>
+
+        {!user && (
+          <div style={{
+            position: 'fixed', top: 56, left: 0, right: 0, bottom: 0, zIndex: 10,
+            backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+            background: 'rgba(8, 8, 14, 0.75)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center', gap: 16,
+            textAlign: 'center', padding: 24,
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 8 }}>⏳</div>
+            <div style={{
+              fontFamily: 'var(--f-display)', fontSize: isMobile ? 28 : 36,
+              letterSpacing: '-0.02em', color: 'var(--ink)',
+              fontWeight: 600,
+            }}>
+              Coming Soon
+            </div>
+            <div style={{
+              fontSize: 14, color: 'var(--ink-mute)',
+              maxWidth: 320, lineHeight: 1.6,
+            }}>
+              The event schedule is being finalized. Log in to get updates when it goes live.
+            </div>
+          </div>
+        )}
 
         {error && (
           <div style={{ marginTop: 20, padding: '12px 16px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', fontSize: 13, color: '#f87171' }}>

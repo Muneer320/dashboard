@@ -142,7 +142,7 @@ export default function Landing() {
           position: 'relative', zIndex: 2,
         }}>
           <a onClick={() => navigate('/credentials')} className="btn primary" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
-            Get Credentials
+            Register
             <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, opacity: 0.7 }}>→</span>
           </a>
           <a onClick={() => navigate('/login')} className="btn" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
@@ -291,7 +291,7 @@ export default function Landing() {
                 Our Flagships
               </h2>
             </div>
-            <a onClick={() => navigate('/explore')} className="btn sm">See all 24 events →</a>
+            <a href="https://unstop.com/college-fests/ascent-scaler-school-of-technology-bengaluru-karnataka-454762" target="_blank" rel="noopener noreferrer" className="btn sm">See all events →</a>
           </div>
           <div style={{
             display: 'grid',
@@ -299,12 +299,20 @@ export default function Landing() {
             gap: 16,
           }}>
             {[
-              { title: 'Anvil', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Anvil_poydj2.png' },
-              { title: 'Ship to Scaler', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png' },
-              { title: 'Impulse', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Impulse_fhczet.png' },
-              { title: 'Launchpad', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Launchpad_dixz7h.png' },
-            ].map(({ title, imgUrl }) => (
-              <PosterPlaceholder key={title} title={title} imgUrl={imgUrl} w="100%" h={isMobile ? 200 : 340} />
+              { title: 'Anvil', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Anvil_poydj2.png', linkUrl: 'https://unstop.com/hackathons/the-anvil-hackathon-ascent-scaler-school-of-technology-bengaluru-karnataka-1669632' },
+              { title: 'Ship to Scaler', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png', linkUrl: '' },
+              { title: 'Impulse', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Impulse_fhczet.png', linkUrl: 'https://unstop.com/hackathons/impulse-cp-team-contest-ascent-scaler-school-of-technology-bengaluru-karnataka-1669639' },
+              { title: 'Launchpad', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Launchpad_dixz7h.png', linkUrl: 'https://unstop.com/events/launchpad-from-idea-to-impact-ascent-scaler-school-of-technology-bengaluru-karnataka-1669644' },
+            ].map(({ title, imgUrl, linkUrl }) => (
+              linkUrl ? (
+                <a key={title} href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
+                  <PosterPlaceholder title={title} imgUrl={imgUrl} w="100%" h={isMobile ? 200 : 340} />
+                </a>
+              ) : (
+                <div key={title}>
+                  <PosterPlaceholder title={title} imgUrl={imgUrl} w="100%" h={isMobile ? 200 : 340} />
+                </div>
+              )
             ))}
           </div>
         </div>
@@ -318,19 +326,6 @@ export default function Landing() {
           </h2>
         </div>
         {/* <SponsorStrip isMobile={isMobile} /> */}
-      </section>
-
-      {/* ─────────────── FAQ ─────────────── */}
-      <section style={{ padding: isMobile ? '60px 20px 40px' : '100px 48px 40px', position: 'relative' }}>
-        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-          <div className="eyebrow">§ 04 · FAQ</div>
-          <h2 className="display" style={{ fontSize: isMobile ? 32 : 44, marginTop: 16, letterSpacing: '-0.02em' }}>
-            Questions, answered.
-          </h2>
-          <div style={{ marginTop: 40 }}>
-            <FAQList />
-          </div>
-        </div>
       </section>
 
       <Footer />
@@ -431,66 +426,3 @@ function SponsorStrip({ isMobile }) {
   );
 }
 
-function FAQList() {
-  const faqs = [
-    { q: 'Who can participate?', a: 'Any undergraduate or postgraduate student with a valid college ID. We also run a short open track for first-year students and a couple of invite-only finals.' },
-    { q: 'How do I get credentials?', a: 'Fill out the request form on the Get Credentials page. Our organizers verify your college ID and email, then send your login within 24 hours.' },
-    { q: 'Is there a participation fee?', a: 'Entry to the campus and most events is free. A handful of premium events (Hack Night, Robo Wars) carry a small registration fee that covers kits, food, and prizes.' },
-    { q: 'Can I form my own team?', a: "Yes. Most events allow teams of 2–4. We also run a matchmaking thread on our Discord if you're flying solo." },
-    { q: 'Where does the fest happen?', a: 'Across the main campus of Scaler School of Technology, Bengaluru.' },
-    { q: 'What about food and stay?', a: 'All meals are covered by your Food QR.' },
-  ];
-  const [open, setOpen] = React.useState(0);
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {faqs.map((f, i) => {
-        const isOpen = open === i;
-        return (
-          <div key={i} style={{ borderTop: '1px solid var(--glass-border)' }}>
-            <div
-              onClick={() => setOpen(isOpen ? -1 : i)}
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '22px 4px',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', flexShrink: 0 }}>
-                  0{i+1}
-                </span>
-                <span style={{
-                  fontFamily: 'var(--f-display)',
-                  fontSize: 17, fontWeight: 500,
-                  letterSpacing: '-0.01em',
-                  color: isOpen ? 'var(--ink)' : 'var(--ink-dim)',
-                  transition: 'color .2s',
-                }}>{f.q}</span>
-              </div>
-              <div style={{
-                width: 28, height: 28, borderRadius: '50%',
-                border: '1px solid var(--glass-border-strong)',
-                display: 'grid', placeItems: 'center',
-                color: 'var(--ink-dim)', flexShrink: 0, marginLeft: 12,
-                transform: isOpen ? 'rotate(45deg)' : 'rotate(0)',
-                transition: 'transform .3s',
-              }}>+</div>
-            </div>
-            <div style={{
-              overflow: 'hidden',
-              maxHeight: isOpen ? 200 : 0,
-              transition: 'max-height .4s ease',
-            }}>
-              <div style={{
-                padding: '0 4px 22px 32px',
-                color: 'var(--ink-dim)',
-                fontSize: 14, lineHeight: 1.6, maxWidth: 700,
-              }}>{f.a}</div>
-            </div>
-          </div>
-        );
-      })}
-      <div style={{ borderTop: '1px solid var(--glass-border)' }}/>
-    </div>
-  );
-}

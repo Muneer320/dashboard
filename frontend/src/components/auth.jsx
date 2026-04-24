@@ -109,11 +109,7 @@ export function Credentials() {
   const [loading, setLoading]     = React.useState(false);
   const [error, setError]         = React.useState('');
   const [ticketId, setTicketId]   = React.useState('');
-  const [form, setForm] = React.useState({ name: '', college: '', email: '', phone: '', events: [], notes: '' });
-  const eventOpts = ['Hack Night', 'Circuit Rush', 'Pitch./Dev', 'Code Clash', 'Design Jam', 'Robo Wars', 'Mirage Walk', 'Quantum Quiz'];
-  const toggleEvent = (e) => setForm(f => ({
-    ...f, events: f.events.includes(e) ? f.events.filter(x => x !== e) : [...f.events, e]
-  }));
+  const [form, setForm] = React.useState({ name: '', college: '', email: '', phone: '', notes: '' });
 
   const AUTH_BG = 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878498/auth_scene_vjvvtq.jpg';
 
@@ -122,18 +118,30 @@ export function Credentials() {
     setError('');
     setLoading(true);
     try {
-      await credApi.request({
-        name:              form.name,
-        college:           form.college,
-        email:             form.email,
-        phone:             form.phone,
-        events_of_interest: form.events,   // backend field name
-        note:              form.notes || null,
+      // Backend requires college + phone (NOT NULL columns). Let them through
+      // as empty strings if the user skipped them — the admin review tab will
+      // still show the request.
+      const res = await credApi.request({
+        name:    form.name,
+        college: form.college || '',
+        email:   form.email,
+        phone:   form.phone || '',
+        note:    form.notes || null,
       });
-      setTicketId(`ASC-${Math.floor(Math.random()*900000+100000)}`);
+      // Use the real ticket_id issued by the server so follow-ups match.
+      setTicketId(res?.ticket_id || '');
       setSubmitted(true);
     } catch (e) {
-      setError(e.message || 'Submission failed. Please try again.');
+      // Duplicate-email 409 responses include a structured detail object we
+      // can surface nicely instead of the raw "[object Object]" fallback.
+      let msg = e.message || 'Submission failed. Please try again.';
+      if (e.data?.detail && typeof e.data.detail === 'object') {
+        const d = e.data.detail;
+        msg = d.message
+          ? `${d.message}${d.ticket_id ? ` (ticket ${d.ticket_id})` : ''}`
+          : msg;
+      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -210,24 +218,6 @@ export function Credentials() {
             <div>
               <label className="label">Phone</label>
               <input className="input" placeholder="+91 98XXX XXXXX" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})}/>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 28 }}>
-            <label className="label">Events of interest · pick as many as you like</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {eventOpts.map(e => {
-                const active = form.events.includes(e);
-                return (
-                  <div key={e} onClick={() => toggleEvent(e)} className="chip" style={{
-                    cursor: 'pointer',
-                    borderColor: active ? 'rgba(127,119,221,0.6)' : undefined,
-                    background: active ? 'rgba(127,119,221,0.15)' : undefined,
-                    color: active ? '#F1EFE8' : undefined,
-                    padding: '6px 14px', fontSize: 11,
-                  }}>{e}</div>
-                );
-              })}
             </div>
           </div>
 

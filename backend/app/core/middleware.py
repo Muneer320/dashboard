@@ -23,6 +23,17 @@ PUBLIC_PATHS = {
     "/api/v1/openapi.json",
     "/docs",
     "/redoc",
+    # Pre-login: people without an account submit credential requests here.
+    # Handled by the public ``credentials`` router (POST / ...). Admin review
+    # lives under /api/v1/admin-panel/requested-members and stays gated.
+    "/api/v1/credentials-requests",
+    "/api/v1/credentials-requests/",
+    # Public name-only event list used by the /credentials form to show the
+    # real list of events as selectable chips. Returns only {id, name}.
+    "/api/v1/credentials-requests/events",
+    "/api/v1/credentials-requests/events/",
+    "/api/v1/events/public",
+    "/api/v1/events/public/",
 }
 
 
@@ -35,7 +46,7 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         if path in PUBLIC_PATHS:
             return await call_next(request)
 
-        if path.startswith("/api/v1/files/"):
+        if path.startswith("/api/v1/files/") or path.startswith("/api/v1/schedule/global"):
             return await call_next(request)
 
         token = self._extract_token(request)

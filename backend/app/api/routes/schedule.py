@@ -38,7 +38,6 @@ router = APIRouter()
 @router.get("/global", response_model=list[GlobalScheduleItem])
 async def get_full_global_schedule(
     supabase: AsyncClient = Depends(get_supabase),
-    _: User = Depends(get_current_user),
 ) -> list[GlobalScheduleItem]:
     """Return all days in the global schedule, ordered by date."""
     rows = await list_global_schedule(supabase)
@@ -49,7 +48,6 @@ async def get_full_global_schedule(
 async def get_global_schedule_day(
     day: date,
     supabase: AsyncClient = Depends(get_supabase),
-    _: User = Depends(get_current_user),
 ) -> GlobalScheduleItem:
     """Return the global schedule for a specific date (YYYY-MM-DD)."""
     row = await get_global_schedule_by_date(supabase, day)
