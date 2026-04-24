@@ -174,6 +174,19 @@ export function Announcements() {
     return `${Math.floor(hrs / 24)}d ago`;
   }
 
+  // Pull a subject out of a description that uses the
+  //   "<> Subject goes here <> body body body"
+  // convention. Returns { subject, body }. If no <> ... <> is found
+  // at the start, subject is null and body is the full text.
+  function splitSubject(text) {
+    if (!text) return { subject: null, body: '' };
+    const m = text.match(/^\s*<>\s*([\s\S]+?)\s*<>\s*([\s\S]*)$/);
+    if (!m) return { subject: null, body: text };
+    const subject = m[1].trim();
+    const body = m[2].trim();
+    return { subject: subject || null, body };
+  }
+
   const visible = posts.filter(p => {
     if (!isVisible(p)) return false;
     if (filter === 'all') return true;
@@ -243,6 +256,7 @@ export function Announcements() {
             const cat = (p.category || '').trim().toLowerCase();
             // Show event badge only when it's targeted at a specific event
             const isEventTargeted = allEventNames?.has(cat) && !BROADCAST_CATEGORIES.has(cat);
+            const { subject, body } = splitSubject(p.announcement);
             return (
               <div key={i} className="glass" style={{
                 padding: isMobile ? 16 : 22,
@@ -250,18 +264,48 @@ export function Announcements() {
                 background: pin ? 'rgba(127,119,221,0.07)' : undefined,
                 position: 'relative',
               }}>
+                {/* Header row — chips + timestamp */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1 }}>
                     {pin && <span className="chip violet" style={{ padding: '2px 8px', fontSize: 9, flexShrink: 0 }}>📌 PINNED</span>}
                     {isEventTargeted && (
                       <span className="chip" style={{ padding: '2px 8px', fontSize: 9, flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                         {p.category}
                       </span>
                     )}
-                    <span style={{ fontFamily: 'var(--f-display)', fontSize: isMobile ? 15 : 18, fontWeight: 600, letterSpacing: '-0.01em' }}>{p.announcement}</span>
                   </div>
                   <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', whiteSpace: 'nowrap', flexShrink: 0 }}>{relativeTime(p.time)}</span>
                 </div>
+
+                {/* Subject — shown only when the description started with "<> ... <>" */}
+                {subject && (
+                  <div style={{
+                    marginTop: 10,
+                    fontFamily: 'var(--f-display)',
+                    fontSize: isMobile ? 20 : 24,
+                    fontWeight: 700,
+                    letterSpacing: '-0.01em',
+                    color: 'var(--ink)',
+                    lineHeight: 1.25,
+                  }}>
+                    {subject}
+                  </div>
+                )}
+
+                {/* Body — if there was no subject, this is just the full announcement */}
+                {body && (
+                  <div style={{
+                    marginTop: subject ? 8 : 10,
+                    fontSize: isMobile ? 14 : 15,
+                    color: subject ? 'var(--ink-dim)' : 'var(--ink)',
+                    fontWeight: subject ? 400 : 500,
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}>
+                    {body}
+                  </div>
+                )}
               </div>
             );
           })}
