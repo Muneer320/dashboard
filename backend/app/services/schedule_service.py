@@ -212,8 +212,25 @@ async def list_all_announcements(
                 "is_pinned": bool(item.get("is_pinned", False)),
             })
 
-    # Sort by time desc (ISO strings sort correctly)
-    flat.sort(key=lambda x: x["time"], reverse=True)
+    # Sort by time desc. Use a composite key (date, time) so legacy rows
+    # with bare "HH:MM" or empty time values still land in a sensible order
+    # — they'll sort within their day rather than polluting the newest bucket.
+    # Normalising to a datetime string also means mixed formats (ISO vs HH:MM)
+    # don't cause ASCII string-compare surprises.
+    def _sort_key(item: dict) -> str:
+        t = item.get("time") or ""
+        d = item.get("date") or ""
+        # If time already looks like an ISO datetime (contains "T"), use it as-is.
+        if "T" in t:
+            return t
+        # If time is just a HH:MM, prepend the date so ordering is by moment,
+        # not just time-of-day across different days.
+        if t:
+            return f"{d}T{t}"
+        # No time at all → sort under end of day so new items still beat it.
+        return f"{d}T00:00"
+
+    flat.sort(key=_sort_key, reverse=True)
     return flat[:limit]
 
 

@@ -131,16 +131,42 @@ export function Announcements() {
         eventsApi.list().catch(() => []),    // all events (to detect event-targeted categories)
       ]).then(([data, myEvs, allEvs]) => {
         // Build lookup sets (lowercase names for case-insensitive match)
-        const myNames  = new Set((myEvs  || []).map(e => e.name.trim().toLowerCase()));
-        const allNames = new Set((allEvs || []).map(e => e.name.trim().toLowerCase()));
+        const norm = (s) => (s || '').trim().toLowerCase();
+        const myNames  = new Set((myEvs  || []).map(e => norm(e.name)).filter(Boolean));
+        const allNames = new Set((allEvs || []).map(e => norm(e.name)).filter(Boolean));
 
-        // Sort: pinned first, then newest
-        const sorted = [...data].sort((a, b) => {
-          const aPin = a.category === 'pinned' ? 1 : 0;
-          const bPin = b.category === 'pinned' ? 1 : 0;
-          if (bPin !== aPin) return bPin - aPin;
-          return new Date(b.time) - new Date(a.time);
-        });
+        // Backend already returns announcements sorted newest-first. We only
+        // re-sort here to float pinned items to the top while preserving the
+        // backend's relative order within each group. (Don't re-sort by
+        // new Date(p.time) — legacy rows may have "HH:MM" or empty time
+        // fields, which produce Invalid Date → NaN → undefined sort order,
+        // which is exactly what caused new posts to end up below old ones.)
+        const pinned   = data.filter(p => p.category === 'pinned');
+        const unpinned = data.filter(p => p.category !== 'pinned');
+
+        // Defensive tiebreaker: if a valid ISO timestamp is present on both
+        // items, prefer newest first. If either is unparseable, fall back to
+        // the incoming order (stable sort).
+        const byTimeDesc = (a, b) => {
+          const ta = Date.parse(a.time);
+          const tb = Date.parse(b.time);
+          if (Number.isNaN(ta) || Number.isNaN(tb)) return 0;
+          return tb - ta;
+        };
+        pinned.sort(byTimeDesc);
+        unpinned.sort(byTimeDesc);
+
+        const sorted = [...pinned, ...unpinned];
+
+        // Dev diagnostic — visible in browser console. Helps trace mismatches
+        // between announcement categories and event names (e.g. stale category
+        // strings, renamed events, or user.events not populated).
+        if (typeof window !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.debug('[Announcements] myEvents:', [...myNames],
+                        '| allEvents:', [...allNames],
+                        '| categories:', sorted.map(p => p.category));
+        }
 
         setMyEventNames(myNames);
         setAllEventNames(allNames);
@@ -157,10 +183,34 @@ export function Announcements() {
     const cat = (post.category || 'general').trim().toLowerCase();
     // If it's a broadcast category → always show
     if (BROADCAST_CATEGORIES.has(cat)) return true;
-    // If the category matches a known event name → show only if user is registered
+    // Exact match against a known event name → show only if user is registered
     if (allEventNames.has(cat)) return myEventNames.has(cat);
-    // Unknown category → treat as broadcast (safe default)
+    // Fuzzy match — announcement category may have extra words/punctuation
+    // ("Anvil Round 1", "Anvil - Round 1", etc.). Match if any of the user's
+    // registered event names is a whole-word substring of the category, or
+    // vice versa.
+    for (const myName of myEventNames) {
+      if (cat.includes(myName) || myName.includes(cat)) return true;
+    }
+    // Unknown category that isn't a broadcast and doesn't match any event →
+    // treat as event-targeted but not for this user → hide.
+    for (const evName of allEventNames) {
+      if (cat.includes(evName) || evName.includes(cat)) return false;
+    }
+    // Truly unknown → show (safe default for legacy/misc posts).
     return true;
+  }
+
+  // Does this post look event-targeted (for bucketing into the "My Events"
+  // filter)? Mirrors isVisible's matching rules.
+  function isEventTargetedPost(post) {
+    const cat = (post.category || 'general').trim().toLowerCase();
+    if (BROADCAST_CATEGORIES.has(cat)) return false;
+    if (allEventNames?.has(cat)) return true;
+    for (const evName of allEventNames || []) {
+      if (cat.includes(evName) || evName.includes(cat)) return true;
+    }
+    return false;
   }
 
   function relativeTime(isoStr) {
@@ -190,8 +240,7 @@ export function Announcements() {
   const visible = posts.filter(p => {
     if (!isVisible(p)) return false;
     if (filter === 'all') return true;
-    const cat = (p.category || 'general').trim().toLowerCase();
-    const isEvent = allEventNames?.has(cat) && !BROADCAST_CATEGORIES.has(cat);
+    const isEvent = isEventTargetedPost(p);
     if (filter === 'general') return !isEvent;
     if (filter === 'events')  return isEvent;
     return true;
@@ -234,8 +283,7 @@ export function Announcements() {
                     ? posts.filter(isVisible).length
                     : posts.filter(p => {
                         if (!isVisible(p)) return false;
-                        const cat = (p.category || 'general').trim().toLowerCase();
-                        const isEv = allEventNames?.has(cat) && !BROADCAST_CATEGORIES.has(cat);
+                        const isEv = isEventTargetedPost(p);
                         return f.key === 'events' ? isEv : !isEv;
                       }).length}
                 </span>
@@ -249,13 +297,23 @@ export function Announcements() {
             <div style={{ color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: 24, textAlign: 'center' }}>Loading…</div>
           )}
           {!loading && visible.length === 0 && (
-            <div style={{ color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: 24, textAlign: 'center' }}>No announcements yet.</div>
+            <div style={{ color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12, padding: 24, textAlign: 'center' }}>
+              {filter === 'events' ? (
+                <>
+                  <div>No announcements for your events yet.</div>
+                  <div style={{ marginTop: 10, opacity: 0.75, textTransform: 'none', letterSpacing: 'normal' }}>
+                    {myEventNames && myEventNames.size > 0
+                      ? <>You're registered for: <span style={{ color: 'var(--ink)' }}>{[...myEventNames].join(', ')}</span></>
+                      : "You don't appear to be registered for any events yet."}
+                  </div>
+                </>
+              ) : 'No announcements yet.'}
+            </div>
           )}
           {visible.map((p, i) => {
             const pin = p.category === 'pinned';
-            const cat = (p.category || '').trim().toLowerCase();
             // Show event badge only when it's targeted at a specific event
-            const isEventTargeted = allEventNames?.has(cat) && !BROADCAST_CATEGORIES.has(cat);
+            const isEventTargeted = isEventTargetedPost(p);
             const { subject, body } = splitSubject(p.announcement);
             return (
               <div key={i} className="glass" style={{
