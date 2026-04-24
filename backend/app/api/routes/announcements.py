@@ -6,7 +6,7 @@ POST /announcements              → append announcement to a day (admin)
 """
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 from supabase import AsyncClient
 
@@ -15,7 +15,12 @@ from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.models.user import User
 from app.schemas.schedule import GlobalScheduleItem
-from app.services.schedule_service import add_announcement, list_all_announcements
+from app.services.schedule_service import (
+    add_announcement,
+    list_all_announcements,
+    update_announcement,
+    delete_announcement,
+)
 
 router = APIRouter()
 
@@ -24,6 +29,7 @@ router = APIRouter()
 
 class AnnouncementFeedItem(BaseModel):
     """Single item in the flat announcements feed."""
+    id: str
     date: str            # "2026-05-10"
     announcement: str
     time: str            # ISO-8601 datetime string
@@ -37,6 +43,15 @@ class AddAnnouncementBody(BaseModel):
     announcement: str
     time: str            # ISO-8601 datetime string, e.g. "2026-05-10T09:00:00+05:30"
     category: str = "general"
+    is_pinned: bool = False
+
+
+class UpdateAnnouncementBody(BaseModel):
+    """Admin PATCH body to update an existing announcement."""
+    announcement: str | None = None
+    time: str | None = None
+    category: str | None = None
+    is_pinned: bool | None = None
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -77,5 +92,46 @@ async def post_announcement(
         announcement=body.announcement,
         time=body.time,
         category=body.category,
+        is_pinned=body.is_pinned,
     )
+    return GlobalScheduleItem(**row)
+
+
+@router.patch("/{date_str}/{announcement_id}", response_model=GlobalScheduleItem)
+async def patch_announcement(
+    date_str: str,
+    announcement_id: str,
+    body: UpdateAnnouncementBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> GlobalScheduleItem:
+    """
+    Admin: update an existing announcement within a specific day.
+    """
+    day = date.fromisoformat(date_str)
+    row = await update_announcement(
+        supabase,
+        day=day,
+        announcement_id=announcement_id,
+        update_data=body.model_dump(exclude_none=True),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    return GlobalScheduleItem(**row)
+
+
+@router.delete("/{date_str}/{announcement_id}", response_model=GlobalScheduleItem)
+async def remove_announcement(
+    date_str: str,
+    announcement_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> GlobalScheduleItem:
+    """
+    Admin: delete an announcement from a specific day.
+    """
+    day = date.fromisoformat(date_str)
+    row = await delete_announcement(supabase, day, announcement_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Announcement not found")
     return GlobalScheduleItem(**row)

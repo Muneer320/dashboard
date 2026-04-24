@@ -4,6 +4,7 @@ from pydantic import BaseModel
 class EventResponse(BaseModel):
     id: str
     name: str
+    title: str = ""
     description: str
     venue: list[str]
     rounds: dict

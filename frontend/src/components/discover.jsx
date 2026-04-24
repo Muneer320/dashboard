@@ -113,7 +113,7 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
         {bannerUrl ? (
           <img
             src={bannerUrl}
-            alt={ev.name}
+            alt={ev.title || ev.name}
             style={{
               width: '100%',
               height: isMobile ? 140 : 180,
@@ -122,7 +122,7 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
             }}
           />
         ) : (
-          <PosterPlaceholder title={(ev.name || '').toUpperCase()} sub="700 × 400" w="100%" h={isMobile ? 140 : 180} tone={tone} />
+          <PosterPlaceholder title={(ev.title || ev.name || '').toUpperCase()} sub="700 × 400" w="100%" h={isMobile ? 140 : 180} tone={tone} />
         )}
         {statusLabel && (
           <div style={{
@@ -146,7 +146,7 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
             {String(index + 1).padStart(2, '0')}
           </span>
         </div>
-        <div className="display" style={{ fontSize: 20, marginTop: 12, letterSpacing: '-0.01em' }}>{ev.name}</div>
+        <div className="display" style={{ fontSize: 20, marginTop: 12, letterSpacing: '-0.01em' }}>{ev.title || ev.name}</div>
         <div style={{ marginTop: 8, fontSize: 13, color: 'var(--ink-dim)', lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {ev.description || 'No description provided.'}
         </div>

@@ -20,6 +20,7 @@ DEFAULT_EVENT_MEALS_COUNT = 3
 class Event:
     id: uuid.UUID
     name: str
+    title: str = ""
     description: str = ""
     start_date: datetime | None = None
     end_date: datetime | None = None
@@ -44,6 +45,7 @@ class Event:
         return cls(
             id=coerce_uuid(row["id"]),
             name=row["name"],
+            title=row.get("title") or "",
             description=row.get("description") or "",
             category=row.get("category") or "",
             start_date=coerce_datetime(row.get("start_date")),

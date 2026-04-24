@@ -22,6 +22,7 @@ function toLocalDateInput(iso) {
 function buildInitialForm(event) {
   return {
     name:                  event.name || '',
+    title:                 event.title || '',
     description:           event.description || '',
     category:              event.category || '',
     date:                  toLocalDateInput(event.date),
@@ -228,6 +229,7 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
 
       const body = {
         name:                  form.name.trim(),
+        title:                 form.title.trim() || undefined,
         description:           form.description.trim() || undefined,
         category:              form.category.trim()    || undefined,
         date:                  form.date               || undefined,
@@ -258,8 +260,12 @@ function EventDetailsTab({ event, canEdit, onSaved }) {
       <div className="ed-section-label">Core Details</div>
       <div className="ed-form-grid">
         <div className="ed-field">
-          <label className="ed-label">Event Name *</label>
+          <label className="ed-label">Event Name * <span className="ed-hint">(Internal ID)</span></label>
           <input className="input-field" value={form.name} onChange={e => setField('name', e.target.value)} disabled={!canEdit} />
+        </div>
+        <div className="ed-field">
+          <label className="ed-label">Display Title <span className="ed-hint">(User Facing)</span></label>
+          <input className="input-field" value={form.title} onChange={e => setField('title', e.target.value)} disabled={!canEdit} placeholder="e.g. The Grand Coding Challenge" />
         </div>
         <div className="ed-field">
           <label className="ed-label">Category</label>
@@ -666,7 +672,10 @@ export default function EventDetail() {
       {/* Event header */}
       <div className="ed-header">
         <div className="ed-header-left">
-          <h1 className="ed-event-name">{event.name}</h1>
+          <h1 className="ed-event-name">{event.title || event.name}</h1>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 8 }}>
+            ID: <span style={{ fontFamily: 'monospace' }}>{event.name}</span>
+          </div>
           <div className="ed-header-meta">
             {event.category && <span className="badge badge-accent">{event.category}</span>}
             {event.date && <span className="badge badge-info">{new Date(event.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span>}

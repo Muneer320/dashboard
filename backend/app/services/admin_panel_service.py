@@ -239,6 +239,7 @@ async def get_events_with_stats(
         result.append({
             "id": eid,
             "name": event.name,
+            "title": event.title or "",
             "category": event.category or "Other",
             "date": event.start_date.date().isoformat() if event.start_date else None,
             "venue": event.venue or [],
@@ -509,6 +510,7 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
         result.append({
             "id": eid,
             "name": event.name,
+            "title": event.title or "",
             "venue": event.venue or [],
             "date": event.start_date.isoformat() if event.start_date else None,
             "maxParticipants": event.max_participants,
@@ -1092,6 +1094,7 @@ async def get_event_detail(
     return {
         "id": event_id,
         "name": event.name,
+        "title": event.title or "",
         "description": event.description,
         "category": event.category or "Other",
         "date": event.start_date.date().isoformat() if event.start_date else None,
@@ -1141,6 +1144,8 @@ async def update_event_details(
     db_patch: dict = {}
     if patch_data.get("name") is not None:
         db_patch["name"] = patch_data["name"]
+    if patch_data.get("title") is not None:
+        db_patch["title"] = patch_data["title"]
     if patch_data.get("description") is not None:
         db_patch["description"] = patch_data["description"]
     if patch_data.get("venue") is not None:
