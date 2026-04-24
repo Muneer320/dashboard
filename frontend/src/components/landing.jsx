@@ -141,10 +141,10 @@ export default function Landing() {
           marginTop: 36, display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center',
           position: 'relative', zIndex: 2,
         }}>
-          <a onClick={() => navigate('/credentials')} className="btn primary" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
+          {/* <a onClick={() => navigate('/credentials')} className="btn primary" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
             Register
             <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, opacity: 0.7 }}>→</span>
-          </a>
+          </a> */}
           <a onClick={() => navigate('/login')} className="btn" style={{ padding: isMobile ? '12px 20px' : '14px 26px', fontSize: 13 }}>
             Login
           </a>

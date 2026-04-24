@@ -40,7 +40,7 @@ export default function App() {
         {/* Public */}
         <Route path="/"              element={<GuestOnly><Landing /></GuestOnly>} />
         <Route path="/login"         element={<GuestOnly><Login /></GuestOnly>} />
-        <Route path="/credentials"   element={<Credentials />} />
+        {/* <Route path="/credentials"   element={<Credentials />} /> */}
         <Route path="/faq"           element={<FAQ />} />
         <Route path="/schedule"      element={<Schedule />}/>
         <Route path="/explore"       element={<Explore />}/>

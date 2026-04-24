@@ -279,12 +279,12 @@ export function NavBar({ active, variant = "app" }) {
                 <a onClick={() => navClick("login")} className="btn ghost sm">
                   Login
                 </a>
-                <a
+                {/* <a
                   onClick={() => navClick("credentials")}
                   className="btn primary sm"
                 >
                   Register
-                </a>
+                </a> */}
               </>
             )}
           </div>
@@ -402,13 +402,13 @@ export function NavBar({ active, variant = "app" }) {
                 >
                   Login
                 </a>
-                <a
+                {/* <a
                   onClick={() => navClick("credentials")}
                   className="btn primary"
                   style={{ width: "100%", justifyContent: "center" }}
                 >
                   Register
-                </a>
+                </a> */}
               </>
             )}
           </div>
@@ -931,7 +931,7 @@ export function Footer() {
               {
                 h: "Participate",
                 items: [
-                  { label: "Register", to: "/credentials" },
+                  // { label: "Register", to: "/credentials" },
                   { label: "Login", to: "/login" },
                   { label: "FAQ", to: "/faq" },
                   { label: "Code of Conduct", to: null },
@@ -969,7 +969,7 @@ export function Footer() {
               ] 
             },
             { h: 'Participate', items: [
-                { label: 'Register', to: '/credentials' },
+                // { label: 'Register', to: '/credentials' },
                 { label: 'Login', to: '/login' },
                 { label: 'FAQ', to: '/faq' },
               ] 
