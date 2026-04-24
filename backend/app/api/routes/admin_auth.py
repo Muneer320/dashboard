@@ -28,7 +28,7 @@ class AdminLoginRequest(BaseModel):
 
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("5/minute")
+@limiter.limit("50/minute")
 async def admin_login_endpoint(
     request: Request,
     payload: AdminLoginRequest,
