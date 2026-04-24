@@ -21,57 +21,11 @@ export function useMobile(breakpoint = 768) {
 export function AscentLogo({ size = 22, withMark = true }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      {withMark && (
-        <div
-          style={{
-            width: size * 1.1,
-            height: size * 1.1,
-            borderRadius: 6,
-            background:
-              "linear-gradient(135deg, rgba(127,119,221,0.35), rgba(29,158,117,0.18))",
-            border: "1px solid rgba(255,255,255,0.16)",
-            display: "grid",
-            placeItems: "center",
-            fontFamily: "var(--f-mono)",
-            fontSize: size * 0.5,
-            color: "var(--ink)",
-            letterSpacing: 0,
-          }}
-        >
-          <svg
-            width={size * 0.55}
-            height={size * 0.55}
-            viewBox="0 0 24 24"
-            fill="none"
-          >
-            <path
-              d="M4 20 L12 4 L20 20"
-              stroke="#F1EFE8"
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-            <path
-              d="M8 14 L16 14"
-              stroke="#7F77DD"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
-        </div>
-      )}
-      <div
-        style={{
-          fontFamily: "var(--f-display)",
-          fontWeight: 700,
-          fontSize: size,
-          letterSpacing: "-0.02em",
-          color: "var(--ink)",
-        }}
-      >
-        ASCENT
-        <span style={{ color: "var(--violet)", marginLeft: 2 }}>.</span>
-      </div>
+      <img 
+        src="/Logo.svg" 
+        alt="Ascent Logo" 
+        style={{ height: size * 1.5, display: "block" }} 
+      />
     </div>
   );
 }
