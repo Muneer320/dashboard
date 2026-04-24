@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 @router.post("/{event_id}/submit", response_model=SubmissionResponse, status_code=201)
-@limiter.limit("10/minute")
+@limiter.limit("50/minute")
 async def submit_event(
     request: Request,
     event_id: str,
