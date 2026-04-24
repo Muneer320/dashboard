@@ -30,6 +30,7 @@ async def get_events(
         EventResponse(
             id=str(event.id),
             name=event.name,
+            title=event.title or "",
             description=event.description,
             venue=event.venue or [],
             rounds=event.rounds or {},
@@ -50,6 +51,7 @@ async def get_public_events(
         EventResponse(
             id=str(event.id),
             name=event.name,
+            title=event.title or "",
             description=event.description,
             venue=event.venue or [],
             rounds=event.rounds or {},
@@ -70,6 +72,7 @@ async def get_single_event(
     return EventResponse(
         id=str(event.id),
         name=event.name,
+        title=event.title or "",
         description=event.description,
         venue=event.venue or [],
         rounds=event.rounds or {},

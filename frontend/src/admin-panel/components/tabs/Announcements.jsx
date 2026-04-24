@@ -63,6 +63,8 @@ export default function Announcements() {
   const [posting, setPosting]             = useState(false)
   const [error, setError]                 = useState('')
   const [success, setSuccess]             = useState('')
+  const [editingAnn, setEditingAnn]       = useState(null) // { id, announcement, category, date, time }
+  const [deletingId, setDeletingId]       = useState(null)
 
   // form state
   const today = new Date().toISOString().split('T')[0]
@@ -132,6 +134,45 @@ export default function Announcements() {
       setError(err.message)
     } finally {
       setPosting(false)
+    }
+  }
+
+  async function handleUpdate(e) {
+    e.preventDefault()
+    if (!editingAnn.announcement.trim()) return
+    setPosting(true)
+    setError('')
+    setSuccess('')
+    try {
+      await adminFetch(`/announcements/${editingAnn.date}/${editingAnn.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          announcement: editingAnn.announcement.trim(),
+          category: editingAnn.category,
+          is_pinned: editingAnn.category === 'pinned',
+        }),
+      })
+      setSuccess('Announcement updated!')
+      setEditingAnn(null)
+      load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setPosting(false)
+    }
+  }
+
+  async function handleDelete(date, id) {
+    if (!window.confirm('Delete this announcement?')) return
+    setDeletingId(id)
+    try {
+      await adminFetch(`/announcements/${date}/${id}`, { method: 'DELETE' })
+      setSuccess('Announcement deleted')
+      load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -328,22 +369,119 @@ export default function Announcements() {
                     </div>
                     <ExpandableText text={a.announcement} />
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    {relTime(a.time)}
-                    <br />
-                    <span style={{ fontSize: 10 }}>{a.date}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {relTime(a.time)}
+                      <br />
+                      <span style={{ fontSize: 10 }}>{a.date}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => setEditingAnn({ ...a })}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: 'var(--accent-light)', fontSize: 12, padding: 0,
+                          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em'
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(a.date, a.id)}
+                        disabled={deletingId === a.id}
+                        style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: '#E07070', fontSize: 12, padding: 0,
+                          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+                          opacity: deletingId === a.id ? 0.5 : 1
+                        }}
+                      >
+                        {deletingId === a.id ? '...' : 'Delete'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
             )
           })}
           
-          <Pagination 
-            currentPage={currentPage} 
-            totalPages={totalPages} 
-            onPageChange={setCurrentPage} 
-          />
+      {/* ── Edit Modal ──────────────────────────────────── */}
+      {editingAnn && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: 20
+        }}>
+          <div className="card" style={{ width: '100%', maxWidth: 500, padding: 28 }}>
+            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 600 }}>Edit Announcement</h3>
+            <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={labelStyle}>Message</label>
+                <textarea
+                  rows={4}
+                  required
+                  value={editingAnn.announcement}
+                  onChange={e => setEditingAnn(prev => ({ ...prev, announcement: e.target.value }))}
+                  style={{ ...inputStyle, resize: 'vertical' }}
+                />
+              </div>
+
+              <div className="announcements-grid">
+                <div>
+                  <label style={labelStyle}>Category</label>
+                  <select
+                    value={editingAnn.category}
+                    onChange={e => setEditingAnn(prev => ({ ...prev, category: e.target.value }))}
+                    style={{ ...inputStyle, colorScheme: 'dark' }}
+                  >
+                    <optgroup label="Broadcast" style={optGroupStyle}>
+                      {BROADCAST_CATS.map(c => (
+                        <option key={c} value={c} style={optStyle}>{c.toUpperCase()}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Events" style={optGroupStyle}>
+                      {events.map(ev => (
+                        <option key={ev.id} value={ev.name} style={optStyle}>{ev.name}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Date (Reference)</label>
+                  <input type="text" disabled value={editingAnn.date} style={{ ...inputStyle, opacity: 0.6 }} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setEditingAnn(null)}
+                  className="btn-secondary"
+                  style={{ minWidth: 100 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={posting}
+                  className="btn-primary"
+                  style={{ minWidth: 120 }}
+                >
+                  {posting ? 'Saving…' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
+      )}
+
+      <Pagination 
+        currentPage={currentPage} 
+        totalPages={totalPages} 
+        onPageChange={setCurrentPage} 
+      />
+    </div>
       )}
     </div>
   )

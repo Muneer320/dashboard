@@ -205,6 +205,7 @@ async def list_all_announcements(
             if category is not None and item_category != category:
                 continue
             flat.append({
+                "id": item.get("id") or str(uuid.uuid4()),
                 "date": iso_date,
                 "announcement": item.get("announcement", ""),
                 "time": item.get("time", ""),
@@ -240,6 +241,7 @@ async def add_announcement(
     announcement: str,
     time: str,
     category: str = "general",
+    is_pinned: bool = False,
 ) -> dict:
     """
     Append an announcement to a specific day's row (admin only).
@@ -249,9 +251,11 @@ async def add_announcement(
     row = await _get_or_create_row(supabase, day)
     existing = list(row.get("announcements") or [])
     existing.append({
+        "id": str(uuid.uuid4()),
         "announcement": announcement,
         "time": time,
         "category": category,
+        "is_pinned": is_pinned,
     })
 
     update_resp = await (
@@ -264,3 +268,65 @@ async def add_announcement(
     if updated is not None:
         return _row_to_dict(updated)
     return _row_to_dict({**row, "announcements": existing})
+
+
+async def update_announcement(
+    supabase: AsyncClient,
+    day: date,
+    announcement_id: str,
+    update_data: dict,
+) -> dict | None:
+    """
+    Update an existing announcement in a day's row.
+    Returns the full updated row dict, or None if not found.
+    """
+    row = await _get_or_create_row(supabase, day)
+    existing = list(row.get("announcements") or [])
+    
+    found = False
+    for i, ann in enumerate(existing):
+        if ann.get("id") == announcement_id:
+            # Merge updates
+            existing[i] = {**ann, **update_data}
+            found = True
+            break
+    
+    if not found:
+        return None
+
+    update_resp = await (
+        supabase.table("global")
+        .update({"announcements": existing})
+        .eq("id", row["id"])
+        .execute()
+    )
+    updated = first_row(update_resp)
+    return _row_to_dict(updated) if updated else _row_to_dict({**row, "announcements": existing})
+
+
+async def delete_announcement(
+    supabase: AsyncClient,
+    day: date,
+    announcement_id: str,
+) -> dict | None:
+    """
+    Remove an announcement from a day's row.
+    Returns the full updated row dict, or None if not found.
+    """
+    row = await _get_or_create_row(supabase, day)
+    existing = list(row.get("announcements") or [])
+    
+    initial_len = len(existing)
+    existing = [ann for ann in existing if ann.get("id") != announcement_id]
+    
+    if len(existing) == initial_len:
+        return None
+
+    update_resp = await (
+        supabase.table("global")
+        .update({"announcements": existing})
+        .eq("id", row["id"])
+        .execute()
+    )
+    updated = first_row(update_resp)
+    return _row_to_dict(updated) if updated else _row_to_dict({**row, "announcements": existing})

@@ -400,7 +400,7 @@ export function Dashboard() {
                               fontWeight: 700,
                             }}
                           >
-                            {ev.eventData.name[0]}
+                            {(ev.eventData.title || ev.eventData.name)[0]}
                           </div>
                           <div>
                             <div
@@ -418,7 +418,7 @@ export function Dashboard() {
                                   fontWeight: 600,
                                 }}
                               >
-                                {ev.eventData.name}
+                                {ev.eventData.title || ev.eventData.name}
                               </span>
                             </div>
                             <div
@@ -555,7 +555,7 @@ export function Dashboard() {
                         >
                           <div>
                             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>
-                              {ev.eventData.name}
+                              {ev.eventData.title || ev.eventData.name}
                             </div>
                             <div style={{
                               fontSize: 10, color: "var(--ink-mute)",
@@ -840,6 +840,12 @@ export function Dashboard() {
                           gap: 10,
                         }}
                       >
+                        <a 
+                        onClick={() => navigate("/announcements")}
+                          style={{
+                            cursor: "pointer",
+                        }}
+                        >
                         <div style={{ fontSize: 12, color: "var(--ink-dim)" }}>
                           {a.is_pinned && (
                             <span
@@ -865,6 +871,7 @@ export function Dashboard() {
                         >
                           {relTime(a.time)}
                         </span>
+                        </a>
                       </div>
                     ))
                   )}
@@ -1156,7 +1163,7 @@ export function EventDetail() {
               marginBottom: 12,
             }}
           >
-            {event.name}
+            {event.title || event.name}
           </p>
 
           {/* Main message */}
@@ -1291,7 +1298,7 @@ export function EventDetail() {
                 letterSpacing: "-0.03em",
               }}
             >
-              {event.name}.
+              {event.title || event.name}.
             </h1>
             <div
               style={{

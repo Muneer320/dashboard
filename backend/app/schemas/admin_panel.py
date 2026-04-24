@@ -18,6 +18,7 @@ class StatsResponse(BaseModel):
 class EventStatsItem(BaseModel):
     id: str
     name: str
+    title: str = ""
     category: str
     date: Optional[str]
     venue: list[str]
@@ -71,6 +72,7 @@ class MyEventParticipant(BaseModel):
 class MyEventItem(BaseModel):
     id: str
     name: str
+    title: str = ""
     venue: list[str]
     date: Optional[str]
     maxParticipants: int
@@ -86,6 +88,7 @@ class MyEventItem(BaseModel):
 class EventUpdateRequest(BaseModel):
     """Body for PATCH /admin-panel/events/{event_id} — all fields optional."""
     name: Optional[str] = None
+    title: Optional[str] = None
     description: Optional[str] = None
     venue: Optional[list[str]] = None
     date: Optional[str] = None               # maps to start_date  (ISO date)
@@ -104,6 +107,7 @@ class EventDetailResponse(BaseModel):
     """Full event detail returned by GET /admin-panel/events/{event_id}."""
     id: str
     name: str
+    title: str = ""
     description: Optional[str] = None
     category: str
     date: Optional[str]                      # start_date
