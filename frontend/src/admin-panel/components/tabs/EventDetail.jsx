@@ -64,8 +64,14 @@ function PhaseQuestionsEditor({ questions, onChange, canEdit }) {
     onChange(updated)
   }
 
-  function remove(idx) {
-    onChange(questions.filter((_, i) => i !== idx))
+  function updateType(idx, newType) {
+    const updated = [...questions]
+    let currentLimit = updated[idx].word_limit;
+    if (newType === 'text' && currentLimit > 50) currentLimit = 50;
+    if (newType === 'text-long' && currentLimit > 500) currentLimit = 500;
+    if (newType !== 'text' && newType !== 'text-long') currentLimit = undefined;
+    updated[idx] = { ...updated[idx], question_type: newType, word_limit: currentLimit }
+    onChange(updated)
   }
 
   return (
@@ -78,23 +84,44 @@ function PhaseQuestionsEditor({ questions, onChange, canEdit }) {
         <div className="ed-hint" style={{fontSize: '0.8rem'}}>No questions defined for this phase.</div>
       ) : (
         <div className="ed-q-list" style={{display: 'flex', flexDirection: 'column', gap: 12}}>
-          {questions.map((q, i) => (
-            <div key={i} className="ed-q-card" style={{background: 'var(--bg-card)', padding: 12, borderRadius: 8, border: '1px solid var(--border)'}}>
-              <div className="ed-q-row" style={{display: 'flex', gap: 8, alignItems: 'center'}}>
-                <input className="input-field" placeholder="ID (e.g. q1)" value={q.question_id||''} onChange={e=>update(i,'question_id',e.target.value)} disabled={!canEdit} style={{width: 90, fontSize: '0.8rem'}} />
-                <input className="input-field" placeholder="Question Text" value={q.question_text||''} onChange={e=>update(i,'question_text',e.target.value)} disabled={!canEdit} style={{flex: 1, fontSize: '0.8rem'}} />
-                <select className="input-field" value={q.question_type||'text'} onChange={e=>update(i,'question_type',e.target.value)} disabled={!canEdit} style={{width: 100, fontSize: '0.8rem', padding: '6px 8px'}}>
-                  {QUESTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <label className="ed-toggle-label" style={{fontSize: '0.75rem'}}><input type="checkbox" checked={!!q.required} onChange={e=>update(i,'required',e.target.checked)} disabled={!canEdit} /> Req</label>
-                {canEdit && <button className="ed-phase-remove" onClick={()=>remove(i)}>✕</button>}
+          {questions.map((q, i) => {
+            const isText = q.question_type === 'text' || q.question_type === 'text-long';
+            const maxLimit = q.question_type === 'text' ? 50 : 500;
+            return (
+              <div key={i} className="ed-q-card" style={{background: 'var(--bg-card)', padding: 12, borderRadius: 8, border: '1px solid var(--border)'}}>
+                <div className="ed-q-row" style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+                  <input className="input-field" placeholder="ID (e.g. q1)" value={q.question_id||''} onChange={e=>update(i,'question_id',e.target.value)} disabled={!canEdit} style={{width: 90, fontSize: '0.8rem'}} />
+                  <input className="input-field" placeholder="Question Text" value={q.question_text||''} onChange={e=>update(i,'question_text',e.target.value)} disabled={!canEdit} style={{flex: 1, fontSize: '0.8rem'}} />
+                  <select className="input-field" value={q.question_type||'text'} onChange={e=>updateType(i,e.target.value)} disabled={!canEdit} style={{width: 100, fontSize: '0.8rem', padding: '6px 8px'}}>
+                    {QUESTION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <label className="ed-toggle-label" style={{fontSize: '0.75rem'}}><input type="checkbox" checked={!!q.required} onChange={e=>update(i,'required',e.target.checked)} disabled={!canEdit} /> Req</label>
+                  {canEdit && <button className="ed-phase-remove" onClick={()=>remove(i)}>✕</button>}
+                </div>
+                <div className="ed-q-row" style={{display: 'flex', gap: 8, marginTop: 8}}>
+                  <input className="input-field" placeholder="Placeholder text..." value={q.placeholder||''} onChange={e=>update(i,'placeholder',e.target.value)} disabled={!canEdit} style={{flex: 1, fontSize: '0.8rem'}} />
+                  {isText && (
+                    <input 
+                      className="input-field" 
+                      type="number" 
+                      placeholder={`Words (Max ${maxLimit})`} 
+                      value={q.word_limit||''} 
+                      onChange={e => {
+                        let val = e.target.value !== '' ? Number(e.target.value) : undefined;
+                        if (val !== undefined && val > maxLimit) val = maxLimit;
+                        if (val !== undefined && val < 1) val = 1;
+                        update(i,'word_limit', val);
+                      }} 
+                      min={1}
+                      max={maxLimit}
+                      disabled={!canEdit} 
+                      style={{width: 160, fontSize: '0.8rem'}} 
+                    />
+                  )}
+                </div>
               </div>
-              <div className="ed-q-row" style={{display: 'flex', gap: 8, marginTop: 8}}>
-                <input className="input-field" placeholder="Placeholder text..." value={q.placeholder||''} onChange={e=>update(i,'placeholder',e.target.value)} disabled={!canEdit} style={{flex: 1, fontSize: '0.8rem'}} />
-                <input className="input-field" type="number" placeholder="Word Limit" value={q.word_limit||''} onChange={e=>update(i,'word_limit',e.target.value!==''?Number(e.target.value):undefined)} disabled={!canEdit} style={{width: 100, fontSize: '0.8rem'}} />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
