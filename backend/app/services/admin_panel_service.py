@@ -123,14 +123,34 @@ def _build_participant_dict(
     }
 
 
+_PAGE_SIZE = 1000  # Supabase default max per request
+
+
+async def _fetch_all(supabase: AsyncClient, table: str) -> list[dict]:
+    """Paginate a Supabase table query to bypass the 1 000-row default limit."""
+    all_rows: list[dict] = []
+    offset = 0
+    while True:
+        resp = await (
+            supabase.table(table)
+            .select("*")
+            .range(offset, offset + _PAGE_SIZE - 1)
+            .execute()
+        )
+        page = rows(resp)
+        all_rows.extend(page)
+        if len(page) < _PAGE_SIZE:
+            break
+        offset += _PAGE_SIZE
+    return all_rows
+
+
 async def _all_events(supabase: AsyncClient) -> list[Event]:
-    resp = await supabase.table("events").select("*").execute()
-    return [Event.from_row(r) for r in rows(resp)]
+    return [Event.from_row(r) for r in await _fetch_all(supabase, "events")]
 
 
 async def _all_users(supabase: AsyncClient) -> list[User]:
-    resp = await supabase.table("users").select("*").execute()
-    return [User.from_row(r) for r in rows(resp)]
+    return [User.from_row(r) for r in await _fetch_all(supabase, "users")]
 
 
 # ---------------------------------------------------------------------------
@@ -410,11 +430,12 @@ async def lookup_participant(
             )
             found = rows(resp)
         except Exception:
-            all_resp = await supabase.table("users").select("*").execute()
+            # Fallback: paginated full-table scan
+            all_rows = await _fetch_all(supabase, "users")
             needle = q.lower()
             found = [
                 r
-                for r in rows(all_resp)
+                for r in all_rows
                 if needle in (r.get("name") or "").lower()
                 or needle in (r.get("username") or "").lower()
             ]
