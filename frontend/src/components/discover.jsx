@@ -352,7 +352,7 @@ export function Schedule() {
   }, []);
 
   const activeDay = days.find(d => d.date === activeDate);
-  const slots = Array.isArray(activeDay?.schedule) ? activeDay.schedule : [];
+  const slots = Array.isArray(activeDay?.items) ? activeDay.items : [];
 
   // Derive venue chips from the visible day, plus "All"
   const venues = React.useMemo(() => {

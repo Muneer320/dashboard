@@ -92,7 +92,6 @@ export default function Announcements() {
 
   // editingId: null = new post mode, string = edit mode (announcement id being edited)
   const [editingId, setEditingId]   = useState(null)
-  const [editingDate, setEditingDate] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
 
   const [form, setForm] = useState({ ...EMPTY_FORM })
@@ -130,9 +129,7 @@ export default function Announcements() {
     const cat = ann.category || 'general'
     const isBroadcast = BROADCAST_CATS.includes(cat)
     setEditingId(ann.id)
-    setEditingDate(ann.date)
     setForm({
-      date: ann.date,
       title: ann.title || '',
       announcement: ann.announcement || '',
       audienceType: isBroadcast ? 'broadcast' : 'event',
@@ -146,7 +143,6 @@ export default function Announcements() {
 
   function cancelEdit() {
     setEditingId(null)
-    setEditingDate(null)
     setForm({ ...EMPTY_FORM })
     setError('')
     setSuccess('')
@@ -165,7 +161,7 @@ export default function Announcements() {
     try {
       if (editingId) {
         // UPDATE existing
-        await adminFetch(`/announcements/${editingDate}/${editingId}`, {
+        await adminFetch(`/announcements/${editingId}`, {
           method: 'PATCH',
           body: JSON.stringify({
             title: form.title.trim(),
@@ -182,7 +178,6 @@ export default function Announcements() {
         await adminFetch('/announcements', {
           method: 'POST',
           body: JSON.stringify({
-            date: form.date,
             title: form.title.trim(),
             announcement: form.announcement.trim(),
             time: now,
@@ -201,11 +196,11 @@ export default function Announcements() {
     }
   }
 
-  async function handleDelete(date, id) {
+  async function handleDelete(id) {
     if (!window.confirm('Delete this announcement?')) return
     setDeletingId(id)
     try {
-      await adminFetch(`/announcements/${date}/${id}`, { method: 'DELETE' })
+      await adminFetch(`/announcements/${id}`, { method: 'DELETE' })
       setSuccess('Announcement deleted')
       if (editingId === id) cancelEdit()
       load()
@@ -494,7 +489,7 @@ export default function Announcements() {
                           {isBeingEdited ? 'Cancel' : 'Edit'}
                         </button>
                         <button
-                          onClick={() => handleDelete(a.date, a.id)}
+                          onClick={() => handleDelete(a.id)}
                           disabled={deletingId === a.id}
                           style={{
                             background: 'none', border: 'none', cursor: 'pointer',

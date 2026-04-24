@@ -190,7 +190,7 @@ export function Dashboard() {
 
       // Today's schedule — extract items
       if (scheduleData.status === "fulfilled" && scheduleData.value) {
-        setSchedule(scheduleData.value.schedule ?? []);
+        setSchedule(scheduleData.value.items ?? []);
       }
     } finally {
       setLoading(false);

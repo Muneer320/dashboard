@@ -1,3 +1,4 @@
+from datetime import date
 from pydantic import BaseModel
 
 
@@ -28,13 +29,10 @@ class EventScheduleResponse(BaseModel):
 class GlobalScheduleItem(BaseModel):
     """One row from the global table."""
     id: str
-    date: str          # "2026-05-10"
-    schedule: list[ScheduleItem]
-    announcements: list[AnnouncementItem] = []
+    date: date
+    items: list[ScheduleItem]
 
 
 class GlobalScheduleUpsert(BaseModel):
     """Admin payload to create or replace a day's global schedule and announcements."""
-    date: str          # "YYYY-MM-DD"
-    schedule: list[ScheduleItem]
-    announcements: list[AnnouncementItem] = []
+    items: list[ScheduleItem] = []
