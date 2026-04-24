@@ -84,7 +84,13 @@ function isValidEmail(str) {
 /** text / text-long */
 function TextInput({ q, value, onChange, disabled }) {
   const isLong = q.question_type === "text-long";
-  const limit = q.word_limit ?? (isLong ? 500 : null);
+  
+  // Override low word limits for long text to ensure users have enough space
+  let limit = q.word_limit;
+  if (isLong) {
+    limit = (limit && limit < 500) ? 500 : (limit ?? 500);
+  }
+
   const count = wordCount(value);
   const over = limit != null && count > limit;
   const inputStyle = {
@@ -753,6 +759,16 @@ function getAutoFill(q, userData) {
   const qid  = (q.question_id  || '').toLowerCase();
   const type = (q.question_type || '').toLowerCase();
 
+  // ── Skip fields that shouldn't autofill current user's data ──
+  if (
+    text.includes('member') || qid.includes('member') ||
+    text.includes('teammate') || qid.includes('teammate') ||
+    text.includes('leader') || qid.includes('leader') ||
+    text.includes('url') || qid.includes('url') ||
+    text.includes('linkedin') || text.includes('github') ||
+    type === 'url'
+  ) return null;
+
   // ── Email ─────────────────────────────────────────────────────────────
   if (
     type === 'email' ||
@@ -762,8 +778,8 @@ function getAutoFill(q, userData) {
 
   // ── Team name ─────────────────────────────────────────────────────────
   if (
-    qid.includes('team') ||
-    text.includes('team name') || text === 'team name' || text.startsWith('team ')
+    qid.includes('team_name') || qid === 'team' || qid === 'teamname' ||
+    text.includes('team name') || text === 'team name' || text === 'name of the team' || text === 'team'
   ) return userData.teamName || null;
 
   // ── Phone / mobile ────────────────────────────────────────────────────
@@ -939,8 +955,10 @@ export function SubmissionPanel({
         return `"${q.question_text}": Enter a valid email address.`;
       }
 
-      const wLimit =
-        q.word_limit ?? (q.question_type === "text-long" ? 500 : null);
+      let wLimit = q.word_limit;
+      if (q.question_type === "text-long") {
+        wLimit = (wLimit && wLimit < 500) ? 500 : (wLimit ?? 500);
+      }
       if (wLimit != null && val && wordCount(val) > wLimit) {
         return `"${q.question_text}": Answer exceeds ${wLimit} word limit.`;
       }
@@ -1240,10 +1258,9 @@ export function SubmissionPanel({
                     q={q}
                     value={answers[q.question_id]}
                     onChange={(v) => {
-                      if (!isAutoFilled)
-                        setAnswers((prev) => ({ ...prev, [q.question_id]: v }));
+                      setAnswers((prev) => ({ ...prev, [q.question_id]: v }));
                     }}
-                    disabled={submitting || isAutoFilled}
+                    disabled={submitting}
                   />
                 </div>
               );

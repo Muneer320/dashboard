@@ -265,10 +265,9 @@ async def submit_for_event(
     questions = get_questions_for_phase(event, phase)
     normalised_answers = _validate_answers(questions, answers)
 
-    user_events = user.events or {}
-    participants = event.participants or {}
+    # 1. Determine team context
+    team_id = event_entry.get("teamId")
     event_key = str(event.id)
-    user_key = str(user.id)
     phase_key = f"phase{phase}"
     submitted_at = datetime.now(timezone.utc)
     submitted_iso = submitted_at.isoformat()
@@ -278,47 +277,73 @@ async def submit_for_event(
         for a in normalised_answers
     ]
 
-    # User row: update submission map for this phase
-    existing_submission = event_entry.get("submission")
-    if not isinstance(existing_submission, dict):
-        existing_submission = {}  # migrate any old bool/None/object value
+    # 2. Fetch all team members (or just the active user if no teamId)
+    team_members = [user]
+    if team_id:
+        resp = await (
+            supabase.table("users")
+            .select("*")
+            .contains("events", {event_key: {"teamId": team_id}})
+            .execute()
+        )
+        if resp.data:
+            # Reconstruct User models, but replace the active user to keep our active instance
+            fetched_members = [User.from_row(r) for r in resp.data]
+            team_members = [m for m in fetched_members if str(m.id) != str(user.id)]
+            team_members.insert(0, user)
 
-    existing_submission[phase_key] = {
-        "submitted": True,
-        "submitted_at": submitted_iso,
-        "answers": answers_payload,
-    }
-    event_entry["submission"] = existing_submission
-    user_events[event_key] = event_entry
+    # 3. Propagate the submission
+    participants = event.participants or {}
+    
+    for member in team_members:
+        member_key = str(member.id)
+        member_events = member.events or {}
+        member_event_entry = member_events.get(event_key, {})
 
-    # Event row: per-phase history with scoring slots
-    participant_entry = participants.get(user_key, {})
-    phase_submissions = participant_entry.get("submission", {})
-    if not isinstance(phase_submissions, dict):
-        phase_submissions = {}
+        # User row: update submission map for this phase
+        existing_submission = member_event_entry.get("submission")
+        if not isinstance(existing_submission, dict):
+            existing_submission = {}  # migrate any old bool/None/object value
 
-    # Preserve existing score/feedback if an admin already wrote them
-    existing_phase = phase_submissions.get(phase_key, {})
-    phase_submissions[phase_key] = {
-        "submitted": True,
-        "submitted_at": submitted_iso,
-        "answers": answers_payload,
-        "score": existing_phase.get("score"),
-        "feedback": existing_phase.get("feedback"),
-    }
-    participant_entry["submission"] = phase_submissions
-    participants[user_key] = participant_entry
+        existing_submission[phase_key] = {
+            "submitted": True,
+            "submitted_at": submitted_iso,
+            "answers": answers_payload,
+        }
+        member_event_entry["submission"] = existing_submission
+        member_events[event_key] = member_event_entry
+        member.events = member_events
 
-    user.events = user_events
+        # Event row: per-phase history with scoring slots
+        participant_entry = participants.get(member_key, {})
+        phase_submissions = participant_entry.get("submission", {})
+        if not isinstance(phase_submissions, dict):
+            phase_submissions = {}
+
+        # Preserve existing score/feedback if an admin already wrote them
+        existing_phase = phase_submissions.get(phase_key, {})
+        phase_submissions[phase_key] = {
+            "submitted": True,
+            "submitted_at": submitted_iso,
+            "answers": answers_payload,
+            "score": existing_phase.get("score"),
+            "feedback": existing_phase.get("feedback"),
+        }
+        participant_entry["submission"] = phase_submissions
+        participants[member_key] = participant_entry
+
     event.participants = participants
 
-    # Persist: user row first, then event row
-    await (
-        supabase.table("users")
-        .update({"events": user_events})
-        .eq("id", user_key)
-        .execute()
-    )
+    # 4. Persist: update each team member's user row individually
+    for member in team_members:
+        await (
+            supabase.table("users")
+            .update({"events": member.events})
+            .eq("id", str(member.id))
+            .execute()
+        )
+
+    # Persist: event row (contains all participants)
     await (
         supabase.table("events")
         .update({"participants": participants})
