@@ -206,6 +206,7 @@ async def list_all_announcements(
                 continue
             flat.append({
                 "id": item.get("id") or str(uuid.uuid4()),
+                "title": item.get("title", ""),
                 "date": iso_date,
                 "announcement": item.get("announcement", ""),
                 "time": item.get("time", ""),
@@ -240,6 +241,7 @@ async def add_announcement(
     day: date,
     announcement: str,
     time: str,
+    title: str = "",
     category: str = "general",
     is_pinned: bool = False,
 ) -> dict:
@@ -252,6 +254,7 @@ async def add_announcement(
     existing = list(row.get("announcements") or [])
     existing.append({
         "id": str(uuid.uuid4()),
+        "title": title,
         "announcement": announcement,
         "time": time,
         "category": category,

@@ -25,7 +25,6 @@ export function Mirage() {
     <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="mirage" />
 
-      {/* ── Full-page lock overlay — starts below the navbar ── */}
       {locked && (
         <div style={{
           position: 'fixed', top: 56, left: 0, right: 0, bottom: 0, zIndex: 10,
@@ -43,10 +42,7 @@ export function Mirage() {
           }}>
             Unlocks at Round 2
           </div>
-          <div style={{
-            fontSize: 14, color: 'var(--ink-mute)',
-            maxWidth: 320, lineHeight: 1.6,
-          }}>
+          <div style={{ fontSize: 14, color: 'var(--ink-mute)', maxWidth: 320, lineHeight: 1.6 }}>
             Mirage opens its doors after Round 1. Come back for the full photo archive.
           </div>
         </div>
@@ -110,43 +106,63 @@ export function Mirage() {
   );
 }
 
-// Broadcast categories — always show to every logged-in user
+// ── Shared helpers ─────────────────────────────────────────────────────────────
+
 const BROADCAST_CATEGORIES = new Set(['general', 'pinned', 'schedule', 'meal', 'alert', 'info']);
+
+/** Parse raw text into spans + clickable anchor elements for any URLs */
+function RichText({ text, style = {} }) {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
+  const parts = text.split(urlRegex);
+  return (
+    <span style={style}>
+      {parts.map((part, i) => {
+        if (urlRegex.test(part)) {
+          urlRegex.lastIndex = 0;
+          return (
+            <a
+              key={i}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{ color: 'var(--violet)', textDecoration: 'underline', wordBreak: 'break-all' }}
+            >
+              {part}
+            </a>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </span>
+  );
+}
+
+// ── User-facing Announcements page ────────────────────────────────────────────
 
 export function Announcements() {
   const isMobile = useMobile();
   const [posts, setPosts]         = React.useState([]);
   const [loading, setLoading]     = React.useState(true);
-  const [filter, setFilter]       = React.useState('all'); // 'all' | 'general' | 'events'
-  // Set of lowercase event names the user is registered for
+  const [filter, setFilter]       = React.useState('all');
   const [myEventNames, setMyEventNames] = React.useState(null);
-  // Set of all event names (lowercase) — used to detect event-targeted categories
   const [allEventNames, setAllEventNames] = React.useState(null);
 
   React.useEffect(() => {
     import('../lib/api').then(({ announcements: annApi, users, events: eventsApi }) => {
       Promise.all([
         annApi.list(50),
-        users.myEvents().catch(() => []),    // user's registered events
-        eventsApi.list().catch(() => []),    // all events (to detect event-targeted categories)
+        users.myEvents().catch(() => []),
+        eventsApi.list().catch(() => []),
       ]).then(([data, myEvs, allEvs]) => {
-        // Build lookup sets (lowercase names for case-insensitive match)
         const norm = (s) => (s || '').trim().toLowerCase();
         const myNames  = new Set((myEvs  || []).map(e => norm(e.name)).filter(Boolean));
         const allNames = new Set((allEvs || []).map(e => norm(e.name)).filter(Boolean));
 
-        // Backend already returns announcements sorted newest-first. We only
-        // re-sort here to float pinned items to the top while preserving the
-        // backend's relative order within each group. (Don't re-sort by
-        // new Date(p.time) — legacy rows may have "HH:MM" or empty time
-        // fields, which produce Invalid Date → NaN → undefined sort order,
-        // which is exactly what caused new posts to end up below old ones.)
         const pinned   = data.filter(p => p.category === 'pinned');
         const unpinned = data.filter(p => p.category !== 'pinned');
 
-        // Defensive tiebreaker: if a valid ISO timestamp is present on both
-        // items, prefer newest first. If either is unparseable, fall back to
-        // the incoming order (stable sort).
         const byTimeDesc = (a, b) => {
           const ta = Date.parse(a.time);
           const tb = Date.parse(b.time);
@@ -156,53 +172,29 @@ export function Announcements() {
         pinned.sort(byTimeDesc);
         unpinned.sort(byTimeDesc);
 
-        const sorted = [...pinned, ...unpinned];
-
-        // Dev diagnostic — visible in browser console. Helps trace mismatches
-        // between announcement categories and event names (e.g. stale category
-        // strings, renamed events, or user.events not populated).
-        if (typeof window !== 'undefined') {
-          // eslint-disable-next-line no-console
-          console.debug('[Announcements] myEvents:', [...myNames],
-                        '| allEvents:', [...allNames],
-                        '| categories:', sorted.map(p => p.category));
-        }
-
         setMyEventNames(myNames);
         setAllEventNames(allNames);
-        setPosts(sorted);
+        setPosts([...pinned, ...unpinned]);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
     });
   }, []);
 
-  // Decide whether this announcement is visible to the current user
   function isVisible(post) {
     if (allEventNames === null || myEventNames === null) return false;
     const cat = (post.category || 'general').trim().toLowerCase();
-    // If it's a broadcast category → always show
     if (BROADCAST_CATEGORIES.has(cat)) return true;
-    // Exact match against a known event name → show only if user is registered
     if (allEventNames.has(cat)) return myEventNames.has(cat);
-    // Fuzzy match — announcement category may have extra words/punctuation
-    // ("Anvil Round 1", "Anvil - Round 1", etc.). Match if any of the user's
-    // registered event names is a whole-word substring of the category, or
-    // vice versa.
     for (const myName of myEventNames) {
       if (cat.includes(myName) || myName.includes(cat)) return true;
     }
-    // Unknown category that isn't a broadcast and doesn't match any event →
-    // treat as event-targeted but not for this user → hide.
     for (const evName of allEventNames) {
       if (cat.includes(evName) || evName.includes(cat)) return false;
     }
-    // Truly unknown → show (safe default for legacy/misc posts).
     return true;
   }
 
-  // Does this post look event-targeted (for bucketing into the "My Events"
-  // filter)? Mirrors isVisible's matching rules.
   function isEventTargetedPost(post) {
     const cat = (post.category || 'general').trim().toLowerCase();
     if (BROADCAST_CATEGORIES.has(cat)) return false;
@@ -222,19 +214,6 @@ export function Announcements() {
     const hrs = Math.floor(mins / 60);
     if (hrs < 24)  return `${hrs}h ago`;
     return `${Math.floor(hrs / 24)}d ago`;
-  }
-
-  // Pull a subject out of a description that uses the
-  //   "<> Subject goes here <> body body body"
-  // convention. Returns { subject, body }. If no <> ... <> is found
-  // at the start, subject is null and body is the full text.
-  function splitSubject(text) {
-    if (!text) return { subject: null, body: '' };
-    const m = text.match(/^\s*<>\s*([\s\S]+?)\s*<>\s*([\s\S]*)$/);
-    if (!m) return { subject: null, body: text };
-    const subject = m[1].trim();
-    const body = m[2].trim();
-    return { subject: subject || null, body };
   }
 
   const visible = posts.filter(p => {
@@ -311,19 +290,17 @@ export function Announcements() {
             </div>
           )}
           {visible.map((p, i) => {
-            const pin = p.category === 'pinned';
-            // Show event badge only when it's targeted at a specific event
+            const pin = p.category === 'pinned' || p.is_pinned;
             const isEventTargeted = isEventTargetedPost(p);
-            const { subject, body } = splitSubject(p.announcement);
             return (
-              <div key={i} className="glass" style={{
-                padding: isMobile ? 16 : 22,
+              <div key={p.id || i} className="glass" style={{
+                padding: isMobile ? '16px 18px' : '22px 26px',
                 borderColor: pin ? 'rgba(127,119,221,0.45)' : undefined,
-                background: pin ? 'rgba(127,119,221,0.07)' : undefined,
+                background: pin ? 'rgba(127,119,221,0.06)' : undefined,
                 position: 'relative',
               }}>
-                {/* Header row — chips + timestamp */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+                {/* Header row: chips + timestamp */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1 }}>
                     {pin && <span className="chip violet" style={{ padding: '2px 8px', fontSize: 9, flexShrink: 0 }}>📌 PINNED</span>}
                     {isEventTargeted && (
@@ -332,36 +309,38 @@ export function Announcements() {
                       </span>
                     )}
                   </div>
-                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', whiteSpace: 'nowrap', flexShrink: 0 }}>{relativeTime(p.time)}</span>
+                  <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                    {relativeTime(p.time)}
+                  </span>
                 </div>
 
-                {/* Subject — shown only when the description started with "<> ... <>" */}
-                {subject && (
+                {/* Title */}
+                {p.title && (
                   <div style={{
-                    marginTop: 10,
+                    marginTop: 12,
                     fontFamily: 'var(--f-display)',
-                    fontSize: isMobile ? 20 : 24,
+                    fontSize: isMobile ? 18 : 22,
                     fontWeight: 700,
                     letterSpacing: '-0.01em',
                     color: 'var(--ink)',
                     lineHeight: 1.25,
                   }}>
-                    {subject}
+                    {p.title}
                   </div>
                 )}
 
-                {/* Body — if there was no subject, this is just the full announcement */}
-                {body && (
+                {/* Body with link rendering */}
+                {p.announcement && (
                   <div style={{
-                    marginTop: subject ? 8 : 10,
+                    marginTop: p.title ? 8 : 12,
                     fontSize: isMobile ? 14 : 15,
-                    color: subject ? 'var(--ink-dim)' : 'var(--ink)',
-                    fontWeight: subject ? 400 : 500,
-                    lineHeight: 1.6,
+                    color: p.title ? 'var(--ink-dim)' : 'var(--ink)',
+                    fontWeight: p.title ? 400 : 500,
+                    lineHeight: 1.65,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                   }}>
-                    {body}
+                    <RichText text={p.announcement} />
                   </div>
                 )}
               </div>

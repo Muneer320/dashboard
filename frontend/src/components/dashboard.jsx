@@ -826,55 +826,52 @@ export function Dashboard() {
                     anns.slice(0, 3).map((a, i) => (
                       <div
                         key={a.id || i}
+                        onClick={() => navigate("/announcements")}
                         style={{
-                          padding: "10px 12px",
+                          padding: "12px 14px",
                           borderRadius: 8,
-                          border: a.is_pinned
+                          border: (a.is_pinned || a.category === "pinned")
                             ? "1px solid rgba(127,119,221,0.4)"
                             : "1px solid var(--glass-border)",
-                          background: a.is_pinned
+                          background: (a.is_pinned || a.category === "pinned")
                             ? "rgba(127,119,221,0.08)"
                             : "rgba(255,255,255,0.02)",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 10,
+                          cursor: "pointer",
+                          transition: "background .15s",
                         }}
+                        onMouseEnter={e => e.currentTarget.style.background = (a.is_pinned || a.category === "pinned") ? "rgba(127,119,221,0.13)" : "rgba(255,255,255,0.05)"}
+                        onMouseLeave={e => e.currentTarget.style.background = (a.is_pinned || a.category === "pinned") ? "rgba(127,119,221,0.08)" : "rgba(255,255,255,0.02)"}
                       >
-                        <a 
-                        onClick={() => navigate("/announcements")}
-                          style={{
-                            cursor: "pointer",
-                        }}
-                        >
-                        <div style={{ fontSize: 12, color: "var(--ink-dim)" }}>
-                          {a.is_pinned && (
-                            <span
-                              className="chip violet"
-                              style={{
-                                padding: "1px 6px",
-                                fontSize: 8,
-                                marginRight: 8,
-                              }}
-                            >
-                              PIN
-                            </span>
-                          )}
+                        {/* Header row */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 5 }}>
+                          <div>
+                            {(a.is_pinned || a.category === "pinned") && (
+                              <span
+                                className="chip violet"
+                                style={{ padding: "1px 6px", fontSize: 8 }}
+                              >
+                                📌 PIN
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontFamily: "var(--f-mono)", fontSize: 10, color: "var(--ink-mute)", whiteSpace: "nowrap", flexShrink: 0 }}>
+                            {relTime(a.time)}
+                          </span>
+                        </div>
+                        {/* Title */}
+                        {a.title && (
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink)", marginBottom: 3, lineHeight: 1.3 }}>
+                            {a.title}
+                          </div>
+                        )}
+                        {/* Body — 2-line clamp */}
+                        <div style={{ fontSize: 12, color: "var(--ink-dim)", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
                           {a.announcement}
                         </div>
-                        <span
-                          style={{
-                            fontFamily: "var(--f-mono)",
-                            fontSize: 10,
-                            color: "var(--ink-mute)",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {relTime(a.time)}
-                        </span>
-                        </a>
                       </div>
                     ))
                   )}
+
                 </div>
               </div>
             </div>

@@ -12,6 +12,7 @@ class ScheduleItem(BaseModel):
 class AnnouncementItem(BaseModel):
     """A single announcement attached to a day."""
     id: str           # Unique identifier for editing/deleting
+    title: str = ""   # Optional short subject/heading
     announcement: str
     time: str         # ISO-8601 datetime string
     category: str = "general"   # free-form tag: general | schedule | meal | alert | ...

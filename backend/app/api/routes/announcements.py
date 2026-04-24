@@ -40,6 +40,7 @@ class AnnouncementFeedItem(BaseModel):
 class AddAnnouncementBody(BaseModel):
     """Admin POST body to add an announcement to a specific day."""
     date: str            # "YYYY-MM-DD"
+    title: str = ""      # Optional heading/subject
     announcement: str
     time: str            # ISO-8601 datetime string, e.g. "2026-05-10T09:00:00+05:30"
     category: str = "general"
@@ -48,6 +49,7 @@ class AddAnnouncementBody(BaseModel):
 
 class UpdateAnnouncementBody(BaseModel):
     """Admin PATCH body to update an existing announcement."""
+    title: str | None = None
     announcement: str | None = None
     time: str | None = None
     category: str | None = None
@@ -89,6 +91,7 @@ async def post_announcement(
     row = await add_announcement(
         supabase,
         day=day,
+        title=body.title,
         announcement=body.announcement,
         time=body.time,
         category=body.category,
