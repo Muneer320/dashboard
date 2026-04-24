@@ -22,7 +22,7 @@ export function AscentLogo({ size = 22, withMark = true }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <img 
-        src="/Logo.svg" 
+        src="https://res.cloudinary.com/dglvt0iom/image/upload/v1777041823/ascent_logo_uvllh8.svg" 
         alt="Ascent Logo" 
         style={{ height: size * 1.5, display: "block" }} 
       />

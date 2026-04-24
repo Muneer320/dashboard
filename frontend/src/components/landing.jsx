@@ -101,7 +101,7 @@ export default function Landing() {
           textAlign: 'center',
         }}>
           <img 
-            src="/Logo.svg" 
+            src="https://res.cloudinary.com/dglvt0iom/image/upload/v1777041823/ascent_logo_uvllh8.svg" 
             alt="Ascent" 
             style={{ 
               height: isMobile ? 80 : 180, 

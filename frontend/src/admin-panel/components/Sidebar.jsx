@@ -152,7 +152,7 @@ export default function Sidebar({ isOpen, onClose }) {
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       {/* Brand */}
       <div className="sidebar-brand">
-        <img src="/Logo.svg" alt="Ascent Logo" style={{ height: 24, display: 'block', marginRight: 4 }} />
+        <img src="https://res.cloudinary.com/dglvt0iom/image/upload/v1777041823/ascent_logo_uvllh8.svg" alt="Ascent Logo" style={{ height: 24, display: 'block', marginRight: 4 }} />
         <span className="brand-tag">Admin</span>
         
         <button className="sidebar-close-btn" onClick={onClose}>
