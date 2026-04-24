@@ -923,7 +923,7 @@ export function Footer() {
                 h: "Fest",
                 items: [
                   { label: "Overview", to: "/login" },
-                  { label: "Events", to: "/events" },
+                  { label: "Events", to: "/explore" },
                   { label: "Schedule", to: "/schedule" },
                   { label: "Sponsors", to: null },
                 ],
