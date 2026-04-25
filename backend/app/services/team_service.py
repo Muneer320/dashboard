@@ -39,7 +39,7 @@ async def get_my_team(
             detail="Invalid team ID in user profile",
         ) from exc
 
-    # Fetch the team details
+    # Fetch the team details (includes member_ids column)
     team_resp = await (
         supabase.table("teams")
         .select("*")
@@ -53,31 +53,39 @@ async def get_my_team(
 
     team = Team.from_row(team_row)
 
-    # Fetch members via JSONB path filter:
-    #   users.events->{event_id}->>teamId = team_id_str
-    # PostgREST supports this via the `->` / `->>` operators in filter keys.
-    try:
+    # Use member_ids stored on the team row for an efficient targeted lookup
+    member_id_strings = [str(m) for m in team.member_ids]
+
+    if member_id_strings:
         members_resp = await (
             supabase.table("users")
-            .select("id, name, events")
-            .filter(f"events->{event_id}->>teamId", "eq", team_id_str)
+            .select("id, name")
+            .in_("id", member_id_strings)
             .execute()
         )
         member_rows = rows(members_resp)
-    except Exception:
-        # Fallback: scan all users and filter client-side. This is expensive but
-        # correct if PostgREST rejects the JSONB path filter for any reason.
-        all_resp = await (
-            supabase.table("users")
-            .select("id, name, events")
-            .execute()
-        )
-        member_rows = [
-            r
-            for r in rows(all_resp)
-            if ((r.get("events") or {}).get(event_id) or {}).get("teamId")
-            == team_id_str
-        ]
+    else:
+        # Fallback: scan users by JSONB teamId (handles legacy rows not yet backfilled)
+        try:
+            members_resp = await (
+                supabase.table("users")
+                .select("id, name, events")
+                .filter(f"events->{event_id}->>teamId", "eq", team_id_str)
+                .execute()
+            )
+            member_rows = rows(members_resp)
+        except Exception:
+            all_resp = await (
+                supabase.table("users")
+                .select("id, name, events")
+                .execute()
+            )
+            member_rows = [
+                r
+                for r in rows(all_resp)
+                if ((r.get("events") or {}).get(event_id) or {}).get("teamId")
+                == team_id_str
+            ]
 
     leader_id_str = str(team.leader_id) if team.leader_id else None
 
@@ -97,5 +105,6 @@ async def get_my_team(
     return {
         "team_id": str(team.id),
         "name": team.name,
+        "member_ids": [str(m) for m in team.member_ids],
         "members": members,
     }

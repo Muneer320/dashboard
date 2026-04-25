@@ -13,4 +13,5 @@ class MyTeamResponse(BaseModel):
     """Response payload for GET /events/{event_id}/my-team."""
     team_id: str
     name: str
+    member_ids: list[str] = []
     members: list[TeamMember]
