@@ -34,14 +34,7 @@ export default function Login() {
       <div className="login-card fade-in">
         {/* Logo */}
         <div className="login-logo">
-          <div className="logo-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-              <path d="M2 17l10 5 10-5"/>
-              <path d="M2 12l10 5 10-5"/>
-            </svg>
-          </div>
-          <span className="logo-text">Ascent</span>
+          <img src="https://res.cloudinary.com/dglvt0iom/image/upload/v1777041823/ascent_logo_uvllh8.svg" alt="Ascent Logo" style={{ height: 32, display: 'block' }} />
         </div>
 
         <div className="login-heading">

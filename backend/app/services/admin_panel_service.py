@@ -103,17 +103,23 @@ def _build_participant_dict(
     event_id: str,
     event_name: str,
     entry: dict,
+    team_members_map: dict[str, list[str]] | None = None,
 ) -> dict:
     """Build the ParticipantItem dict from a user + one event entry."""
     food = user.food or {}
     sub = entry.get("submission")
+    team_id = entry.get("teamId")
+    member_ids: list[str] = []
+    if team_id and team_members_map:
+        member_ids = team_members_map.get(team_id, [])
     return {
         "id": str(user.id),
         "name": user.name,
         "username": user.username,
         "eventId": event_id,
         "eventName": event_name,
-        "teamId": entry.get("teamId"),
+        "teamId": team_id,
+        "teamMemberIds": member_ids,
         "status": "restricted" if entry.get("restricted") else "active",
         "isAttending": bool(entry.get("isAttending", False)),
         "foodClaimed": any(food.values()),
@@ -278,6 +284,13 @@ async def get_participants_list(
 
     all_users = await _all_users(supabase)
 
+    # Pre-fetch all teams to build a team_id → member_ids lookup (one query)
+    team_rows = await _fetch_all(supabase, "teams")
+    team_members_map: dict[str, list[str]] = {
+        str(t["id"]): [str(m) for m in (t.get("member_ids") or [])]
+        for t in team_rows
+    }
+
     result: list[dict] = []
     for user in all_users:
         if search:
@@ -299,7 +312,7 @@ async def get_participants_list(
                 continue
 
             result.append(
-                _build_participant_dict(user, eid, event_name_map.get(eid, ""), entry)
+                _build_participant_dict(user, eid, event_name_map.get(eid, ""), entry, team_members_map)
             )
 
     return result
@@ -453,12 +466,18 @@ async def lookup_participant(
         )
 
     result: list[dict] = []
+    # Pre-fetch teams for member_ids lookup
+    team_rows = await _fetch_all(supabase, "teams")
+    team_members_map: dict[str, list[str]] = {
+        str(t["id"]): [str(m) for m in (t.get("member_ids") or [])]
+        for t in team_rows
+    }
     for user in users:
         for eid, entry in (user.events or {}).items():
             if eid not in scoped_ids:
                 continue
             result.append(
-                _build_participant_dict(user, eid, event_name_map.get(eid, ""), entry)
+                _build_participant_dict(user, eid, event_name_map.get(eid, ""), entry, team_members_map)
             )
 
     if not result:
@@ -478,6 +497,13 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
     scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
 
     all_users = await _all_users(supabase)
+
+    # Pre-fetch teams for member_ids lookup
+    _team_rows = await _fetch_all(supabase, "teams")
+    team_members_map: dict[str, list[str]] = {
+        str(t["id"]): [str(m) for m in (t.get("member_ids") or [])]
+        for t in _team_rows
+    }
 
     result: list[dict] = []
     for event in scoped_events:
@@ -502,6 +528,7 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
                 "id": str(user.id),
                 "name": user.name,
                 "teamId": entry.get("teamId"),
+                "teamMemberIds": team_members_map.get(entry.get("teamId") or "", []),
                 "status": "restricted" if entry.get("restricted") else "active",
                 "submitted": is_submitted,
                 "isAttending": is_attending,

@@ -97,20 +97,18 @@ export default function Landing() {
         <h1 className="display fade-up" style={{
           animationDelay: '.25s',
           position: 'relative', zIndex: 2,
-          fontSize: isMobile ? 80 : 180,
-          lineHeight: 0.86,
           margin: 0,
           textAlign: 'center',
-          letterSpacing: '-0.045em',
         }}>
-          <span style={{
-            background: 'linear-gradient(180deg, #F1EFE8 0%, #F1EFE8 55%, rgba(241,239,232,0.25) 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-          }}>
-            ASCENT
-          </span>
+          <img 
+            src="https://res.cloudinary.com/dglvt0iom/image/upload/v1777041823/ascent_logo_uvllh8.svg" 
+            alt="Ascent" 
+            style={{ 
+              height: isMobile ? 80 : 180, 
+              display: 'inline-block',
+              filter: 'drop-shadow(0px 10px 30px rgba(127,119,221,0.2))' 
+            }} 
+          />
         </h1>
 
         <div className="fade-up" style={{

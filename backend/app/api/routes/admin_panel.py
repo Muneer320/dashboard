@@ -59,7 +59,7 @@ from app.services.credentials_service import (
     list_requested_members,
     update_requested_member_status,
 )
-from app.services.schedule_service import list_all_announcements
+from app.services.announcement_service import list_announcements
 
 router = APIRouter()
 
@@ -447,7 +447,7 @@ async def admin_list_announcements(
     _: Admin = Depends(get_admin_only),
 ) -> list[dict]:
     """Return all announcements — admin only, uses admin JWT."""
-    return await list_all_announcements(supabase, limit=limit)
+    return await list_announcements(supabase, limit=limit)
 
 
 # ── Requested Members (credentials-request review) ────────────────────────────

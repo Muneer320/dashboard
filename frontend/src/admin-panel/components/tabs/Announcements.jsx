@@ -34,26 +34,52 @@ function relTime(iso) {
   return `${Math.floor(h / 24)}d ago`
 }
 
-function ExpandableText({ text, maxLength = 150 }) {
-  const [expanded, setExpanded] = useState(false)
-  
-  if (!text || text.length <= maxLength) {
-    return <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{text}</p>
-  }
+/** Renders announcement text with clickable links */
+function AnnouncementText({ text, compact = false }) {
+  if (!text) return null
+  // Split by URLs
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g
+  const parts = text.split(urlRegex)
+  const rendered = parts.map((part, i) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--accent-light)', textDecoration: 'underline', wordBreak: 'break-all' }}
+        >
+          {part}
+        </a>
+      )
+    }
+    return <span key={i}>{part}</span>
+  })
 
   return (
-    <div>
-      <p style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-        {expanded ? text : `${text.slice(0, maxLength)}...`}
-      </p>
-      <button 
-        onClick={() => setExpanded(!expanded)} 
-        style={{ background: 'none', border: 'none', color: 'var(--accent-light)', cursor: 'pointer', padding: 0, fontSize: 12, marginTop: 6, fontWeight: 600 }}
-      >
-        {expanded ? 'View Less' : 'View More'}
-      </button>
-    </div>
+    <p style={{
+      margin: 0,
+      fontSize: compact ? 13 : 14,
+      color: 'var(--text-primary)',
+      lineHeight: 1.6,
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word',
+    }}>
+      {rendered}
+    </p>
   )
+}
+
+const EMPTY_FORM = {
+  date: new Date().toISOString().split('T')[0],
+  title: '',
+  announcement: '',
+  audienceType: 'broadcast',
+  broadcastCat: 'general',
+  eventCat: '',
+  is_pinned: false,
 }
 
 export default function Announcements() {
@@ -63,22 +89,13 @@ export default function Announcements() {
   const [posting, setPosting]             = useState(false)
   const [error, setError]                 = useState('')
   const [success, setSuccess]             = useState('')
-  const [editingAnn, setEditingAnn]       = useState(null) // { id, announcement, category, date, time }
-  const [deletingId, setDeletingId]       = useState(null)
 
-  // form state
-  const today = new Date().toISOString().split('T')[0]
-  // audienceType: 'broadcast' | 'event'
-  const [form, setForm] = useState({
-    date: today,
-    announcement: '',
-    audienceType: 'broadcast',   // which dropdown is active
-    broadcastCat: 'general',     // value when audienceType === 'broadcast'
-    eventCat: '',                // value when audienceType === 'event'
-    is_pinned: false,
-  })
+  // editingId: null = new post mode, string = edit mode (announcement id being edited)
+  const [editingId, setEditingId]   = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
 
-  // Pagination state
+  const [form, setForm] = useState({ ...EMPTY_FORM })
+
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
@@ -100,35 +117,77 @@ export default function Announcements() {
 
   useEffect(() => { load() }, [load])
 
-  // Derive the final category string to send to the API
+  // Effective category from form
   const effectiveCategory = form.is_pinned
     ? 'pinned'
     : form.audienceType === 'event'
     ? form.eventCat
     : form.broadcastCat
 
-  async function handlePost(e) {
+  function startEdit(ann) {
+    // Determine audienceType from category
+    const cat = ann.category || 'general'
+    const isBroadcast = BROADCAST_CATS.includes(cat)
+    setEditingId(ann.id)
+    setForm({
+      title: ann.title || '',
+      announcement: ann.announcement || '',
+      audienceType: isBroadcast ? 'broadcast' : 'event',
+      broadcastCat: isBroadcast ? cat : 'general',
+      eventCat: !isBroadcast ? cat : '',
+      is_pinned: ann.category === 'pinned' || !!ann.is_pinned,
+    })
+    // scroll to form
+    setTimeout(() => document.getElementById('ann-compose-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setForm({ ...EMPTY_FORM })
+    setError('')
+    setSuccess('')
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault()
     if (!form.announcement.trim()) return
     if (form.audienceType === 'event' && !form.eventCat) return
     setPosting(true)
     setError('')
     setSuccess('')
+
+    const cat = effectiveCategory
+
     try {
-      const now = new Date()
-      const time = now.toISOString()
-      const cat = effectiveCategory
-      await adminFetch('/announcements', {
-        method: 'POST',
-        body: JSON.stringify({
-          date: form.date,
-          announcement: form.announcement.trim(),
-          time,
-          category: cat,
-        }),
-      })
-      setSuccess('Announcement posted!')
-      setForm(f => ({ ...f, announcement: '', is_pinned: false, eventCat: '' }))
+      if (editingId) {
+        // UPDATE existing
+        await adminFetch(`/announcements/${editingId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            title: form.title.trim(),
+            announcement: form.announcement.trim(),
+            category: cat,
+            is_pinned: form.is_pinned,
+          }),
+        })
+        setSuccess('Announcement updated!')
+        cancelEdit()
+      } else {
+        // POST new
+        const now = new Date().toISOString()
+        await adminFetch('/announcements', {
+          method: 'POST',
+          body: JSON.stringify({
+            title: form.title.trim(),
+            announcement: form.announcement.trim(),
+            time: now,
+            category: cat,
+            is_pinned: form.is_pinned,
+          }),
+        })
+        setSuccess('Announcement posted!')
+        setForm({ ...EMPTY_FORM })
+      }
       load()
     } catch (err) {
       setError(err.message)
@@ -137,37 +196,13 @@ export default function Announcements() {
     }
   }
 
-  async function handleUpdate(e) {
-    e.preventDefault()
-    if (!editingAnn.announcement.trim()) return
-    setPosting(true)
-    setError('')
-    setSuccess('')
-    try {
-      await adminFetch(`/announcements/${editingAnn.date}/${editingAnn.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          announcement: editingAnn.announcement.trim(),
-          category: editingAnn.category,
-          is_pinned: editingAnn.category === 'pinned',
-        }),
-      })
-      setSuccess('Announcement updated!')
-      setEditingAnn(null)
-      load()
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setPosting(false)
-    }
-  }
-
-  async function handleDelete(date, id) {
+  async function handleDelete(id) {
     if (!window.confirm('Delete this announcement?')) return
     setDeletingId(id)
     try {
-      await adminFetch(`/announcements/${date}/${id}`, { method: 'DELETE' })
+      await adminFetch(`/announcements/${id}`, { method: 'DELETE' })
       setSuccess('Announcement deleted')
+      if (editingId === id) cancelEdit()
       load()
     } catch (err) {
       setError(err.message)
@@ -178,11 +213,13 @@ export default function Announcements() {
 
   const categoryLabel = (cat) => {
     if (BROADCAST_CATS.includes(cat)) return cat.toUpperCase()
-    return cat  // event name
+    return cat
   }
 
   const totalPages = Math.ceil(announcements.length / itemsPerPage)
   const paginatedAnns = announcements.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+
+  const isEditing = editingId !== null
 
   return (
     <div className="fade-in" style={{ padding: '0 0 48px' }}>
@@ -192,36 +229,76 @@ export default function Announcements() {
         <span className="badge badge-accent">Admin Only</span>
       </div>
 
-      {/* ── Compose form ─────────────────────────────────── */}
-      <div className="card" style={{ marginBottom: 32, padding: '24px 28px' }}>
-        <h3 style={{ margin: '0 0 20px', fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
-          Post New Announcement
-        </h3>
-        <form onSubmit={handlePost} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* ── Compose / Edit form ─────────────────────────────────── */}
+      <div
+        id="ann-compose-form"
+        className="card"
+        style={{
+          marginBottom: 32,
+          padding: '24px 28px',
+          borderColor: isEditing ? 'rgba(127,119,221,0.5)' : undefined,
+          boxShadow: isEditing ? '0 0 0 1px rgba(127,119,221,0.3)' : undefined,
+          transition: 'border-color .2s, box-shadow .2s',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            {isEditing ? (
+              <>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block', boxShadow: '0 0 8px var(--accent)' }} />
+                Edit Announcement
+              </>
+            ) : 'Post New Announcement'}
+          </h3>
+          {isEditing && (
+            <button
+              onClick={cancelEdit}
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 14px', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 12 }}
+            >
+              ✕ Cancel Edit
+            </button>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* Title (optional) */}
+          <div>
+            <label style={labelStyle}>Title <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional heading)</span></label>
+            <input
+              type="text"
+              placeholder="e.g. Important Update, Round 1 Results…"
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              style={inputStyle}
+            />
+          </div>
 
           {/* Announcement text */}
           <div>
-            <label style={labelStyle}>Message</label>
+            <label style={labelStyle}>Message *</label>
             <textarea
-              rows={3}
+              rows={4}
               required
-              placeholder="Type your announcement…"
+              placeholder="Type your announcement… URLs will auto-link for users."
               value={form.announcement}
               onChange={e => setForm(f => ({ ...f, announcement: e.target.value }))}
-              style={{ ...inputStyle, resize: 'vertical', minHeight: 80 }}
+              style={{ ...inputStyle, resize: 'vertical', minHeight: 90 }}
             />
           </div>
 
           <div className="announcements-grid">
-            {/* Date */}
-            <div>
+            {/* Date — only for new posts */}
+            <div style={{ opacity: isEditing ? 0.5 : 1 }}>
               <label style={labelStyle}>Date</label>
               <input
                 type="date"
                 value={form.date}
-                onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                onChange={e => !isEditing && setForm(f => ({ ...f, date: e.target.value }))}
+                disabled={isEditing}
                 style={inputStyle}
               />
+              {isEditing && <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>Date is fixed after posting</span>}
             </div>
 
             {/* Audience type toggle */}
@@ -245,9 +322,8 @@ export default function Announcements() {
             </div>
           </div>
 
-          {/* Two dropdowns — one active, one dimmed */}
+          {/* Category selectors */}
           <div className="announcements-grid">
-            {/* Broadcast category */}
             <div style={{ opacity: form.audienceType === 'broadcast' ? 1 : 0.35, transition: 'opacity .2s', pointerEvents: form.audienceType === 'broadcast' ? 'auto' : 'none' }}>
               <label style={labelStyle}>Broadcast Category</label>
               <select
@@ -257,17 +333,12 @@ export default function Announcements() {
                 style={{ ...inputStyle, colorScheme: 'dark' }}
               >
                 {BROADCAST_CATS.filter(c => c !== 'pinned').map(c => (
-                  <option key={c} value={c} style={optStyle}>
-                    {c.charAt(0).toUpperCase() + c.slice(1)}
-                  </option>
+                  <option key={c} value={c} style={optStyle}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
                 ))}
               </select>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-                Shown to all registered users
-              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>Shown to all registered users</span>
             </div>
 
-            {/* Event-specific */}
             <div style={{ opacity: form.audienceType === 'event' ? 1 : 0.35, transition: 'opacity .2s', pointerEvents: form.audienceType === 'event' ? 'auto' : 'none' }}>
               <label style={labelStyle}>Target Event</label>
               <select
@@ -281,9 +352,7 @@ export default function Announcements() {
                   <option key={ev.id} value={ev.name} style={optStyle}>{ev.name}</option>
                 ))}
               </select>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>
-                Only visible to participants of that event
-              </span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, display: 'block' }}>Only visible to participants of that event</span>
             </div>
           </div>
 
@@ -311,14 +380,26 @@ export default function Announcements() {
           {error   && <div style={errorStyle}>{error}</div>}
           {success && <div style={successStyle}>{success}</div>}
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+            {isEditing && (
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="btn-secondary"
+                style={{ minWidth: 100 }}
+              >
+                Cancel
+              </button>
+            )}
             <button
               type="submit"
-              disabled={posting || !form.announcement.trim()}
+              disabled={posting || !form.announcement.trim() || (form.audienceType === 'event' && !form.eventCat)}
               className="btn-primary"
-              style={{ minWidth: 140 }}
+              style={{ minWidth: 170 }}
             >
-              {posting ? 'Posting…' : 'Post Announcement'}
+              {posting
+                ? (isEditing ? 'Updating…' : 'Posting…')
+                : (isEditing ? '✓ Update Announcement' : 'Post Announcement')}
             </button>
           </div>
         </form>
@@ -326,12 +407,8 @@ export default function Announcements() {
 
       {/* ── Existing announcements ────────────────────────── */}
       <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
-          All Announcements
-        </span>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {announcements.length} total
-        </span>
+        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>All Announcements</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{announcements.length} total</span>
       </div>
 
       {loading ? (
@@ -339,149 +416,104 @@ export default function Announcements() {
       ) : announcements.length === 0 ? (
         <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>No announcements yet.</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {paginatedAnns.map((a, i) => {
-            const isPinned = a.category === 'pinned'
-            const isEvent  = !BROADCAST_CATS.includes((a.category || '').toLowerCase())
-            return (
-              <div key={i} className="card" style={{
-                padding: '14px 18px',
-                borderLeft: isPinned
-                  ? '3px solid var(--accent)'
-                  : isEvent
-                  ? '3px solid #5eaad7'
-                  : '3px solid var(--border)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
-                      {isPinned && (
-                        <span className="badge badge-accent" style={{ fontSize: 10 }}>📌 PINNED</span>
+        <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {paginatedAnns.map((a) => {
+              const isPinned = a.category === 'pinned' || a.is_pinned
+              const isEvent  = !BROADCAST_CATS.includes((a.category || '').toLowerCase())
+              const isBeingEdited = editingId === a.id
+              return (
+                <div
+                  key={a.id}
+                  className="card"
+                  style={{
+                    padding: '14px 18px',
+                    borderLeft: isPinned
+                      ? '3px solid var(--accent)'
+                      : isEvent
+                      ? '3px solid #5eaad7'
+                      : '3px solid var(--border)',
+                    background: isBeingEdited ? 'rgba(127,119,221,0.07)' : undefined,
+                    outline: isBeingEdited ? '1px solid rgba(127,119,221,0.35)' : undefined,
+                    transition: 'background .2s, outline .2s',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {/* Badges */}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 6 }}>
+                        {isPinned && (
+                          <span className="badge badge-accent" style={{ fontSize: 10 }}>📌 PINNED</span>
+                        )}
+                        <span className="badge" style={{
+                          fontSize: 10,
+                          background: isEvent ? 'rgba(94,170,215,0.15)' : 'rgba(255,255,255,0.06)',
+                          color: isEvent ? '#5eaad7' : 'var(--text-muted)',
+                          border: isEvent ? '1px solid rgba(94,170,215,0.3)' : '1px solid var(--border)',
+                        }}>
+                          {categoryLabel(a.category || 'general')}
+                        </span>
+                        {isBeingEdited && (
+                          <span className="badge badge-accent" style={{ fontSize: 10, background: 'rgba(127,119,221,0.18)', color: 'var(--accent-light)', border: '1px solid rgba(127,119,221,0.4)' }}>
+                            ✏ EDITING
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Title */}
+                      {a.title && (
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4, letterSpacing: '-0.01em' }}>
+                          {a.title}
+                        </div>
                       )}
-                      <span className="badge" style={{
-                        fontSize: 10,
-                        background: isEvent ? 'rgba(94,170,215,0.15)' : 'rgba(255,255,255,0.06)',
-                        color: isEvent ? '#5eaad7' : 'var(--text-muted)',
-                        border: isEvent ? '1px solid rgba(94,170,215,0.3)' : '1px solid var(--border)',
-                      }}>
-                        {categoryLabel(a.category || 'general')}
-                      </span>
+
+                      {/* Announcement text with link rendering */}
+                      <AnnouncementText text={a.announcement} compact />
                     </div>
-                    <ExpandableText text={a.announcement} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      {relTime(a.time)}
-                      <br />
-                      <span style={{ fontSize: 10 }}>{a.date}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button
-                        onClick={() => setEditingAnn({ ...a })}
-                        style={{
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          color: 'var(--accent-light)', fontSize: 12, padding: 0,
-                          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em'
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(a.date, a.id)}
-                        disabled={deletingId === a.id}
-                        style={{
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          color: '#E07070', fontSize: 12, padding: 0,
-                          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
-                          opacity: deletingId === a.id ? 0.5 : 1
-                        }}
-                      >
-                        {deletingId === a.id ? '...' : 'Delete'}
-                      </button>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, flexShrink: 0 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {relTime(a.time)}<br />
+                        <span style={{ fontSize: 10 }}>{a.date}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button
+                          onClick={() => isBeingEdited ? cancelEdit() : startEdit(a)}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: isBeingEdited ? 'var(--text-muted)' : 'var(--accent-light)',
+                            fontSize: 12, padding: 0,
+                            fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em'
+                          }}
+                        >
+                          {isBeingEdited ? 'Cancel' : 'Edit'}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(a.id)}
+                          disabled={deletingId === a.id}
+                          style={{
+                            background: 'none', border: 'none', cursor: 'pointer',
+                            color: '#E07070', fontSize: 12, padding: 0,
+                            fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+                            opacity: deletingId === a.id ? 0.5 : 1
+                          }}
+                        >
+                          {deletingId === a.id ? '...' : 'Delete'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
-          
-      {/* ── Edit Modal ──────────────────────────────────── */}
-      {editingAnn && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, padding: 20
-        }}>
-          <div className="card" style={{ width: '100%', maxWidth: 500, padding: 28 }}>
-            <h3 style={{ margin: '0 0 20px', fontSize: 16, fontWeight: 600 }}>Edit Announcement</h3>
-            <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label style={labelStyle}>Message</label>
-                <textarea
-                  rows={4}
-                  required
-                  value={editingAnn.announcement}
-                  onChange={e => setEditingAnn(prev => ({ ...prev, announcement: e.target.value }))}
-                  style={{ ...inputStyle, resize: 'vertical' }}
-                />
-              </div>
-
-              <div className="announcements-grid">
-                <div>
-                  <label style={labelStyle}>Category</label>
-                  <select
-                    value={editingAnn.category}
-                    onChange={e => setEditingAnn(prev => ({ ...prev, category: e.target.value }))}
-                    style={{ ...inputStyle, colorScheme: 'dark' }}
-                  >
-                    <optgroup label="Broadcast" style={optGroupStyle}>
-                      {BROADCAST_CATS.map(c => (
-                        <option key={c} value={c} style={optStyle}>{c.toUpperCase()}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Events" style={optGroupStyle}>
-                      {events.map(ev => (
-                        <option key={ev.id} value={ev.name} style={optStyle}>{ev.name}</option>
-                      ))}
-                    </optgroup>
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>Date (Reference)</label>
-                  <input type="text" disabled value={editingAnn.date} style={{ ...inputStyle, opacity: 0.6 }} />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 10 }}>
-                <button
-                  type="button"
-                  onClick={() => setEditingAnn(null)}
-                  className="btn-secondary"
-                  style={{ minWidth: 100 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={posting}
-                  className="btn-primary"
-                  style={{ minWidth: 120 }}
-                >
-                  {posting ? 'Saving…' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
+              )
+            })}
           </div>
-        </div>
-      )}
 
-      <Pagination 
-        currentPage={currentPage} 
-        totalPages={totalPages} 
-        onPageChange={setCurrentPage} 
-      />
-    </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
+        </>
       )}
     </div>
   )
@@ -500,13 +532,6 @@ const inputStyle = {
   background: 'var(--surface-2)',
   color: 'var(--text-primary)', fontSize: 13,
   outline: 'none',
-}
-
-const optGroupStyle = {
-  background: '#1a1a2e',
-  color: '#8888aa',
-  fontWeight: 600,
-  fontSize: 11,
 }
 
 const optStyle = {

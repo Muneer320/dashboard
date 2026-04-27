@@ -1,3 +1,4 @@
+from datetime import date
 from pydantic import BaseModel
 
 
@@ -12,6 +13,7 @@ class ScheduleItem(BaseModel):
 class AnnouncementItem(BaseModel):
     """A single announcement attached to a day."""
     id: str           # Unique identifier for editing/deleting
+    title: str = ""   # Optional short subject/heading
     announcement: str
     time: str         # ISO-8601 datetime string
     category: str = "general"   # free-form tag: general | schedule | meal | alert | ...
@@ -27,13 +29,10 @@ class EventScheduleResponse(BaseModel):
 class GlobalScheduleItem(BaseModel):
     """One row from the global table."""
     id: str
-    date: str          # "2026-05-10"
-    schedule: list[ScheduleItem]
-    announcements: list[AnnouncementItem] = []
+    date: date
+    items: list[ScheduleItem]
 
 
 class GlobalScheduleUpsert(BaseModel):
     """Admin payload to create or replace a day's global schedule and announcements."""
-    date: str          # "YYYY-MM-DD"
-    schedule: list[ScheduleItem]
-    announcements: list[AnnouncementItem] = []
+    items: list[ScheduleItem] = []

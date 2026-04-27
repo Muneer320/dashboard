@@ -7,7 +7,6 @@ It powers user onboarding, event participation, submissions, and QR-based valida
 
 - `backend/`: FastAPI service (Python, uv, PostgreSQL/Supabase)
 - `frontend/`: Dashboard web application (to be implemented)
-- `docs/`: product and technical planning docs
 
 ## Current Status
 
@@ -95,14 +94,7 @@ The test suite covers route wiring, admin phase controls, the scheduled-job help
 
 ## Documentation
 
-See planning and architecture documents in `docs/BackendDocs`:
-
-- `0. User & Event Dashboard_ Backend & System Design (Detailed PRD).md`
-- `1. SystemOverview.md`
-- `2. BackendArchitecture.md`
-- `3. DatabaseAndModels.md`
-- `4. APIandWorkflows.md`
-- `5. ImplimentationPlan.md`
+See the `Database_schema_lastest.md` in the root directory for the comprehensive database schema and system overview.
 
 ## Development Notes
 

@@ -15,12 +15,11 @@ All timestamps are `TIMESTAMPTZ` with `DEFAULT now()`. `updated_at` is maintaine
 | `admins`           | Staff accounts (admin / eventManager / Scanner)          | `SERIAL uid`  | `events`                              |
 | `teams`            | Teams formed inside team-based events                    | `UUID`        | —                                     |
 | `ratings`          | Per-user, per-event 1–5 star rating + optional feedback  | `UUID`        | —                                     |
-| `global`           | Day-level global schedule + announcements feed           | `UUID`        | `schedule`, `announcements`           |
+| `global_schedule`  | Day-level master schedule (festival agenda)              | `UUID`        | `items`                               |
+| `announcements`    | Platform announcements / notices / alerts                | `UUID`        | —                                     |
 | `feedback`         | Anonymous overall-festival feedback (sliders + text)     | `UUID`        | `scores`                              |
 | `requested_members`| Credential requests submitted from the pre-login page    | `UUID`        | —                                     |
 | `rate_limit_entries` | Per-key request counters backing the rate limiter      | `UUID`        | —                                     |
-
-> Note: `global` is a reserved SQL word — it's always quoted in queries (`.table("global")`).
 
 ---
 
@@ -109,7 +108,7 @@ Catalog of events with per-event configuration. `rounds`, `participants`, and `s
 
 Indexes: `idx_events_name`, `idx_events_registration_deadline`.
 
-### `events.schedule` — shape (same as `global.schedule`)
+### `events.schedule` — shape (same as `global_schedule.items`)
 
 ```jsonc
 [
@@ -213,32 +212,37 @@ Indexes: `idx_ratings_event_id`, `idx_ratings_user_id`.
 
 ---
 
-## Table: `global`
+## Table: `global_schedule`
 
-One row per calendar date. Holds the day's master schedule feed and the rolling announcements list. Table name is quoted (`"global"`) because it's a reserved SQL word.
+One row per calendar date. Holds the day's master schedule feed.
 
 | Column          | DB type       | Nullable | Default           | Notes |
 |-----------------|---------------|----------|-------------------|-------|
 | `id`            | `UUID`        | no       | `gen_random_uuid()` | |
 | `date`          | `DATE`        | no       | —                 | Unique — one row per day. |
-| `schedule`      | `JSONB`       | no       | `'[]'`            | Same item shape as `events.schedule`. |
-| `announcements` | `JSONB`       | no       | `'[]'`            | Array — see shape below. |
+| `items`         | `JSONB`       | no       | `'[]'`            | Same item shape as `events.schedule`. |
 | `created_at`    | `TIMESTAMPTZ` | no       | `now()`           | |
 | `updated_at`    | `TIMESTAMPTZ` | no       | `now()`           | |
 
-Indexes: `idx_global_date` (unique).
+Indexes: `idx_global_schedule_date` (unique).
 
-### `global.announcements` — shape
+---
 
-```jsonc
-[
-  {
-    "announcement": "Registration for Round 2 is now open",
-    "time": "2026-04-22T14:00:00+05:30",
-    "category": "general"     // "general" | "schedule" | "urgent" | ...
-  }
-]
-```
+## Table: `announcements`
+
+Independent rows for announcements, enabling proper CRUD without JSON array limits.
+
+| Column          | DB type       | Nullable | Default           | Notes |
+|-----------------|---------------|----------|-------------------|-------|
+| `id`            | `UUID`        | no       | `gen_random_uuid()` | |
+| `title`         | `TEXT`        | no       | `''`              | |
+| `body`          | `TEXT`        | no       | —                 | Markdown/Rich text body. |
+| `category`      | `VARCHAR(128)`| no       | `'general'`       | Filtering tag (e.g. `alert`, `meal`, event name). |
+| `is_pinned`     | `BOOLEAN`     | no       | `false`           | If true, appears at the top. |
+| `created_at`    | `TIMESTAMPTZ` | no       | `now()`           | Used as the announcement timestamp. |
+| `updated_at`    | `TIMESTAMPTZ` | no       | `now()`           | |
+
+Indexes: `idx_announcements_category`, `idx_announcements_is_pinned`, `idx_announcements_created_at`.
 
 ---
 

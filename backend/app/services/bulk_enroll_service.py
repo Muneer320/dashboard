@@ -306,6 +306,8 @@ async def bulk_enroll(
 
     # team_uuid → team payload; only populated for users with a real team_id.
     teams_to_upsert: dict[str, dict] = {}
+    # team_uuid → list of user emails in that team (resolved to IDs later)
+    team_email_members: dict[str, list[str]] = {}
 
     for idx, row in enumerate(parsed_rows, start=2):  # row 1 is the header
         email = _clean_email(row.get("email"))
@@ -328,6 +330,7 @@ async def bulk_enroll(
                 "event_id": event_uuid,
                 "leader_id": None,  # set nullable; no single leader during bulk enroll
             }
+            team_email_members.setdefault(team_uuid, []).append(email)
         else:
             # Solo participant — no team assignment.
             team_uuid = None
@@ -339,21 +342,6 @@ async def bulk_enroll(
             "raw": row,
             "team_uuid": team_uuid,
         })
-
-    # ── Upsert teams (only real teams, not solo participants) ─────────────────
-    if teams_to_upsert:
-        teams_list = list(teams_to_upsert.values())
-        for i in range(0, len(teams_list), 200):
-            try:
-                await supabase.table("teams").upsert(
-                    teams_list[i : i + 200], on_conflict="id"
-                ).execute()
-            except Exception as exc:
-                errors_detail.append({
-                    "row": -1,
-                    "email": "teams-upsert",
-                    "reason": f"Team batch upsert failed: {exc}",
-                })
 
     # ── Fetch all existing users in one (chunked) query ───────────────────────
     emails = [p["email"] for p in prepared]
@@ -504,6 +492,33 @@ async def bulk_enroll(
                 "email": upd["email"],
                 "reason": f"Failed to update existing user: {exc}",
             })
+
+    # ── Upsert teams with member_ids now that all user IDs are known ──────────
+    if teams_to_upsert:
+        # Build email→user_id map from new payloads + existing users
+        email_to_id: dict[str, str] = {}
+        for p in new_user_payloads:
+            email_to_id[p["username"]] = p["id"]
+        for email_key, existing_row in existing_map.items():
+            email_to_id[email_key] = str(existing_row["id"])
+
+        teams_list: list[dict] = []
+        for t_uuid, t_payload in teams_to_upsert.items():
+            member_emails = team_email_members.get(t_uuid, [])
+            member_ids = [email_to_id[e] for e in member_emails if e in email_to_id]
+            teams_list.append({**t_payload, "member_ids": member_ids})
+
+        for i in range(0, len(teams_list), 200):
+            try:
+                await supabase.table("teams").upsert(
+                    teams_list[i : i + 200], on_conflict="id"
+                ).execute()
+            except Exception as exc:
+                errors_detail.append({
+                    "row": -1,
+                    "email": "teams-upsert",
+                    "reason": f"Team batch upsert failed: {exc}",
+                })
 
     return {
         "event": event,

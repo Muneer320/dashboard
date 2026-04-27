@@ -66,10 +66,9 @@ async def upsert_global_schedule_day(
     supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ) -> GlobalScheduleItem:
-    """Create or fully replace the global schedule (and announcements) for a given date. Admin only."""
-    items = [item.model_dump() for item in body.schedule]
-    ann = [a.model_dump() for a in body.announcements]
-    row = await upsert_global_schedule(supabase, day, items, announcements=ann)
+    """Create or fully replace the global schedule for a given date. Admin only."""
+    items = [item.model_dump() for item in body.items]
+    row = await upsert_global_schedule(supabase, day, items)
     return GlobalScheduleItem(**row)
 
 
