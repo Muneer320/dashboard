@@ -32,7 +32,7 @@ const _BANNER_MAP = {
   'quanta':           'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878459/Invariant_s7bl8i.webp',
   'synapse':          'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Synapse_dtk2nc.png',
   'ai film conclave': 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/AI_film_conclave_s789t6.png',
-  'ship to scaler':   'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png',
+  'ship to scale':   'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png',
   'tech play zone':   'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Tech_play_zone_emyf1q.png',
 };
 function getEventBannerUrl(name) {
@@ -1733,7 +1733,7 @@ export function EventDetail() {
                   <img
                     src={bannerUrl}
                     alt={event.name}
-                    style={{ width: '100%', height: isMobile ? 180 : 250, objectFit: 'cover', display: 'block' }}
+                    style={{ width: '100%', aspectRatio: '7/4', objectFit: 'cover', display: 'block' }}
                   />
                 </div>
               ) : (
@@ -1741,7 +1741,8 @@ export function EventDetail() {
                   title={event.name.toUpperCase()}
                   sub="700 × 400"
                   w="100%"
-                  h={isMobile ? 180 : 250}
+                  h="auto"
+                  style={{ aspectRatio: "7/4" }}
                   tone="violet"
                 />
               );
