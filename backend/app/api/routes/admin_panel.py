@@ -54,7 +54,21 @@ from app.services.admin_panel_service import (
     update_event_meals_count,
     get_overview_stats,
 )
-from app.services.bulk_enroll_service import bulk_enroll, parse_upload
+from app.services.bulk_enroll_service import (
+    bulk_enroll,
+    find_uncovered_users,
+    parse_upload,
+    regenerate_passwords_for_ids,
+)
+from pydantic import BaseModel
+
+
+class _CoveredEmailsBody(BaseModel):
+    emails: list[str] = []
+
+
+class _RegenerateIdsBody(BaseModel):
+    user_ids: list[str] = []
 from app.services.credentials_service import (
     list_requested_members,
     update_requested_member_status,
@@ -134,6 +148,47 @@ async def handle_bulk_registration(
         headers=headers,
     )
 
+
+# ── Uncovered users (find DB rows missing from a credentials CSV) ────────────
+#
+# Workflow on the admin panel:
+#   1. Admin uploads a CSV (name, email, password) of users they've already
+#      sent credentials to. Frontend extracts the email column and posts the
+#      list to /uncovered-users.
+#   2. We diff DB usernames against the supplied list and return the gap.
+#   3. Admin reviews the list, clicks "Generate passwords & email", which
+#      batches user IDs (chunks of ~350 client-side) into the regenerate
+#      endpoint below. Each chunk hashes & writes new passwords and returns
+#      the plaintext credentials so the frontend's existing Apps-Script
+#      mailer can send them.
+
+@router.post("/uncovered-users")
+async def post_uncovered_users(
+    body: _CoveredEmailsBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    """
+    Return DB users whose ``username`` (email) does NOT appear in
+    ``body.emails``. Comparison is case-insensitive + whitespace-tolerant.
+    """
+    return await find_uncovered_users(supabase, body.emails)
+
+
+@router.post("/uncovered-users/regenerate")
+async def post_regenerate_uncovered(
+    body: _RegenerateIdsBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    """
+    Regenerate passwords for the given user IDs (overwrites password_hash).
+    Returns ``[{name, email, password}]`` so the frontend can hand the
+    plaintext credentials to the same Apps-Script mailer it already uses
+    for new bulk-enrollments. Caller is expected to chunk this from the
+    frontend so each request fits inside the proxy timeout.
+    """
+    return await regenerate_passwords_for_ids(supabase, body.user_ids)
 
 
 # ── Overview ──────────────────────────────────────────────────────────────────

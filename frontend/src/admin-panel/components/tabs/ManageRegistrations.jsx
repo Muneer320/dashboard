@@ -1,21 +1,87 @@
 import React, { useState, useEffect } from 'react'
 import { useData } from '../../context/DataContext'
+import { adminPanel as adminApi } from '../../../lib/api'
 import Pagination from '../Pagination'
 import './ManageRegistrations.css'
 
 const GOOGLE_SCRIPT_URL =
   'https://script.google.com/macros/s/AKfycbwcvY-1YOFoimzkhpqis3qL8UQtxQ8nI-EcavcgypXJa9l9MjA_ktNcURNpgg6Wm1_R/exec'
 
-// Simple CSV parser (handles quoted fields)
+// How many roster rows per backend upload. Each batch has to fit inside the
+// edge proxy's response timeout (Cloudflare/Vercel/nginx default = 30–60s).
+// At cost-factor-12 bcrypt + sequential per-existing-user updates, the backend
+// processes ~25 rows/sec. 350 rows ≈ 14s — safely inside even the strictest
+// proxy timeout, with headroom for slow links.
+const BATCH_SIZE = 350
+
+// ─── RFC-4180-ish CSV parsing/serialisation ──────────────────────────────────
+//
+// The previous parser split on `,` and didn't honour quoted fields, so any cell
+// with a comma or newline corrupted every following column. We need both
+// directions (parse on the way in, serialise per-batch on the way out) so the
+// round-trip survives names like  "Doe, John"  and addresses with line breaks.
+
+/** Parse CSV text into { header: string[], rows: string[][] }. */
+function parseCSVRows(text) {
+  // Strip BOM that Excel loves to inject
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1)
+  const rows = []
+  let row = []
+  let cur = ''
+  let inQuotes = false
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i++ }
+        else                      { inQuotes = false }
+      } else {
+        cur += ch
+      }
+    } else {
+      if (ch === '"')                           inQuotes = true
+      else if (ch === ',')                      { row.push(cur); cur = '' }
+      else if (ch === '\n' || ch === '\r') {
+        row.push(cur); cur = ''
+        // skip \r\n pair
+        if (ch === '\r' && text[i + 1] === '\n') i++
+        // drop fully-empty trailing rows (common at file end)
+        if (row.length > 1 || (row.length === 1 && row[0] !== '')) rows.push(row)
+        row = []
+      } else {
+        cur += ch
+      }
+    }
+  }
+  if (cur.length > 0 || row.length > 0) {
+    row.push(cur)
+    if (row.length > 1 || (row.length === 1 && row[0] !== '')) rows.push(row)
+  }
+
+  if (rows.length === 0) return { header: [], rows: [] }
+  const [header, ...body] = rows
+  return { header, rows: body }
+}
+
+/** Serialise a single CSV cell, quoting only when needed. */
+function csvCell(v) {
+  const s = (v ?? '').toString()
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+}
+
+/** Build a CSV string from a header row + body rows. */
+function buildCSV(header, rows) {
+  const all = [header, ...rows]
+  return all.map(r => r.map(csvCell).join(',')).join('\r\n')
+}
+
+/** Parse the credentials CSV the backend returns into row dicts (legacy shape). */
 function parseCSV(text) {
-  const lines = text.trim().split('\n')
-  if (lines.length < 2) return []
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
-  return lines.slice(1).map(line => {
-    // Basic split — handles simple CSVs
-    const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''))
-    return Object.fromEntries(headers.map((h, i) => [h, cols[i] ?? '']))
-  }).filter(row => row.Name || row.Username)
+  const { header, rows } = parseCSVRows(text)
+  if (!header.length) return []
+  return rows.map(cols => Object.fromEntries(header.map((h, i) => [h, cols[i] ?? ''])))
+            .filter(row => row.Name || row.Username)
 }
 
 // Send credentials email via Google Apps Script.
@@ -49,6 +115,21 @@ export default function ManageRegistrations() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const fileInputRef = React.useRef(null)
+  // { current, total, status }  — surfaces "Batch 2 of 4 · uploading…" in the UI
+  const [batchProgress, setBatchProgress] = useState(null)
+
+  // ── "Find users missing from your CSV" workflow state ───────────────────
+  const [coveredFile, setCoveredFile]         = useState(null)
+  const coveredFileRef                        = React.useRef(null)
+  const [findingUncovered, setFindingUncovered] = useState(false)
+  // [{ id, name, email }] — DB users not present in the uploaded CSV
+  const [uncovered, setUncovered]             = useState([])
+  // After regeneration: [{ name, email, password, status }]
+  const [regenCreds, setRegenCreds]           = useState([])
+  const [regenProgress, setRegenProgress]     = useState(null)
+  const [regenSending, setRegenSending]       = useState(false)
+  // 'idle' | 'preview' | 'regenerated' — controls which buttons appear
+  const [uncoveredPhase, setUncoveredPhase]   = useState('idle')
 
   useEffect(() => {
     setCurrentPage(1)
@@ -56,6 +137,49 @@ export default function ManageRegistrations() {
 
   const handleFileChange = (e) => {
     if (e.target.files?.[0]) setFile(e.target.files[0])
+  }
+
+  // Send one batch (or the whole file for small uploads / xlsx). Returns the
+  // parsed credentials, accumulated stats, and any error rows the backend
+  // surfaced via its X-* headers. Throws on HTTP error so the caller can decide
+  // whether to abort the queue or skip ahead.
+  async function uploadOneBatch(batchFile, eventId) {
+    const formData = new FormData()
+    formData.append('event_id', eventId)
+    formData.append('file', batchFile)
+
+    const token = localStorage.getItem('ascent_admin_token')
+    const BASE  = (import.meta.env.VITE_API_BASE || '/api/v1').replace(/\/$/, '')
+
+    const res = await fetch(`${BASE}/admin-panel/registrations/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    })
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({ detail: 'Upload failed' }))
+      const err = new Error(errData?.detail || `HTTP ${res.status}`)
+      err.status = res.status
+      throw err
+    }
+
+    const stats = {
+      created:    parseInt(res.headers.get('x-stats-created')    ?? '0', 10) || 0,
+      altered:    parseInt(res.headers.get('x-stats-added')      ?? '0', 10) || 0,
+      duplicates: parseInt(res.headers.get('x-stats-duplicates') ?? '0', 10) || 0,
+      errors:     parseInt(res.headers.get('x-stats-errors')     ?? '0', 10) || 0,
+    }
+
+    let errorsDetail = []
+    try {
+      const errorsJson = res.headers.get('x-errors-detail')
+      if (errorsJson) errorsDetail = JSON.parse(errorsJson)
+    } catch {}
+
+    const csvText = await res.text()
+    const parsed  = parseCSV(csvText)
+    return { stats, errorsDetail, csvText, parsed }
   }
 
   const handleUpload = async () => {
@@ -67,64 +191,132 @@ export default function ManageRegistrations() {
     setUsers([])
     setUploadErrors([])
     setEmailProgress({})
+    setBatchProgress(null)
 
     try {
-      const formData = new FormData()
-      formData.append('event_id', selectedEvent)
-      formData.append('file', file)
+      const isCSV = /\.csv$/i.test(file.name)
 
-      const token = localStorage.getItem('ascent_admin_token')
-      const BASE  = (import.meta.env.VITE_API_BASE || '/api/v1').replace(/\/$/, '')
+      // Batch only for CSV. XLSX would need a client-side parser (SheetJS) we
+      // don't ship; if someone uploads a giant XLSX we still send it whole and
+      // they're back to the timeout risk — keep XLSX uploads small for now.
+      let batches = []  // [{ file: File, range: [startRow, endRow] }]
+      let totalDataRows = 0
 
-      const res = await fetch(`${BASE}/admin-panel/registrations/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      })
+      if (isCSV) {
+        const text = await file.text()
+        const { header, rows } = parseCSVRows(text)
+        if (!header.length || !rows.length) {
+          throw new Error('CSV is empty or has no header row.')
+        }
+        totalDataRows = rows.length
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({ detail: 'Upload failed' }))
-        throw new Error(errData?.detail || `HTTP ${res.status}`)
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+          const slice = rows.slice(i, i + BATCH_SIZE)
+          const csv   = buildCSV(header, slice)
+          const blob  = new Blob([csv], { type: 'text/csv' })
+          const partFile = new File(
+            [blob],
+            file.name.replace(/\.csv$/i, `__batch${(i / BATCH_SIZE) + 1}.csv`),
+            { type: 'text/csv' },
+          )
+          batches.push({ file: partFile, range: [i + 1, Math.min(i + BATCH_SIZE, rows.length)] })
+        }
+      } else {
+        // XLSX / XLS — single shot. Subject to proxy timeout for huge files.
+        batches = [{ file, range: null }]
       }
 
-      // Pull stats from headers BEFORE consuming body
-      const created    = res.headers.get('x-stats-created')    ?? '0'
-      const altered    = res.headers.get('x-stats-added')      ?? '0'
-      const duplicates = res.headers.get('x-stats-duplicates') ?? '0'
-      const errors     = res.headers.get('x-stats-errors')     ?? '0'
-      setStats({ created, altered, duplicates, errors })
+      // Aggregators across batches
+      const totalStats   = { created: 0, altered: 0, duplicates: 0, errors: 0 }
+      const allErrors    = []
+      const allParsed    = []   // user rows for the on-screen table
+      const csvParts     = []   // per-batch credential CSV bodies for the merged download
+      const failedBatches = []
 
-      // Read body as text, parse CSV, then also trigger download
-      // Parse errors detail from header
-      try {
-        const errorsJson = res.headers.get('x-errors-detail')
-        if (errorsJson) setUploadErrors(JSON.parse(errorsJson))
-      } catch {}
+      for (let b = 0; b < batches.length; b++) {
+        const { file: batchFile, range } = batches[b]
+        setBatchProgress({
+          current: b + 1,
+          total:   batches.length,
+          status:  range
+            ? `Uploading batch ${b + 1} of ${batches.length} · rows ${range[0]}–${range[1]}…`
+            : `Uploading…`,
+        })
 
-      const csvText = await res.text()
-      const parsed  = parseCSV(csvText)
-      setUsers(parsed)
+        try {
+          const { stats: bStats, errorsDetail, csvText, parsed } = await uploadOneBatch(batchFile, selectedEvent)
+          totalStats.created    += bStats.created
+          totalStats.altered    += bStats.altered
+          totalStats.duplicates += bStats.duplicates
+          totalStats.errors     += bStats.errors
+          allErrors.push(...errorsDetail)
+          allParsed.push(...parsed)
+          csvParts.push({ csvText, isFirst: b === 0 })
+        } catch (err) {
+          // Don't abort — record the failure and move on so the rest of the
+          // file still lands. The admin can re-upload the failed slice.
+          failedBatches.push({
+            range,
+            message: err.message || 'Upload failed',
+          })
+          allErrors.push({
+            email: range ? `rows ${range[0]}–${range[1]}` : 'batch',
+            reason: `Batch upload failed: ${err.message || err.status || 'unknown'}`,
+          })
+        }
+      }
 
-      // Only new users (with a password) get email sending
+      setBatchProgress({ current: batches.length, total: batches.length, status: 'Done.' })
+
+      // ── Surface aggregated state ─────────────────────────────────────────
+      setStats({
+        created:    String(totalStats.created),
+        altered:    String(totalStats.altered),
+        duplicates: String(totalStats.duplicates),
+        errors:     String(totalStats.errors),
+      })
+      setUploadErrors(allErrors)
+      setUsers(allParsed)
+
+      // Prime per-row email-send tracking
       const initProgress = {}
-      parsed.filter(u => u.Type === 'new' && u.Password).forEach(u => {
+      allParsed.filter(u => u.Type === 'new' && u.Password).forEach(u => {
         initProgress[u.Username] = 'pending'
       })
       setEmailProgress(initProgress)
 
-      // Trigger CSV download
-      const blob = new Blob([csvText], { type: 'text/csv' })
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href     = url
-      const disp = res.headers.get('content-disposition') || ''
-      a.download = disp.includes('filename=')
-        ? disp.split('filename=')[1].replace(/['"]/g, '')
-        : 'credentials.csv'
-      document.body.appendChild(a)
-      a.click()
-      URL.revokeObjectURL(url)
-      a.remove()
+      // ── Build a single merged credentials CSV download ───────────────────
+      if (csvParts.length > 0) {
+        // Strip the header from non-first parts so the file isn't a Frankenstein
+        const merged = csvParts.map((p, idx) => {
+          if (idx === 0) return p.csvText.replace(/[\r\n]+$/, '')
+          // skip first newline after header
+          const firstNl = p.csvText.search(/\r?\n/)
+          return firstNl >= 0 ? p.csvText.slice(firstNl + 1).replace(/[\r\n]+$/, '') : ''
+        }).filter(Boolean).join('\r\n') + '\r\n'
+
+        const blob = new Blob([merged], { type: 'text/csv' })
+        const url  = URL.createObjectURL(blob)
+        const a    = document.createElement('a')
+        a.href     = url
+        a.download = `Ascent_Credentials_${new Date().toISOString().slice(0,10)}.csv`
+        document.body.appendChild(a)
+        a.click()
+        URL.revokeObjectURL(url)
+        a.remove()
+      }
+
+      if (failedBatches.length > 0) {
+        const ranges = failedBatches
+          .map(b => b.range ? `rows ${b.range[0]}–${b.range[1]}` : 'one batch')
+          .join(', ')
+        alert(
+          `Upload partially completed.\n\n` +
+          `${batches.length - failedBatches.length} of ${batches.length} batches succeeded.\n` +
+          `Failed: ${ranges}\n\n` +
+          `You can re-upload just those rows (split your CSV manually if needed).`
+        )
+      }
 
       setFile(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -134,6 +326,8 @@ export default function ManageRegistrations() {
       alert(e.message || 'Upload error.')
     } finally {
       setIsLoading(false)
+      // Hide the per-batch label after a short delay so the user sees "Done."
+      setTimeout(() => setBatchProgress(null), 1500)
     }
   }
 
@@ -165,6 +359,121 @@ export default function ManageRegistrations() {
     })
 
     setIsSending(false)
+  }
+
+  // ─── "Find users missing from your CSV" workflow ───────────────────────
+  //
+  // Step 1 — admin uploads a CSV (Name, Email, Password) of users who already
+  //          got their credentials. We extract the email column client-side
+  //          and ask the backend for DB users NOT in that list.
+  //
+  // Step 2 — admin reviews the gap and clicks "Generate passwords & email".
+  //          We chunk the user IDs (350/batch) so each backend request fits
+  //          inside the proxy timeout, then hand the resulting plaintext
+  //          credentials to the same Apps-Script mailer the upload flow uses.
+
+  const handleCoveredFileChange = (e) => {
+    const f = e.target.files?.[0]
+    if (!f) return
+    setCoveredFile(f)
+    setUncovered([])
+    setRegenCreds([])
+    setUncoveredPhase('idle')
+  }
+
+  const handleFindUncovered = async () => {
+    if (!coveredFile) {
+      alert('Pick a CSV with Name, Email, Password columns first.')
+      return
+    }
+    setFindingUncovered(true)
+    setUncovered([])
+    setRegenCreds([])
+    setUncoveredPhase('idle')
+
+    try {
+      const text = await coveredFile.text()
+      const { header, rows } = parseCSVRows(text)
+      if (!header.length || !rows.length) {
+        throw new Error('CSV looks empty.')
+      }
+      const lower = header.map(h => h.trim().toLowerCase())
+      const emailIdx = lower.findIndex(h => h === 'email' || h === 'mail' || h === 'username')
+      if (emailIdx < 0) {
+        throw new Error('CSV is missing an "email" (or "username") column.')
+      }
+      const emails = rows
+        .map(r => (r[emailIdx] || '').trim().toLowerCase())
+        .filter(e => e && e.includes('@'))
+
+      const result = await adminApi.findUncoveredUsers(emails)
+      setUncovered(Array.isArray(result) ? result : [])
+      setUncoveredPhase('preview')
+    } catch (e) {
+      console.error(e)
+      alert(e.message || 'Could not run the diff.')
+    } finally {
+      setFindingUncovered(false)
+    }
+  }
+
+  const handleRegenerateAndEmail = async () => {
+    if (!uncovered.length) return
+    if (!confirm(
+      `This will OVERWRITE the password for ${uncovered.length} user(s) and ` +
+      `then email them their new credentials.\n\nAny existing password those ` +
+      `users may have had will stop working. Continue?`
+    )) return
+
+    setRegenSending(true)
+    setRegenCreds([])
+    setRegenProgress({ current: 0, total: 0, status: 'Starting…' })
+
+    const ids = uncovered.map(u => u.id)
+    const REGEN_BATCH = 350
+    const totalBatches = Math.ceil(ids.length / REGEN_BATCH)
+    const allCreds = []
+
+    try {
+      for (let b = 0; b < totalBatches; b++) {
+        setRegenProgress({
+          current: b + 1,
+          total:   totalBatches,
+          status:  `Generating passwords · batch ${b + 1} of ${totalBatches}…`,
+        })
+        const slice = ids.slice(b * REGEN_BATCH, (b + 1) * REGEN_BATCH)
+        const creds = await adminApi.regenerateUncovered(slice)
+        if (Array.isArray(creds)) allCreds.push(...creds)
+      }
+
+      // Tag everything as 'pending' until the mailer responds
+      const initial = allCreds.map(c => ({ ...c, status: 'pending' }))
+      setRegenCreds(initial)
+      setUncoveredPhase('regenerated')
+
+      // Use the same Apps-Script mailer as the bulk-upload path. We do this
+      // in chunks so the script doesn't choke on a giant payload.
+      setRegenProgress({ current: 0, total: 0, status: 'Sending emails…' })
+      const MAIL_BATCH = 100
+      for (let i = 0; i < allCreds.length; i += MAIL_BATCH) {
+        const slice = allCreds.slice(i, i + MAIL_BATCH)
+        const result = await sendCredentialEmails(slice.map(c => ({
+          name: c.name, email: c.email, password: c.password,
+        })))
+        // Mark this slice with the mailer result
+        setRegenCreds(prev => prev.map(p =>
+          slice.find(s => s.email === p.email) ? { ...p, status: result } : p
+        ))
+      }
+
+      setRegenProgress(null)
+    } catch (e) {
+      console.error(e)
+      alert(`Regenerate / send failed: ${e.message || e}`)
+      setRegenProgress(null)
+    } finally {
+      setRegenSending(false)
+    }
   }
 
   const togglePassword = (email) =>
@@ -225,20 +534,55 @@ export default function ManageRegistrations() {
             className="btn btn-primary"
             onClick={handleUpload}
             disabled={!file || !selectedEvent || isLoading}
-            style={{ height: 42, minWidth: 160, position: 'relative', overflow: 'hidden' }}
+            style={{ height: 42, minWidth: 200, position: 'relative', overflow: 'hidden' }}
           >
             {isLoading ? (
               <>
-                <span style={{ position: 'relative', zIndex: 2 }}>Processing…</span>
+                <span style={{ position: 'relative', zIndex: 2 }}>
+                  {batchProgress
+                    ? `Batch ${batchProgress.current} of ${batchProgress.total}…`
+                    : 'Processing…'}
+                </span>
                 <div style={{
-                  position: 'absolute', top: 0, left: 0, bottom: 0, width: '100%',
+                  position: 'absolute', top: 0, left: 0, bottom: 0,
+                  width: batchProgress
+                    ? `${(batchProgress.current / batchProgress.total) * 100}%`
+                    : '100%',
                   background: 'rgba(255,255,255,0.18)',
-                  animation: 'progress-indeterminate 1.5s infinite linear',
+                  transition: batchProgress ? 'width 0.3s' : 'none',
+                  animation: batchProgress ? 'none' : 'progress-indeterminate 1.5s infinite linear',
                 }} />
               </>
             ) : 'Upload Registrations'}
           </button>
         </div>
+
+        {/* Batch status line — shown while a multi-batch upload is in flight */}
+        {isLoading && batchProgress && (
+          <div style={{
+            marginTop: 14, padding: '10px 14px', borderRadius: 8,
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            fontSize: 12, color: 'var(--text-secondary)',
+            display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: '50%',
+              background: '#3b82f6',
+              boxShadow: '0 0 0 0 rgba(59,130,246,0.6)',
+              animation: 'pulse-dot 1.2s infinite',
+              flexShrink: 0,
+            }} />
+            <span>{batchProgress.status}</span>
+            <style dangerouslySetInnerHTML={{ __html: `
+              @keyframes pulse-dot {
+                0%   { box-shadow: 0 0 0 0    rgba(59,130,246,0.55); }
+                70%  { box-shadow: 0 0 0 10px rgba(59,130,246,0);    }
+                100% { box-shadow: 0 0 0 0    rgba(59,130,246,0);    }
+              }
+            ` }} />
+          </div>
+        )}
 
         <style dangerouslySetInnerHTML={{ __html: `
           @keyframes progress-indeterminate {
@@ -376,13 +720,179 @@ export default function ManageRegistrations() {
               </tbody>
             </table>
           </div>
-          <Pagination 
-            currentPage={currentPage} 
-            totalPages={totalPages} 
-            onPageChange={setCurrentPage} 
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
           />
         </div>
       )}
+
+      {/* ── Find users missing from your credentials CSV ────────────────── */}
+      <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
+        <h3 style={{ marginBottom: 6 }}>Find Users Missing From Your CSV</h3>
+        <p style={{ marginBottom: 18, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
+          Upload a CSV with <strong>Name, Email, Password</strong> columns of users who already received their credentials.
+          We'll diff it against the <code>users</code> table and surface anyone present in the database but missing from your file.
+          You can then regenerate fresh passwords for those users and send them credential emails — using the same mailer the upload flow uses.
+          <br />
+          <span style={{ color: '#f59e0b', fontSize: 12 }}>
+            ⚠️ Regenerating overwrites <code>password_hash</code>. Any password those users may have had will stop working.
+          </span>
+        </p>
+
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label style={labelStyle}>Already-sent CSV (Name, Email, Password)</label>
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleCoveredFileChange}
+              className="input-field"
+              style={{ paddingTop: 8, paddingBottom: 8 }}
+              disabled={findingUncovered || regenSending}
+              ref={coveredFileRef}
+            />
+          </div>
+
+          <button
+            className="btn btn-primary"
+            onClick={handleFindUncovered}
+            disabled={!coveredFile || findingUncovered || regenSending}
+            style={{ height: 42, minWidth: 180 }}
+          >
+            {findingUncovered ? 'Diffing…' : 'Find Missing Users'}
+          </button>
+        </div>
+
+        {/* Result list */}
+        {uncoveredPhase !== 'idle' && (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: 14 }}>
+                  {uncoveredPhase === 'regenerated' ? 'Regenerated & emailed' : 'Missing users'}
+                  <span style={{ marginLeft: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+                    {uncoveredPhase === 'regenerated' ? regenCreds.length : uncovered.length}
+                  </span>
+                </h4>
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {uncoveredPhase === 'regenerated'
+                    ? 'New passwords were generated and credential emails dispatched via the Apps-Script mailer.'
+                    : 'These users are in the database but not in your CSV.'}
+                </p>
+              </div>
+
+              {uncoveredPhase === 'preview' && uncovered.length > 0 && (
+                <button
+                  className="btn btn-primary"
+                  onClick={handleRegenerateAndEmail}
+                  disabled={regenSending}
+                  style={{ minWidth: 220, display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  {regenSending ? (
+                    <>
+                      <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                      {regenProgress?.status || 'Working…'}
+                    </>
+                  ) : '🔑 Generate Passwords & Email'}
+                </button>
+              )}
+            </div>
+
+            {regenProgress && regenSending && (
+              <div style={{
+                marginBottom: 14, padding: '10px 14px', borderRadius: 8,
+                background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+                fontSize: 12, color: 'var(--text-secondary)',
+              }}>
+                {regenProgress.status}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {uncoveredPhase === 'preview' && uncovered.length === 0 && (
+              <div style={{
+                padding: '14px 16px', borderRadius: 10,
+                background: 'rgba(16,185,129,0.08)',
+                border: '1px solid rgba(16,185,129,0.3)',
+                color: '#10b981', fontSize: 13,
+              }}>
+                ✓ No gaps found — every user in the database appears in your CSV.
+              </div>
+            )}
+
+            {/* Preview table — before regeneration */}
+            {uncoveredPhase === 'preview' && uncovered.length > 0 && (
+              <div className="table-responsive">
+                <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                      {['#', 'Name', 'Email'].map(h => (
+                        <th key={h} style={{ padding: '10px 12px', fontWeight: 600, fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {uncovered.slice(0, 200).map((u, i) => (
+                      <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={tdStyle}>{i + 1}</td>
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>{u.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{u.email}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {uncovered.length > 200 && (
+                  <div style={{ padding: 10, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+                    Showing first 200 of {uncovered.length}. The Generate &amp; Email step will process all of them.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Result table — after regeneration */}
+            {uncoveredPhase === 'regenerated' && regenCreds.length > 0 && (
+              <div className="table-responsive">
+                <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                      {['#', 'Name', 'Email', 'New Password', 'Email Status'].map(h => (
+                        <th key={h} style={{ padding: '10px 12px', fontWeight: 600, fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {regenCreds.slice(0, 200).map((c, i) => (
+                      <tr key={c.email + i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={tdStyle}>{i + 1}</td>
+                        <td style={{ ...tdStyle, fontWeight: 500 }}>{c.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{c.email}</td>
+                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{c.password}</td>
+                        <td style={tdStyle}><EmailStatusBadge status={c.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {regenCreds.length > 200 && (
+                  <div style={{ padding: 10, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+                    Showing first 200 of {regenCreds.length}.
+                  </div>
+                )}
+                <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-secondary)' }}>
+                  ✓ Sent: {regenCreds.filter(c => c.status === 'sent').length}
+                  {' · '}
+                  ✗ Failed: {regenCreds.filter(c => c.status === 'failed').length}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

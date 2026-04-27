@@ -234,6 +234,15 @@ export const adminPanel = {
   },
   setRequestedMemberStatus: (id, newStatus) =>
     patch(`/admin-panel/requested-members/${id}`, { status: newStatus }, { adminAuth: true }),
+
+  // ── Uncovered users (diff DB ↔ credentials CSV) ──────────────────────────
+  // Given the email column of an admin's "already-sent" CSV, return DB
+  // users that aren't on the list. Then regenerate passwords for the IDs
+  // the admin selects so the existing Apps-Script mailer can deliver them.
+  findUncoveredUsers: (emails) =>
+    post('/admin-panel/uncovered-users', { emails }, { adminAuth: true }),
+  regenerateUncovered: (user_ids) =>
+    post('/admin-panel/uncovered-users/regenerate', { user_ids }, { adminAuth: true }),
 };
 
 // ─── QR Scan ──────────────────────────────────────────────────────────────────
