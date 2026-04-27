@@ -274,15 +274,12 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
           style={{
             marginTop: 14,
             display: "flex",
-            justifyContent: "space-between",
+            justifyContent: "flex-end",
             alignItems: "center",
             gap: 8,
             flexWrap: "wrap",
           }}
         >
-          <a className="btn sm" onClick={handleCardClick}>
-            {user ? "Details" : "Register"}
-          </a>
           <a
             className="btn sm primary"
             href={
