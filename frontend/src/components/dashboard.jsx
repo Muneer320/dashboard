@@ -55,9 +55,11 @@ function getEventBannerUrl(name) {
 }
 
 // Events hosted on an external platform — no dashboard submission form
-const PLATFORM_EVENT_NAMES = new Set(['override.exe', 'impulse', 'invariant']);
+const PLATFORM_EVENT_NAMES = ['override.exe', 'impulse', 'invariant', 'synapse'];
 function isPlatformEvent(name) {
-  return PLATFORM_EVENT_NAMES.has((name || '').toLowerCase().trim());
+  if (!name) return false;
+  const normalized = name.toLowerCase().trim();
+  return PLATFORM_EVENT_NAMES.some(plat => normalized.includes(plat));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1646,6 +1648,29 @@ export function EventDetail() {
                         </span>
                       ) : event.name === 'Impulse' ? (
                         'Impulse is hosted live on Codeforces / HackerRank. Head there to participate—your team\'s submission is tracked on the contest platform.'
+                      ) : event.name?.toLowerCase().includes('synapse') ? (
+                        isRegistered ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <span>
+                              🔗 Competition Link:{' '}
+                              <a
+                                href="https://www.kaggle.com/t/05ed16babc1145a48e60f59c731f1767"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: 'var(--violet)', textDecoration: 'underline', textUnderlineOffset: 2, wordBreak: 'break-all' }}
+                              >
+                                https://www.kaggle.com/t/05ed16babc1145a48e60f59c731f1767
+                              </a>
+                            </span>
+                            <span style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
+                              📌 You can make multiple submissions — your best score will be considered.
+                            </span>
+                          </div>
+                        ) : (
+                          <span>
+                            Synapse is hosted on Kaggle. Please <strong style={{ color: 'var(--ink)' }}>register</strong> for the event to view the competition link.
+                          </span>
+                        )
                       ) : (
                         'Override.exe is a live CTF event. The platform link will be shared before the event starts. Submit your flags directly on the CTF platform.'
                       )}
