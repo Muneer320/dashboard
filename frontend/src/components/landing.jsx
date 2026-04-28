@@ -289,7 +289,7 @@ export default function Landing() {
                 Our Flagships
               </h2>
             </div>
-            <a href="https://unstop.com/college-fests/ascent-scaler-school-of-technology-bengaluru-karnataka-454762" target="_blank" rel="noopener noreferrer" className="btn sm">See all events →</a>
+            <a href="/explore" rel="noopener noreferrer" className="btn sm">See all events →</a>
           </div>
           <div style={{
             display: 'grid',
