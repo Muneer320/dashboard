@@ -298,7 +298,7 @@ export default function Landing() {
           }}>
             {[
               { title: 'Anvil', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Anvil_poydj2.png', linkUrl: 'https://unstop.com/hackathons/the-anvil-hackathon-ascent-scaler-school-of-technology-bengaluru-karnataka-1669632' },
-              { title: 'Ship to Scaler', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png', linkUrl: 'https://unstop.com/events/ship-to-scale-build-break-bank-ascent-scaler-school-of-technology-bengaluru-karnataka-1679327' },
+              { title: 'Ship to Scale', imgUrl: 'https://res.cloudinary.com/dt1hemzmb/image/upload/f_auto,q_auto/1000126955_jjytt0', linkUrl: 'https://unstop.com/events/ship-to-scale-build-break-bank-ascent-scaler-school-of-technology-bengaluru-karnataka-1679327' },
               { title: 'Impulse', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Impulse_fhczet.png', linkUrl: 'https://unstop.com/hackathons/impulse-cp-team-contest-ascent-scaler-school-of-technology-bengaluru-karnataka-1669639' },
               { title: 'Launchpad', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Launchpad_dixz7h.png', linkUrl: 'https://unstop.com/events/launchpad-from-idea-to-impact-ascent-scaler-school-of-technology-bengaluru-karnataka-1669644' },
             ].map(({ title, imgUrl, linkUrl }) => (
