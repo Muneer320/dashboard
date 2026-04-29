@@ -42,6 +42,19 @@ async function request(path, { method = 'GET', body, adminAuth = false } = {}) {
   const data = await res.json().catch(() => ({ detail: res.statusText }));
 
   if (!res.ok) {
+    if (res.status === 401) {
+      if (adminAuth) {
+        token.clearAdmin();
+        if (!window.location.pathname.startsWith('/admin/login')) {
+          window.location.href = '/admin/login';
+        }
+      } else {
+        token.clearUser();
+        if (!window.location.pathname.startsWith('/login') && window.location.pathname !== '/') {
+          window.location.href = '/login';
+        }
+      }
+    }
     const msg = data?.detail ?? `HTTP ${res.status}`;
     throw new ApiError(msg, res.status, data);
   }

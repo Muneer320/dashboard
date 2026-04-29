@@ -853,7 +853,17 @@ export function SubmissionPanel({
   const [loadingEx, setLoadingEx] = useState(false);
 
   // Form state: map of question_id → current answer value
+  const draftKey = `ascent_draft_${eventId}_phase${phase}_${userData?.email || "guest"}`;
   const [answers, setAnswers] = useState({});
+
+  // Save answers to draft on change
+  useEffect(() => {
+    if (Object.keys(answers).length > 0) {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(answers));
+      } catch (e) {}
+    }
+  }, [answers, draftKey]);
 
   // Edit mode: when true, show form even if submission exists
   const [editMode, setEditMode] = useState(false);
@@ -872,19 +882,25 @@ export function SubmissionPanel({
       const res = await eventsApi.questions(eventId, phase);
       const qs = res.questions ?? [];
       setQuestions(qs);
-      // Pre-fill auto-fill fields from userData (only if not already answered)
-      if (userData) {
-        setAnswers((prev) => {
-          const prefill = { ...prev };
+      // Pre-fill from draft and auto-fill fields from userData
+      setAnswers((prev) => {
+        let draft = {};
+        try {
+          const saved = localStorage.getItem(draftKey);
+          if (saved) draft = JSON.parse(saved);
+        } catch (e) {}
+
+        const prefill = { ...prev, ...draft };
+        if (userData) {
           qs.forEach((q) => {
             const autoVal = getAutoFill(q, userData);
             if (autoVal && !prefill[q.question_id]) {
               prefill[q.question_id] = autoVal;
             }
           });
-          return prefill;
-        });
-      }
+        }
+        return prefill;
+      });
     } catch (err) {
       // 404 = no questions defined for this phase
       if (err.status === 404) {
@@ -1016,6 +1032,9 @@ export function SubmissionPanel({
       });
       setSubmitSuccess(res);
       setEditMode(false);
+      try {
+        localStorage.removeItem(draftKey);
+      } catch (e) {}
       // Refresh the existing submission display
       await loadExisting();
       onSuccess?.(res);

@@ -249,15 +249,6 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
             alignItems: "center",
           }}
         >
-          <span
-            style={{
-              fontFamily: "var(--f-mono)",
-              fontSize: 10,
-              color: "var(--ink-mute)",
-            }}
-          >
-            {teamsCount} REGISTERED
-          </span>
           {status?.phase != null && (
             <span
               style={{
