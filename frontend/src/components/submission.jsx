@@ -85,11 +85,7 @@ function isValidEmail(str) {
 function TextInput({ q, value, onChange, disabled }) {
   const isLong = q.question_type === "text-long";
   
-  // Override low word limits for long text to ensure users have enough space
   let limit = q.word_limit;
-  if (isLong) {
-    limit = (limit && limit < 500) ? 500 : (limit ?? 500);
-  }
 
   const count = wordCount(value);
   const over = limit != null && count > limit;
@@ -956,9 +952,6 @@ export function SubmissionPanel({
       }
 
       let wLimit = q.word_limit;
-      if (q.question_type === "text-long") {
-        wLimit = (wLimit && wLimit < 500) ? 500 : (wLimit ?? 500);
-      }
       if (wLimit != null && val && wordCount(val) > wLimit) {
         return `"${q.question_text}": Answer exceeds ${wLimit} word limit.`;
       }
