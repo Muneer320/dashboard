@@ -38,7 +38,7 @@ const _BANNER_MAP = {
   "ai film conclave":
     "https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/AI_film_conclave_s789t6.png",
   "ship to scale":
-    "https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png",
+    "https://res.cloudinary.com/dt1hemzmb/image/upload/f_auto,q_auto/1000126955_jjytt0",
   "tech play zone":
     "https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Tech_play_zone_emyf1q.png",
 };
@@ -249,15 +249,6 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
             alignItems: "center",
           }}
         >
-          <span
-            style={{
-              fontFamily: "var(--f-mono)",
-              fontSize: 10,
-              color: "var(--ink-mute)",
-            }}
-          >
-            {teamsCount} REGISTERED
-          </span>
           {status?.phase != null && (
             <span
               style={{
