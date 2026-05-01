@@ -34,11 +34,18 @@ build/
 backend/.venv/
 backend/__pycache__/
 
-<<<<<<< HEAD
-# Stress Test logs
-loadtest*
-=======
 # Stress testing logs
 stress_testing/
 loadtest*
->>>>>>> fbf3e600bd6c72e40a8f3a7c110f144f5f669c07
+
+# Mirage processor local environments and caches
+processor/.venv/
+processor/.venv311/
+processor/**/__pycache__/
+processor/data/events/
+processor/piyush/cache/
+processor/piyush/test/
+processor/piyush/train/
+processor/piyush/test_manifest.json
+processor/piyush/verification_report.json
+processor/testing/dataset/

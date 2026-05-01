@@ -89,7 +89,9 @@ export function DataProvider({ children }) {
       setMaxMealsCount(perUser?.max_meals_count ?? 0)
       setUserMeals(perUser?.users ?? [])
     } catch (e) {
-      console.error('Meals fetch failed:', e.message)
+      if (e?.status !== 403) {
+        console.error('Meals fetch failed:', e.message)
+      }
     }
   }, [user?.role])
 

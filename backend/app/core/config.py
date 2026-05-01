@@ -19,8 +19,12 @@ class Settings(BaseSettings):
     # Supabase (primary data backend)
     SUPABASE_URL: str
     SUPABASE_SERVICE_ROLE_KEY: str
+    MIRAGE_SUPABASE_URL: str | None = None
+    MIRAGE_SUPABASE_SERVICE_ROLE_KEY: str | None = None
     SUPABASE_STORAGE_BUCKET: str = "submissions"
     SUPABASE_SIGNED_URL_EXPIRES_SECONDS: int = 604800
+    GOOGLE_APPLICATION_CREDENTIALS: str | None = None
+    GOOGLE_SERVICE_ACCOUNT_JSON: str | None = None
 
     BACKGROUND_JOB_INTERVAL_SECONDS: int = 300
     UNSTOP_SYNC_SOURCE_JSON: str | None = None

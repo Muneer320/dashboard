@@ -2,9 +2,262 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, ImgPlaceholder } from './shared';
+import { MirageGallery } from './MirageGallery';
 import { useUserAuth } from '../lib/UserAuthContext';
+import { mirage as mirageApi, token as authToken } from '../lib/api';
 
 export function Mirage() {
+  return <MirageGallery />;
+
+  const isMobile = useMobile();
+  const { user } = useUserAuth();
+  const locked = false;
+  const [days, setDays] = React.useState([]);
+  const [selectedDay, setSelectedDay] = React.useState('All');
+  const [loading, setLoading] = React.useState(!locked);
+  const [error, setError] = React.useState('');
+  const [lightbox, setLightbox] = React.useState(null);
+  const userToken = authToken.getUser();
+
+  const withToken = React.useCallback((url) => {
+    if (!url || /^https?:\/\//i.test(url)) return url;
+    if (!userToken) return url;
+    const joiner = url.includes('?') ? '&' : '?';
+    return `${url}${joiner}token=${encodeURIComponent(userToken)}`;
+  }, [userToken]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (locked) {
+      setDays([]);
+      setSelectedDay('All');
+      setLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    setLoading(true);
+    setError('');
+    mirageApi.gallery()
+      .then((data) => {
+        if (cancelled) return;
+        const nextDays = Array.isArray(data) ? data : [];
+        setDays(nextDays);
+        setSelectedDay((prev) => (
+          prev !== 'All' && nextDays.some(day => day.dayLabel === prev) ? prev : 'All'
+        ));
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || 'Could not load Mirage yet.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [locked]);
+
+  const totalPhotos = days.reduce(
+    (sum, day) => sum + day.sections.reduce((sectionSum, section) => sectionSum + (section.imageCount || 0), 0),
+    0,
+  );
+  const dayOptions = ['All', ...days.map(day => day.dayLabel)];
+  const visibleDays = selectedDay === 'All'
+    ? days
+    : days.filter(day => day.dayLabel === selectedDay);
+
+  return (
+    <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
+      <NavBar variant="app" active="mirage" />
+
+      {locked && (
+        <div style={{
+          position: 'fixed', top: 56, left: 0, right: 0, bottom: 0, zIndex: 10,
+          backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
+          background: 'rgba(8, 8, 14, 0.82)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 16,
+          textAlign: 'center', padding: 24,
+        }}>
+          <div style={{ fontSize: 48 }}>Lock</div>
+          <div style={{
+            fontFamily: 'var(--f-mono)', fontSize: isMobile ? 18 : 22,
+            letterSpacing: '0.12em', color: 'var(--ink)',
+            textTransform: 'uppercase', fontWeight: 700,
+          }}>
+            Unlocks at Round 2
+          </div>
+          <div style={{ fontSize: 14, color: 'var(--ink-mute)', maxWidth: 320, lineHeight: 1.6 }}>
+            Mirage opens its doors after Round 1. Come back for the full photo archive.
+          </div>
+        </div>
+      )}
+
+      <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: 12 }}>
+          <div>
+            <div className="eyebrow">Mirage · Photo Archive</div>
+            <h1 className="display" style={{ fontSize: isMobile ? 40 : 72, marginTop: 14, letterSpacing: '-0.03em' }}>The weekend, as seen.</h1>
+          </div>
+          {!isMobile && (
+            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
+              {totalPhotos} PHOTOS · DRIVE-SYNCED
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: 24, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {dayOptions.map(day => (
+            <div key={day} onClick={() => setSelectedDay(day)} className="chip" style={{
+              cursor: 'pointer', padding: '7px 14px', fontSize: 11,
+              background: selectedDay === day ? 'rgba(127,119,221,0.2)' : undefined,
+              borderColor: selectedDay === day ? 'rgba(127,119,221,0.55)' : undefined,
+              color: selectedDay === day ? '#F1EFE8' : undefined,
+            }}>{day}</div>
+          ))}
+        </div>
+
+        {loading && (
+          <div style={{ marginTop: 28, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12 }}>
+            Loading Mirage from Drive...
+          </div>
+        )}
+
+        {!loading && error && (
+          <div style={{
+            marginTop: 28,
+            padding: '14px 16px',
+            borderRadius: 12,
+            background: 'rgba(220, 80, 80, 0.1)',
+            border: '1px solid rgba(220, 80, 80, 0.28)',
+            color: '#f1b0b0',
+            fontSize: 14,
+          }}>
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && visibleDays.length === 0 && !locked && (
+          <div style={{ marginTop: 28, color: 'var(--ink-mute)', fontSize: 14 }}>
+            No Mirage folders are published yet.
+          </div>
+        )}
+
+        {!loading && !error && visibleDays.map((day) => (
+          <div key={day.dayLabel} style={{ marginTop: 28 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ fontFamily: 'var(--f-display)', fontSize: isMobile ? 28 : 34, color: 'var(--ink)' }}>
+                {day.dayLabel}
+              </div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.08em' }}>
+                {day.sections.reduce((sum, section) => sum + (section.imageCount || 0), 0)} FRAMES
+              </div>
+            </div>
+
+            <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 18 }}>
+              {day.sections.map((section) => (
+                <div key={section.id} className="glass" style={{ padding: isMobile ? 16 : 18 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontFamily: 'var(--f-display)', fontSize: isMobile ? 22 : 26, color: 'var(--ink)' }}>
+                        {section.sectionTitle}
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 13, color: 'var(--ink-dim)' }}>
+                        {section.eventName || 'Custom section'} · {section.imageCount} image{section.imageCount !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    <div className="chip" style={{ padding: '6px 10px', fontSize: 10 }}>
+                      {section.recursive ? 'MULTI-FOLDER' : 'DIRECT FOLDER'}
+                    </div>
+                  </div>
+
+                  {section.images?.length === 0 ? (
+                    <div style={{ marginTop: 16, color: 'var(--ink-mute)', fontSize: 13 }}>
+                      This folder is published but currently has no readable images.
+                    </div>
+                  ) : (
+                    <div style={{
+                      marginTop: 16,
+                      display: 'grid',
+                      gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))',
+                      gap: isMobile ? 10 : 12,
+                    }}>
+                      {section.images.map((image) => (
+                        <button
+                          key={image.fileId}
+                          type="button"
+                          onClick={() => setLightbox({
+                            ...image,
+                            sectionTitle: section.sectionTitle,
+                            dayLabel: day.dayLabel,
+                          })}
+                          style={{
+                            padding: 0,
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            background: 'rgba(255,255,255,0.02)',
+                            borderRadius: 12,
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <div style={{ aspectRatio: '1 / 1', background: 'rgba(255,255,255,0.03)' }}>
+                            <img
+                              src={withToken(image.url)}
+                              alt={image.name}
+                              loading="lazy"
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            />
+                          </div>
+                          <div style={{ padding: '10px 11px 12px' }}>
+                            <div style={{
+                              fontSize: 12,
+                              color: 'var(--ink)',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}>
+                              {image.name}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(5,5,10,0.88)',
+          display: 'grid', placeItems: 'center', zIndex: 100, padding: isMobile ? 16 : 40,
+          backdropFilter: 'blur(20px)',
+        }}>
+          <div style={{ maxWidth: 1000, width: '100%', position: 'relative' }}>
+            <div style={{ borderRadius: 16, overflow: 'hidden', background: 'rgba(255,255,255,0.03)' }}>
+              <img
+                src={withToken(lightbox.url)}
+                alt={lightbox.name}
+                style={{ width: '100%', maxHeight: isMobile ? '70vh' : '78vh', objectFit: 'contain', display: 'block' }}
+              />
+            </div>
+            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ color: 'var(--ink)', fontSize: 14 }}>
+                {lightbox.sectionTitle} · {lightbox.name}
+              </div>
+              <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)' }}>TAP · CLOSE</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </PageBackground>
+  );
+}
+
+function MirageLegacy() {
   const isMobile = useMobile();
   const navigate = useNavigate();
   const { user } = useUserAuth();

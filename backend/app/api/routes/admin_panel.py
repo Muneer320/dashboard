@@ -14,7 +14,7 @@ _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _SAFE_FILENAME_RE = re.compile(r"[^\w\-]")
 
 from app.api.deps import get_admin_only, get_admin_or_em, get_current_admin, get_scanner_or_above
-from app.db.supabase_client import get_supabase
+from app.db.supabase_client import get_mirage_supabase, get_supabase
 from app.models.admin import Admin
 from app.schemas.admin_panel import (
     AdminUserCreate,
@@ -35,6 +35,11 @@ from app.schemas.admin_panel import (
     RestrictResponse,
     StatsResponse,
     UserMealsResponse,
+)
+from app.schemas.mirage import (
+    MirageAdminSectionCreate,
+    MirageAdminSectionItem,
+    MirageAdminSectionUpdate,
 )
 from app.services.admin_panel_service import (
     create_admin_user,
@@ -72,6 +77,12 @@ class _RegenerateIdsBody(BaseModel):
 from app.services.credentials_service import (
     list_requested_members,
     update_requested_member_status,
+)
+from app.services.mirage_service import (
+    create_admin_section,
+    delete_admin_section,
+    list_admin_sections,
+    update_admin_section,
 )
 from app.services.announcement_service import list_announcements
 
@@ -543,3 +554,46 @@ async def requested_members_update_status(
     """
     data = await update_requested_member_status(supabase, request_id, body.status)
     return RequestedMemberItem(**data)
+
+
+@router.get("/mirage", response_model=list[MirageAdminSectionItem])
+async def admin_list_mirage_sections(
+    supabase: AsyncClient = Depends(get_mirage_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> list[MirageAdminSectionItem]:
+    items = await list_admin_sections(supabase)
+    return [MirageAdminSectionItem(**item) for item in items]
+
+
+@router.post("/mirage", response_model=MirageAdminSectionItem, status_code=201)
+async def admin_create_mirage_section(
+    body: MirageAdminSectionCreate,
+    supabase: AsyncClient = Depends(get_mirage_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MirageAdminSectionItem:
+    item = await create_admin_section(supabase, body.model_dump())
+    return MirageAdminSectionItem(**item)
+
+
+@router.patch("/mirage/{section_id}", response_model=MirageAdminSectionItem)
+async def admin_patch_mirage_section(
+    section_id: str,
+    body: MirageAdminSectionUpdate,
+    supabase: AsyncClient = Depends(get_mirage_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MirageAdminSectionItem:
+    item = await update_admin_section(
+        supabase,
+        section_id,
+        body.model_dump(exclude_unset=True),
+    )
+    return MirageAdminSectionItem(**item)
+
+
+@router.delete("/mirage/{section_id}", status_code=204)
+async def admin_remove_mirage_section(
+    section_id: str,
+    supabase: AsyncClient = Depends(get_mirage_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> None:
+    await delete_admin_section(supabase, section_id)

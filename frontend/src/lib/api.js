@@ -156,6 +156,14 @@ export const feedback = {
   submit: (body) => post('/feedback', body),
 };
 
+export const mirage = {
+  overview: () => get('/mirage/overview'),
+  gallery: () => get('/mirage/gallery'),
+  collection: (collectionId) => get(`/mirage/collections/${collectionId}`),
+  toggleLike: (photoId) => post(`/mirage/photos/${photoId}/like`, {}),
+  fileUrl: (fileId) => `${BASE}/mirage/files/${fileId}`,
+};
+
 // ─── Credentials (request access) ────────────────────────────────────────────
 
 export const credentials = {
@@ -243,6 +251,13 @@ export const adminPanel = {
     post('/admin-panel/uncovered-users', { emails }, { adminAuth: true }),
   regenerateUncovered: (user_ids) =>
     post('/admin-panel/uncovered-users/regenerate', { user_ids }, { adminAuth: true }),
+
+  mirageSections: () => get('/admin-panel/mirage', { adminAuth: true }),
+  addMirageSection: (body) => post('/admin-panel/mirage', body, { adminAuth: true }),
+  updateMirageSection: (sectionId, body) =>
+    patch(`/admin-panel/mirage/${sectionId}`, body, { adminAuth: true }),
+  deleteMirageSection: (sectionId) =>
+    del(`/admin-panel/mirage/${sectionId}`, { adminAuth: true }),
 };
 
 // ─── QR Scan ──────────────────────────────────────────────────────────────────
