@@ -6,12 +6,12 @@ target event_id and:
   - Creates a ``users`` row for every email we haven't seen before (with a
     fresh 12-char alphanumeric password, hashed into ``password_hash``), and
     enrols them in the event.
-  - **Skips any email whose user already exists in the database.** We do
-    NOT modify existing users' rows — not their events map, not their team
-    assignment, nothing. This prevents re-uploads from corrupting state when
-    participants edit their team on Unstop between uploads (e.g. someone
-    leaves a team → their old teamId would otherwise stay stale, and the
-    team's member_ids would otherwise shrink destructively under upsert).
+  - If a user already exists in ``users`` but is NOT yet registered for the
+    target event, append the missing event entry to their ``events`` map using
+    a targeted column update. This preserves multi-event registrations without
+    rewriting unrelated profile fields.
+  - If the user is already registered for the target event, treat the row as a
+    duplicate and skip it.
   - For teams referenced in the file: NEW teams are inserted with the new
     users as members; EXISTING teams have new user IDs *appended* to the
     member_ids array — the upsert is non-destructive, never removing any
@@ -424,17 +424,30 @@ async def bulk_enroll(
         existing_row = existing_map.get(email)
 
         if existing_row is not None:
-            # ── SAFE-RE-UPLOAD POLICY ────────────────────────────────────
-            # The user already exists in the DB. We do NOT touch them.
-            # No events-map update. No team membership change for them.
-            # No password reset. They get logged as a duplicate so the
-            # admin sees the count, and we move on.
-            #
-            # Why: re-uploading after Unstop edits used to corrupt team
-            # data — existing users kept stale teamIds while team rows
-            # got replaced under upsert. Treating "email already in DB"
-            # as a hard skip is the only way to make re-uploads safe.
-            duplicates_detail.append({"row": row_idx, "email": email})
+            user = User.from_row(existing_row)
+            events_map = dict(user.events or {})
+
+            if event_uuid in events_map:
+                # Already registered for this event — keep the current row
+                # untouched so same-event re-uploads remain safe and idempotent.
+                duplicates_detail.append({"row": row_idx, "email": email})
+                continue
+
+            # Existing user, new event — this is the legitimate multi-event case
+            # that the admin uploader must support. Update only the events JSON;
+            # other profile fields stay as-is.
+            events_map[event_uuid] = _default_event_entry(team_uuid=team_uuid)
+            existing_user_updates.append({
+                "id": str(user.id),
+                "email": email,
+                "name": user.name,
+                "events": events_map,
+            })
+            added_to_existing.append({
+                "email": email,
+                "user_id": str(user.id),
+                "name": user.name,
+            })
             continue
 
         # Brand-new user — queue for concurrent password hashing.
@@ -474,11 +487,31 @@ async def bulk_enroll(
                     "reason": f"New-user batch insert failed: {exc}",
                 })
 
-    # NOTE: We deliberately do NOT update existing users any more.
-    # See the SAFE-RE-UPLOAD POLICY note in the row-classification loop
-    # above. ``existing_user_updates`` will always be empty under the
-    # current policy; the variable is retained only so the response shape
-    # below stays backward-compatible (added_to_existing == []).
+    # ── Update existing users' events map ───────────────────────────────────
+    #
+    # Only the ``events`` JSON column is updated. This restores the intended
+    # "same user can join multiple events" behavior without resurrecting the old
+    # full-row upsert that could clobber unrelated state.
+    if existing_user_updates:
+        sem = asyncio.Semaphore(20)
+
+        async def _update_existing_user(upd: dict[str, Any]) -> None:
+            async with sem:
+                try:
+                    await (
+                        supabase.table("users")
+                        .update({"events": upd["events"]})
+                        .eq("id", upd["id"])
+                        .execute()
+                    )
+                except Exception as exc:
+                    errors_detail.append({
+                        "row": -1,
+                        "email": upd["email"],
+                        "reason": f"Failed to update existing user event map: {exc}",
+                    })
+
+        await asyncio.gather(*[_update_existing_user(upd) for upd in existing_user_updates])
 
     # ── Teams: non-destructive create/append ─────────────────────────────────
     #
@@ -498,13 +531,13 @@ async def bulk_enroll(
     # users who left on Unstop) needs a separate cleanup pass — out of scope
     # for the bulk upload because we have no ground truth for "who left."
     if teams_to_upsert:
-        # email→user_id map: ONLY new users (we're not touching existing
-        # users at all per the safe-re-upload policy, and admin existing
-        # users were never part of the team add path either). If you need
-        # to add an existing user to a new team, do that manually.
+        # email→user_id map from both newly-created users and existing users
+        # who were legitimately added to this event during this upload.
         email_to_id: dict[str, str] = {}
         for p in new_user_payloads:
             email_to_id[p["username"]] = p["id"]
+        for upd in existing_user_updates:
+            email_to_id[upd["email"]] = upd["id"]
 
         team_uuids = list(teams_to_upsert.keys())
 
