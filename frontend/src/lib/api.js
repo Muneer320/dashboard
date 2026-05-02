@@ -43,14 +43,20 @@ async function request(path, { method = 'GET', body, adminAuth = false } = {}) {
 
   if (!res.ok) {
     if (res.status === 401) {
-      if (adminAuth) {
+      // Determine redirect target by current page location, not by the API call's auth type.
+      // This prevents admin-flagged calls (e.g. events.setQuestions) from wrongly
+      // sending regular users to /admin/login.
+      const inAdminArea = window.location.pathname.startsWith('/admin');
+      if (inAdminArea) {
         token.clearAdmin();
         if (!window.location.pathname.startsWith('/admin/login')) {
           window.location.href = '/admin/login';
         }
       } else {
         token.clearUser();
-        if (!window.location.pathname.startsWith('/login') && window.location.pathname !== '/') {
+        const safePaths = ['/login', '/'];
+        const alreadyOnSafePage = safePaths.some(p => window.location.pathname === p || window.location.pathname.startsWith('/login'));
+        if (!alreadyOnSafePage) {
           window.location.href = '/login';
         }
       }
