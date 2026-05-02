@@ -5,9 +5,39 @@ import ConfirmModal from '../ConfirmModal'
 import Pagination from '../Pagination'
 import './Participants.css'
 
+function ParticipantsSkeleton() {
+  return (
+    <div className="participants-page fade-in">
+      <div className="section-header" style={{ marginBottom: 16 }}>
+        <div className="sk-line sk-h-6 sk-w-1-4" />
+      </div>
+      <div className="sk-row" style={{ marginBottom: 16, gap: 12 }}>
+        <div className="sk-line sk-h-10" style={{ flex: 1 }} />
+        <div className="sk-line sk-h-10" style={{ width: 180 }} />
+      </div>
+      <div className="sk-card" style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
+        {[...Array(8)].map((_, i) => (
+          <div key={i} className="sk-row" style={{
+            padding: '14px 20px',
+            borderBottom: '1px solid var(--border)',
+            gap: 16,
+          }}>
+            <div className="sk-line sk-h-5" style={{ width: 28 }} />
+            <div className="sk-line sk-h-5" style={{ flex: 2 }} />
+            <div className="sk-line sk-h-5" style={{ flex: 2 }} />
+            <div className="sk-line sk-h-5 sk-w-1-4" />
+            <div className="sk-line sk-h-5 sk-w-1-4" />
+            <div className="sk-line sk-h-8" style={{ width: 80, borderRadius: 6 }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Participants() {
   const { user, isAdmin } = useAuth()
-  const { events, participants, updateParticipantStatus } = useData()
+  const { events, participants, loading, updateParticipantStatus } = useData()
 
   const [selectedEvent, setSelectedEvent] = useState('all')
   const [searchQuery, setSearchQuery]     = useState('')
@@ -19,6 +49,8 @@ export default function Participants() {
   useEffect(() => {
     setCurrentPage(1)
   }, [selectedEvent, searchQuery])
+
+  if (loading) return <ParticipantsSkeleton />
 
   // For event manager: only show their events
   const visibleEvents = isAdmin

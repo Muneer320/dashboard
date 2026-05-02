@@ -194,7 +194,7 @@ async def post_regenerate_uncovered(
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)
-@cache(expire=30)
+@cache(expire=60)
 async def overview_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -209,6 +209,7 @@ async def overview_stats(
 
 
 @router.get("/events/stats", response_model=list[EventStatsItem])
+@cache(expire=60)
 async def events_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -294,6 +295,23 @@ async def my_events(
     """
     rows = await get_my_events(supabase, admin)
     return [MyEventItem(**r) for r in rows]
+
+
+# ── Meals count — must be BEFORE /{event_id} wildcard ────────────────────────
+
+@router.get("/events/meals-count", response_model=list[EventMealsItem])
+async def list_events_meals(
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+) -> list[EventMealsItem]:
+    """
+    Per-event meals_count list.
+    admin       → all events
+    eventManager → assigned events only
+    NOTE: must stay above /events/{event_id} or FastAPI will shadow it.
+    """
+    rows = await get_events_meals_counts(supabase, admin)
+    return [EventMealsItem(**r) for r in rows]
 
 
 # ── Individual Event Detail ────────────────────────────────────────────────────
@@ -413,18 +431,6 @@ async def delete_admin(
 # auto-assign the next slot; admins can still toggle slots here manually.
 
 
-@router.get("/events/meals-count", response_model=list[EventMealsItem])
-async def list_events_meals(
-    supabase: AsyncClient = Depends(get_supabase),
-    admin: Admin = Depends(get_admin_or_em),
-) -> list[EventMealsItem]:
-    """
-    Per-event meals_count list.
-    admin       → all events
-    eventManager → assigned events only
-    """
-    rows = await get_events_meals_counts(supabase, admin)
-    return [EventMealsItem(**r) for r in rows]
 
 
 @router.patch("/events/{event_id}/meals-count", response_model=EventMealsItem)

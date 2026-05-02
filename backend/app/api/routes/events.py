@@ -20,7 +20,7 @@ router = APIRouter()
 
 
 @router.get("", response_model=list[EventResponse])
-@cache(expire=60)
+@cache(expire=120)
 async def get_events(
     supabase: AsyncClient = Depends(get_supabase),
     _: User = Depends(get_current_user),
@@ -42,7 +42,7 @@ async def get_events(
 
 
 @router.get("/public", response_model=list[EventResponse])
-@cache(expire=60)
+@cache(expire=120)
 async def get_public_events(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> list[EventResponse]:

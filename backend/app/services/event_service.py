@@ -12,11 +12,20 @@ from app.db.supabase_client import first_row, rows
 from app.models.event import Event
 from app.models.user import User
 
+# Columns returned for event listings — excludes the heavy `participants` JSONB
+# (can be many KB per event as it holds all users' submission answers).
+# Single-event fetches (get_event) still use select("*") so submissions work.
+_EVENT_LIST_COLS = (
+    "id,name,description,category,venue,rounds,community_link,"
+    "max_participants,start_date,end_date,registration_deadline,"
+    "meals_count,questions,created_at"
+)
+
 
 async def list_events(supabase: AsyncClient) -> list[Event]:
     resp = await (
         supabase.table("events")
-        .select("*")
+        .select(_EVENT_LIST_COLS)
         .order("created_at", desc=True)
         .execute()
     )

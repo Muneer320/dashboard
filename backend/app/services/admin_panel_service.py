@@ -12,7 +12,9 @@ Scoping rules
 
 from __future__ import annotations
 
+import asyncio
 import re
+import time
 import uuid
 
 from fastapi import HTTPException, status
@@ -129,17 +131,32 @@ def _build_participant_dict(
     }
 
 
+# ---------------------------------------------------------------------------
+# Column sets — lean queries omit heavy JSONB blobs
+# ---------------------------------------------------------------------------
+
+# events: excludes `participants` (can be MB-scale per event)
+_EVENTS_LEAN_COLS = (
+    "id,name,category,start_date,end_date,venue,"
+    "max_participants,meals_count,community_link,rules,judges,rounds,questions"
+)
+
+# users: excludes `password_hash`, `details`, `unstop_id`, `is_profile_complete`,
+# `cents`, timestamps — only what aggregation code actually reads
+_USERS_LEAN_COLS = "id,name,username,is_attending,events,food"
+
+
 _PAGE_SIZE = 1000  # Supabase default max per request
 
 
-async def _fetch_all(supabase: AsyncClient, table: str) -> list[dict]:
+async def _fetch_all(supabase: AsyncClient, table: str, cols: str = "*") -> list[dict]:
     """Paginate a Supabase table query to bypass the 1 000-row default limit."""
     all_rows: list[dict] = []
     offset = 0
     while True:
         resp = await (
             supabase.table(table)
-            .select("*")
+            .select(cols)
             .range(offset, offset + _PAGE_SIZE - 1)
             .execute()
         )
@@ -152,11 +169,50 @@ async def _fetch_all(supabase: AsyncClient, table: str) -> list[dict]:
 
 
 async def _all_events(supabase: AsyncClient) -> list[Event]:
+    """Full event rows including participants — only for write paths that mutate participants."""
     return [Event.from_row(r) for r in await _fetch_all(supabase, "events")]
 
 
-async def _all_users(supabase: AsyncClient) -> list[User]:
-    return [User.from_row(r) for r in await _fetch_all(supabase, "users")]
+# ---------------------------------------------------------------------------
+# In-process memory cache  (avoids repeated round-trips to Supabase)
+# ---------------------------------------------------------------------------
+# The free Supabase plan enforces a short statement timeout. By caching the
+# full table results in RAM for _LEAN_TTL seconds, subsequent requests within
+# that window return instantly without touching the DB.
+
+_LEAN_CACHE: dict[str, tuple[float, list]] = {}
+_LEAN_CACHE_TTL = 30  # seconds
+
+
+async def _cached_lean(key: str, fetcher, ttl: float = _LEAN_CACHE_TTL):
+    """Read-through cache with TTL. Dict writes are GIL-safe in CPython."""
+    now = time.monotonic()
+    cached = _LEAN_CACHE.get(key)
+    if cached and now - cached[0] < ttl:
+        return cached[1]
+    data = await fetcher()
+    _LEAN_CACHE[key] = (now, data)
+    return data
+
+
+def _invalidate_lean_cache() -> None:
+    """Bust the cache after any mutation so next read sees fresh data."""
+    _LEAN_CACHE.clear()
+
+
+async def _all_events_lean(supabase: AsyncClient) -> list[Event]:
+    """Event rows WITHOUT the participants JSONB — cached for _LEAN_CACHE_TTL s."""
+    async def _fetch():
+        return [Event.from_row(r) for r in await _fetch_all(supabase, "events", _EVENTS_LEAN_COLS)]
+    return await _cached_lean("events_lean", _fetch)
+
+
+async def _all_users_lean(supabase: AsyncClient) -> list[User]:
+    """User rows without heavy columns — cached for _LEAN_CACHE_TTL s."""
+    async def _fetch():
+        return [User.from_row(r) for r in await _fetch_all(supabase, "users", _USERS_LEAN_COLS)]
+    return await _cached_lean("users_lean", _fetch)
+
 
 
 # ---------------------------------------------------------------------------
@@ -165,12 +221,12 @@ async def _all_users(supabase: AsyncClient) -> list[User]:
 
 async def get_overview_stats(supabase: AsyncClient, admin: Admin) -> dict:
     """Aggregate stats cards for the Overview tab."""
-    all_events = await _all_events(supabase)
+    all_events, all_users = await asyncio.gather(
+        _all_events_lean(supabase),
+        _all_users_lean(supabase),
+    )
     all_event_ids = [str(e.id) for e in all_events]
-
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
-
-    all_users = await _all_users(supabase)
 
     registered_ids: set[str] = set()
     attending = 0
@@ -217,13 +273,13 @@ async def get_events_with_stats(
     supabase: AsyncClient, admin: Admin
 ) -> list[dict]:
     """Per-event stat rows for the Overview events breakdown table."""
-    all_events = await _all_events(supabase)
+    all_events, all_users = await asyncio.gather(
+        _all_events_lean(supabase),
+        _all_users_lean(supabase),
+    )
     all_event_ids = [str(e.id) for e in all_events]
-
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
     scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
-
-    all_users = await _all_users(supabase)
 
     result: list[dict] = []
     for event in scoped_events:
@@ -268,7 +324,11 @@ async def get_participants_list(
     status_filter: str | None = None,
 ) -> list[dict]:
     """Participants table with optional filters."""
-    all_events = await _all_events(supabase)
+    all_events, all_users, team_rows = await asyncio.gather(
+        _all_events_lean(supabase),
+        _all_users_lean(supabase),
+        _fetch_all(supabase, "teams"),
+    )
     all_event_ids = [str(e.id) for e in all_events]
     event_name_map = {str(e.id): e.name for e in all_events}
 
@@ -282,10 +342,6 @@ async def get_participants_list(
             )
         scoped_ids = {event_id}
 
-    all_users = await _all_users(supabase)
-
-    # Pre-fetch all teams to build a team_id → member_ids lookup (one query)
-    team_rows = await _fetch_all(supabase, "teams")
     team_members_map: dict[str, list[str]] = {
         str(t["id"]): [str(m) for m in (t.get("member_ids") or [])]
         for t in team_rows
@@ -406,7 +462,7 @@ async def lookup_participant(
     Scanners are allowed here (allow_scanner=True).
     Returns a list so name-search can surface multiple matches.
     """
-    all_events = await _all_events(supabase)
+    all_events = await _all_events_lean(supabase)
     all_event_ids = [str(e.id) for e in all_events]
     event_name_map = {str(e.id): e.name for e in all_events}
 
@@ -490,16 +546,14 @@ async def lookup_participant(
 
 async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
     """Events with full participant list for My Events tab."""
-    all_events = await _all_events(supabase)
+    all_events, all_users, _team_rows = await asyncio.gather(
+        _all_events_lean(supabase),
+        _all_users_lean(supabase),
+        _fetch_all(supabase, "teams"),
+    )
     all_event_ids = [str(e.id) for e in all_events]
-
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
     scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
-
-    all_users = await _all_users(supabase)
-
-    # Pre-fetch teams for member_ids lookup
-    _team_rows = await _fetch_all(supabase, "teams")
     team_members_map: dict[str, list[str]] = {
         str(t["id"]): [str(m) for m in (t.get("member_ids") or [])]
         for t in _team_rows
@@ -791,7 +845,7 @@ async def get_events_meals_counts(supabase: AsyncClient, admin: Admin) -> list[d
     eventManager → assigned events only (they don't strictly need this
     endpoint yet, but scoping keeps parity with the rest of the panel).
     """
-    all_events = await _all_events(supabase)
+    all_events = await _all_events_lean(supabase)
     all_event_ids = [str(e.id) for e in all_events]
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
     scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
@@ -860,8 +914,10 @@ async def list_user_meals(supabase: AsyncClient) -> dict:
     Also returns the global cap (``max_meals_count`` = sum of every event's
     meals_count) so the UI can size its table safely for the power-user case.
     """
-    all_events = await _all_events(supabase)
-    all_users = await _all_users(supabase)
+    all_events, all_users = await asyncio.gather(
+        _all_events_lean(supabase),
+        _all_users_lean(supabase),
+    )
 
     event_meal_map: dict[str, int] = {
         str(e.id): _event_meals_count(e) for e in all_events
@@ -1075,7 +1131,10 @@ async def get_event_detail(
     Return full detail for a single event including participant list.
     admin → any event; eventManager → assigned events only.
     """
-    all_events = await _all_events(supabase)
+    all_events, all_users = await asyncio.gather(
+        _all_events_lean(supabase),
+        _all_users_lean(supabase),
+    )
     all_event_ids = [str(e.id) for e in all_events]
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
 
@@ -1088,8 +1147,6 @@ async def get_event_detail(
     event = next((e for e in all_events if str(e.id) == event_id), None)
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
-
-    all_users = await _all_users(supabase)
 
     participants: list[dict] = []
     registered = attended = submitted_count = restricted_count = 0
@@ -1153,7 +1210,7 @@ async def update_event_details(
     admin       → any event
     eventManager → must be assigned to this event
     """
-    all_events = await _all_events(supabase)
+    all_events = await _all_events_lean(supabase)
     all_event_ids = [str(e.id) for e in all_events]
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
 
@@ -1211,7 +1268,10 @@ async def update_event_details(
         .eq("id", str(event_uuid))
         .execute()
     )
-    updated_row = first_row(update_resp)
+    _ = first_row(update_resp)
+
+    # Bust the cache so subsequent reads see the updated data
+    _invalidate_lean_cache()
 
     # Re-fetch for a consistent return shape
     return await get_event_detail(supabase, admin, event_id)

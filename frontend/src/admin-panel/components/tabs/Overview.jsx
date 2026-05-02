@@ -15,8 +15,38 @@ function StatCard({ icon, label, value, sub, colorClass }) {
   )
 }
 
+function OverviewSkeleton() {
+  return (
+    <div className="overview-page fade-in">
+      <div className="section-header">
+        <div className="sk-line sk-h-6 sk-w-1-4" />
+        <div className="sk-line sk-h-5 sk-w-1-4" />
+      </div>
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="sk-card" style={{ minHeight: 100 }}>
+            <div className="sk-row">
+              <div className="sk-block sk-h-10" style={{ width: 40, borderRadius: 8, flexShrink: 0 }} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="sk-line sk-h-8 sk-w-3-4" />
+                <div className="sk-line sk-h-4 sk-w-1-2" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 24 }}>
+        <div className="sk-line sk-h-6 sk-w-1-4" style={{ marginBottom: 16 }} />
+        <div className="sk-block sk-h-24 sk-w-full" />
+      </div>
+    </div>
+  )
+}
+
 export default function Overview() {
-  const { stats, events } = useData()   // events are EventStatsItem[] — counts already computed
+  const { stats, events, loading } = useData()
+
+  if (loading) return <OverviewSkeleton />
 
   return (
     <div className="overview-page fade-in">

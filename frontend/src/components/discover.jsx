@@ -329,9 +329,11 @@ export function Explore() {
     };
   }, [user]);
 
-  // Fetch all events lazily when tab switches (or on mount if we want to pre-load)
+  // Fetch all events lazily — only when the user navigates to the "All Events" tab.
+  // For logged-out visitors "all" is the default so this fires immediately.
   React.useEffect(() => {
-    if (allEvents.length > 0) return; // already fetched
+    if (tab !== "all") return;     // don't pre-fetch while on "My Events"
+    if (allEvents.length > 0) return; // already fetched — no repeat
     let cancelled = false;
     setLoadingAll(true);
     const fetchFn = user ? eventsApi.list : eventsApi.publicList;
@@ -349,7 +351,7 @@ export function Explore() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [tab, user]); // re-runs only when tab flips to "all" or user changes
 
   const activeEvents = tab === "my" ? myEvents : allEvents;
   const isLoading = tab === "my" ? loadingMy : loadingAll;
