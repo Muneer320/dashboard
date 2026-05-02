@@ -47,11 +47,11 @@ export function Login() {
             </div>
 
             <div style={{ marginTop: 30 }}>
-              <label className="label">Email</label>
+              <label className="label">Email or username</label>
               <input
-                className="input" type="email" placeholder="archived-efc0ee75d9@example.invalid"
+                className="input" type="text" placeholder="archived-efc0ee75d9@example.invalid or username"
                 value={email} onChange={e => { setError(''); setEmail(e.target.value); }}
-                required autoComplete="email"
+                required autoComplete="username"
               />
             </div>
             <div style={{ marginTop: 18 }}>

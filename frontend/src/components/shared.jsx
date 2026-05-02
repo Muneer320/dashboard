@@ -1,7 +1,8 @@
 // Ascent — Shared UI components
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUserAuth } from "../lib/UserAuthContext";
+import { notifications as notificationsApi } from "../lib/api";
 // ─────────────────────────────────────────────────────────────
 // Responsive hook
 // ─────────────────────────────────────────────────────────────
@@ -36,9 +37,78 @@ export function AscentLogo({ size = 22, withMark = true }) {
 export function NavBar({ active, variant = "app" }) {
   const isMobile = useMobile();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [hoverLogout, setHoverLogout] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef(null);
+  const [bellOpen, setBellOpen] = useState(false);
+  const bellRef = useRef(null);
+  const [notifs, setNotifs] = useState({ items: [], unread: 0 });
   const navigate = useNavigate();
   const { user, logout } = useUserAuth() || {};
+
+  // Close popovers on outside click
+  useEffect(() => {
+    if (!profileOpen) return;
+    const onDoc = (e) => {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [profileOpen]);
+
+  useEffect(() => {
+    if (!bellOpen) return;
+    const onDoc = (e) => {
+      if (bellRef.current && !bellRef.current.contains(e.target)) setBellOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [bellOpen]);
+
+  // Poll notifications every 30s — only when there is a logged-in user.
+  const loadNotifs = useCallback(() => {
+    if (!user) return;
+    notificationsApi.list(20).then(setNotifs).catch(() => {});
+  }, [user]);
+  useEffect(() => { loadNotifs(); }, [loadNotifs]);
+  useEffect(() => {
+    if (!user) return;
+    // Poll every 15s so an admin approval/rejection shows up in the bell
+    // within ~15s without manually reloading. Also re-fetch when the tab
+    // regains focus so a returning user gets the latest state immediately.
+    const id = setInterval(loadNotifs, 15000);
+    const onFocus = () => loadNotifs();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadNotifs, user]);
+
+  const onBellOpen = () => {
+    setBellOpen((v) => {
+      const next = !v;
+      if (next && notifs.unread > 0) {
+        notificationsApi.markAllRead()
+          .then(() => setNotifs((n) => ({
+            ...n, unread: 0,
+            items: n.items.map(it => ({ ...it, read_at: it.read_at || new Date().toISOString() })),
+          })))
+          .catch(() => {});
+      }
+      return next;
+    });
+  };
+
+  function relTimeShort(iso) {
+    if (!iso) return "";
+    const d = (Date.now() - new Date(iso)) / 1000;
+    if (d < 60) return `${Math.floor(d)}s`;
+    if (d < 3600) return `${Math.floor(d / 60)}m`;
+    if (d < 86400) return `${Math.floor(d / 3600)}h`;
+    return `${Math.floor(d / 86400)}d`;
+  }
 
   const handleLogout = () => {
     if (logout) logout();
@@ -59,6 +129,7 @@ export function NavBar({ active, variant = "app" }) {
     "Schedule",
     "Explore",
     "Leaderboard",
+    "My Coins",
     "Mirage",
     "Announcements",
   ];
@@ -71,6 +142,7 @@ export function NavBar({ active, variant = "app" }) {
       schedule: "/schedule",
       explore: "/explore",
       leaderboard: "/leaderboard",
+      "my coins": "/coins",
       mirage: "/mirage",
       announcements: "/announcements",
       landing: "/",
@@ -173,12 +245,98 @@ export function NavBar({ active, variant = "app" }) {
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {variant === "app" ? (
-              <div
-                style={{ position: "relative" }}
-                onMouseEnter={() => setHoverLogout(true)}
-                onMouseLeave={() => setHoverLogout(false)}
-              >
-                <div
+              <>
+              {/* Bell */}
+              <div ref={bellRef} style={{ position: "relative" }}>
+                <button
+                  onClick={onBellOpen}
+                  aria-label="Notifications"
+                  style={{
+                    background: "transparent", border: 0, color: "var(--ink-dim)",
+                    cursor: "pointer", padding: 6, position: "relative",
+                  }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                  </svg>
+                  {notifs.unread > 0 && (
+                    <span style={{
+                      position: "absolute", top: 0, right: 0,
+                      minWidth: 16, height: 16, borderRadius: 999, padding: "0 4px",
+                      background: "var(--violet)", color: "#fff",
+                      fontSize: 9, fontFamily: "var(--f-mono)", fontWeight: 600,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      boxShadow: "0 0 0 2px var(--bg)",
+                    }}>{notifs.unread > 9 ? "9+" : notifs.unread}</span>
+                  )}
+                </button>
+
+                {bellOpen && (
+                  <div className="fade-up" style={{
+                    position: "absolute", top: "calc(100% + 10px)", right: 0,
+                    width: 360, maxHeight: 480, overflowY: "auto",
+                    padding: 14, zIndex: 50,
+                    background: "rgba(15, 15, 22, 0.97)",
+                    border: "1px solid var(--glass-border-strong)",
+                    borderRadius: "var(--r-lg)",
+                    backdropFilter: "blur(28px) saturate(140%)",
+                    WebkitBackdropFilter: "blur(28px) saturate(140%)",
+                    boxShadow: "0 30px 80px -30px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04)",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px 8px" }}>
+                      <div className="eyebrow">§ NOTIFICATIONS</div>
+                      <span className="mono" style={{ fontSize: 10, color: "var(--ink-mute)" }}>
+                        {notifs.items.length} TOTAL
+                      </span>
+                    </div>
+                    {notifs.items.length === 0 ? (
+                      <div style={{ padding: 24, textAlign: "center", color: "var(--ink-mute)", fontSize: 12.5 }}>
+                        No notifications yet.
+                      </div>
+                    ) : notifs.items.map((n) => {
+                      const tone =
+                        n.template_key === "ugc_rejected" ? "var(--amber)" :
+                        n.template_key === "ugc_approved" ? "var(--teal)" :
+                        n.template_key === "post_deleted_reversal" ? "var(--amber)" :
+                        "var(--violet)";
+                      return (
+                        <div key={n.id} style={{
+                          padding: "12px 4px",
+                          borderBottom: "1px solid var(--glass-border)",
+                          opacity: n.read_at ? 0.7 : 1,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: tone, flexShrink: 0 }} />
+                              <span style={{
+                                fontSize: 13, color: "var(--ink)", fontWeight: 500,
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              }}>
+                                {n.title}
+                              </span>
+                            </div>
+                            <span className="mono" style={{ fontSize: 9.5, color: "var(--ink-mute)", flexShrink: 0 }}>
+                              {relTimeShort(n.created_at)}
+                            </span>
+                          </div>
+                          <div style={{
+                            fontSize: 12, color: "var(--ink-dim)", marginTop: 6,
+                            marginLeft: 14, lineHeight: 1.45,
+                          }}>
+                            {n.body}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div ref={profileRef} style={{ position: "relative" }}>
+                <button
+                  onClick={() => setProfileOpen((v) => !v)}
+                  aria-label="Profile menu"
                   style={{
                     width: 30,
                     height: 30,
@@ -190,44 +348,134 @@ export function NavBar({ active, variant = "app" }) {
                     fontFamily: "var(--f-mono)",
                     fontSize: 11,
                     color: "#fff",
-                    border: "1px solid rgba(255,255,255,0.2)",
+                    border: profileOpen
+                      ? "2px solid var(--violet)"
+                      : "1px solid rgba(255,255,255,0.2)",
                     cursor: "pointer",
+                    padding: 0,
+                    boxShadow: profileOpen
+                      ? "0 0 0 3px rgba(127,119,221,0.18)"
+                      : "none",
+                    transition: "box-shadow .2s, border-color .2s",
                   }}
-                  onClick={() => navClick("event-detail")}
                 >
                   {initials}
-                </div>
+                </button>
 
-                {hoverLogout && (
+                {profileOpen && (
                   <div
+                    className="fade-up"
                     style={{
                       position: "absolute",
-                      top: "100%",
+                      top: "calc(100% + 10px)",
                       right: 0,
-                      paddingTop: 8,
+                      width: 260,
+                      padding: 18,
                       zIndex: 50,
+                      background: "rgba(15, 15, 22, 0.97)",
+                      border: "1px solid var(--glass-border-strong)",
+                      borderRadius: "var(--r-lg)",
+                      backdropFilter: "blur(28px) saturate(140%)",
+                      WebkitBackdropFilter: "blur(28px) saturate(140%)",
+                      boxShadow:
+                        "0 30px 80px -30px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04)",
                     }}
                   >
-                    <button
-                      onClick={handleLogout}
+                    <div className="eyebrow">§ PROFILE</div>
+                    <div
                       style={{
-                        background: "#e53e3e",
-                        color: "#fff",
-                        border: "1px solid rgba(255,255,255,0.2)",
-                        borderRadius: 6,
-                        padding: "6px 12px",
-                        fontSize: 12,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        whiteSpace: "nowrap",
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 12,
+                        marginTop: 12,
                       }}
                     >
-                      Logout
+                      <div
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: "50%",
+                          background:
+                            "linear-gradient(135deg, var(--violet), var(--teal))",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#fff",
+                          fontSize: 15,
+                          fontFamily: "var(--f-mono)",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {initials}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 14,
+                            color: "var(--ink)",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {displayName}
+                        </div>
+                        <div
+                          className="mono"
+                          style={{
+                            fontSize: 11,
+                            color: "var(--ink-mute)",
+                            marginTop: 3,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          @{user?.username || "—"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        height: 1,
+                        background: "var(--glass-border)",
+                        margin: "16px 0",
+                      }}
+                    />
+
+                    <button
+                      onClick={() => {
+                        setProfileOpen(false);
+                        handleLogout();
+                      }}
+                      className="btn ghost"
+                      style={{
+                        width: "100%",
+                        justifyContent: "center",
+                        color: "var(--amber)",
+                      }}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                      Sign out
                     </button>
                   </div>
                 )}
               </div>
+              </>
             ) : (
               <>
                 <a onClick={() => navClick("login")} className="btn ghost sm">

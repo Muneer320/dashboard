@@ -40,3 +40,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(AccessControlMiddleware)
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+
+def main() -> None:
+    """Entrypoint for the `ascent-api` console script declared in pyproject.toml."""
+    import os
+    import uvicorn
+
+    uvicorn.run(
+        "app.main:app",
+        host=os.environ.get("HOST", "127.0.0.1"),
+        port=int(os.environ.get("PORT", "8000")),
+        reload=os.environ.get("RELOAD", "true").lower() == "true",
+    )

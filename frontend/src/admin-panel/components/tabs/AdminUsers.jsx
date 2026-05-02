@@ -7,6 +7,16 @@ import './AdminUsers.css'
 
 import { useAuth } from '../../context/AuthContext'
 
+// Mirrors backend BOOTH_SOURCE_MAP in routes/booth.py — keep in sync.
+const BOOTH_OPTIONS = [
+  { id: 'AR_FILTER',      label: 'AR Filter Booth' },
+  { id: 'SCAVENGER',      label: 'Scavenger Hunt' },
+  { id: 'RAZORPAY',       label: 'Razorpay Pitch' },
+  { id: 'ECO_EXCHANGE',   label: 'Eco Exchange' },
+  { id: 'EVENT_WIN',      label: 'Event Win Desk' },
+  { id: 'ECO_DESIGN_WIN', label: 'Eco Design Win Desk' },
+]
+
 export default function AdminUsers() {
   const { user } = useAuth()
   const { adminUsers, events, loadAdminUsers } = useData()
@@ -26,6 +36,7 @@ export default function AdminUsers() {
   const [password, setPassword] = useState('')
   const [phone, setPhone] = useState('')
   const [selectedEvents, setSelectedEvents] = useState([])
+  const [boothId, setBoothId] = useState('')
   
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -41,8 +52,16 @@ export default function AdminUsers() {
   const totalPages = Math.ceil(filtered.length / itemsPerPage)
   const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
-  const roleLabel = { admin: 'Super Admin', eventManager: 'Event Manager', Scanner: 'Scanner' }
-  const roleBadge = { admin: 'badge-accent', eventManager: 'badge-info', Scanner: 'badge-warning' }
+  const roleLabel = {
+    admin: 'Super Admin', eventManager: 'Event Manager', Scanner: 'Scanner',
+    booth_volunteer: 'Booth Volunteer', prm_volunteer: 'PRM Volunteer',
+    prm_lead: 'PRM Lead', ops_lead: 'Ops Lead',
+  }
+  const roleBadge = {
+    admin: 'badge-accent', eventManager: 'badge-info', Scanner: 'badge-warning',
+    booth_volunteer: 'badge-warning', prm_volunteer: 'badge-info',
+    prm_lead: 'badge-accent', ops_lead: 'badge-accent',
+  }
 
   // Handlers
   function openAdd() {
@@ -54,6 +73,7 @@ export default function AdminUsers() {
     setPassword('')
     setPhone('')
     setSelectedEvents([])
+    setBoothId('')
     setFormError('')
     setIsFormOpen(true)
   }
@@ -67,6 +87,7 @@ export default function AdminUsers() {
     setPassword('') // leave blank to not change
     setPhone(admin.phone || '')
     setSelectedEvents(admin.events || [])
+    setBoothId(admin.booth_id || '')
     setFormError('')
     setIsFormOpen(true)
   }
@@ -85,6 +106,9 @@ export default function AdminUsers() {
     setIsSubmitting(true)
     
     try {
+      // Booth assignment is meaningful only for booth_volunteer; cleared otherwise.
+      const resolvedBoothId = role === 'booth_volunteer' ? (boothId || null) : null
+
       if (editingAdmin) {
         await adminPanel.updateAdminUser(editingAdmin.uid, {
           name,
@@ -92,7 +116,8 @@ export default function AdminUsers() {
           password: password || undefined,
           mail: email || null,
           phone: phone || null,
-          events: role === 'eventManager' ? selectedEvents : []
+          events: role === 'eventManager' ? selectedEvents : [],
+          booth_id: resolvedBoothId,
         })
       } else {
         await adminPanel.addAdminUser({
@@ -102,7 +127,8 @@ export default function AdminUsers() {
           password,
           mail: email || null,
           phone: phone || null,
-          events: role === 'eventManager' ? selectedEvents : []
+          events: role === 'eventManager' ? selectedEvents : [],
+          booth_id: resolvedBoothId,
         })
       }
       setIsFormOpen(false)
@@ -196,6 +222,14 @@ export default function AdminUsers() {
                             })}
                             {u.events.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>None</span>}
                           </div>
+                        ) : u.role === 'booth_volunteer' ? (
+                          u.booth_id ? (
+                            <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>
+                              {BOOTH_OPTIONS.find(b => b.id === u.booth_id)?.label || u.booth_id}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>No booth assigned</span>
+                          )
                         ) : (
                           <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>All Events</span>
                         )}
@@ -245,9 +279,17 @@ export default function AdminUsers() {
                 <div className="form-group">
                   <label>Role</label>
                   <select className="input-field" value={role} onChange={e => setRole(e.target.value)}>
-                    <option value="admin">Super Admin</option>
-                    <option value="eventManager">Event Manager</option>
-                    <option value="Scanner">Scanner</option>
+                    <optgroup label="Core">
+                      <option value="admin">Super Admin</option>
+                      <option value="eventManager">Event Manager</option>
+                      <option value="Scanner">Scanner</option>
+                    </optgroup>
+                    <optgroup label="Sidequest">
+                      <option value="booth_volunteer">Booth Volunteer</option>
+                      <option value="prm_volunteer">PRM Volunteer</option>
+                      <option value="prm_lead">PRM Lead</option>
+                      <option value="ops_lead">Ops Lead</option>
+                    </optgroup>
                   </select>
                 </div>
                 <div className="form-group">
@@ -262,14 +304,35 @@ export default function AdminUsers() {
                   <div className="events-multiselect">
                     {events.map(ev => (
                       <label key={ev.id} className="event-checkbox">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={selectedEvents.includes(ev.id)}
                           onChange={() => handleEventToggle(ev.id)}
                         />
                         {ev.name}
                       </label>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {role === 'booth_volunteer' && (
+                <div className="form-group" style={{ marginTop: 16 }}>
+                  <label>Assigned Booth</label>
+                  <select
+                    className="input-field"
+                    required
+                    value={boothId}
+                    onChange={e => setBoothId(e.target.value)}
+                  >
+                    <option value="">— select booth —</option>
+                    {BOOTH_OPTIONS.map(b => (
+                      <option key={b.id} value={b.id}>{b.label}</option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                    The volunteer's login token will carry this booth_id; awards from
+                    them are recorded against this booth only.
                   </div>
                 </div>
               )}

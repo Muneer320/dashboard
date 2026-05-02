@@ -19,8 +19,6 @@ async def admin_login(supabase: AsyncClient, username: str, password: str) -> st
         .execute()
     )
     row = first_row(resp)
-    print("Here")
-    print(row)
 
     if row is None or not verify_password(password, row["password_hash"]):
         raise HTTPException(
@@ -28,8 +26,23 @@ async def admin_login(supabase: AsyncClient, username: str, password: str) -> st
             detail="Invalid admin credentials",
         )
 
+    role = row.get("role") or "admin"
+
+    # Booth volunteers must carry their assigned booth_id in the token —
+    # /api/v1/booth/* routes refuse the request otherwise.
+    extra_claims: dict | None = None
+    booth_id = row.get("booth_id")
+    if role == "booth_volunteer":
+        if not booth_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Booth volunteer has no booth assigned. Ask an admin to assign a booth.",
+            )
+        extra_claims = {"booth_id": booth_id}
+
     # JWT subject is prefixed with "admin:" so deps can distinguish user vs admin tokens
     return create_access_token(
         subject=f"admin:{row['uid']}",
-        role=row.get("role") or "admin",
+        role=role,
+        extra_claims=extra_claims,
     )

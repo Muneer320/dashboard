@@ -10,6 +10,15 @@ import { Mirage, Announcements, LostFound } from './components/community';
 import { Rating, Feedback, Report } from './components/forms';
 import AdminApp from './admin-panel/App';
 import FAQ from './components/faq';
+import {
+  CoinsHomePage,
+  UGCSubmitPage,
+  LeaderboardPage as CoinsLeaderboardPage,
+  RewardsPage,
+  CoinHistoryPage,
+  MyQRPage,
+} from './components/sidequest';
+import BoothTool from './components/booth';
 
 /** Blocks access to protected user pages — redirects to /login if not authed. */
 function RequireAuth({ children }) {
@@ -56,6 +65,17 @@ export default function App() {
         <Route path="/rating"        element={<RequireAuth><Rating /></RequireAuth>} />
         <Route path="/feedback"      element={<RequireAuth><Feedback /></RequireAuth>} />
         {/* <Route path="/report"        element={<RequireAuth><Report /></RequireAuth>} /> */}
+
+        {/* Booth Tool — has its own auth (booth_volunteer JWT) */}
+        <Route path="/booth"             element={<BoothTool />} />
+
+        {/* Sidequest — Ascent Coins */}
+        <Route path="/coins"             element={<RequireAuth><CoinsHomePage /></RequireAuth>} />
+        <Route path="/coins/submit"      element={<RequireAuth><UGCSubmitPage /></RequireAuth>} />
+        <Route path="/coins/leaderboard" element={<RequireAuth><CoinsLeaderboardPage /></RequireAuth>} />
+        <Route path="/coins/rewards"     element={<RequireAuth><RewardsPage /></RequireAuth>} />
+        <Route path="/coins/qr"          element={<RequireAuth><MyQRPage /></RequireAuth>} />
+        <Route path="/coins/history"     element={<RequireAuth><CoinHistoryPage /></RequireAuth>} />
 
         <Route path="*"              element={<Navigate to="/" replace />} />
       </Routes>

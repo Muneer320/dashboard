@@ -18,11 +18,38 @@ import uuid
 from fastapi import HTTPException, status
 from supabase import AsyncClient
 
+from app.api.routes.booth import BOOTH_SOURCE_MAP
 from app.core.security import get_password_hash
 from app.db.supabase_client import first_row, rows
 from app.models.admin import Admin, AdminRole
 from app.models.event import DEFAULT_EVENT_MEALS_COUNT, Event
 from app.models.user import User
+
+
+def _validate_booth_assignment(role: str | None, booth_id: str | None) -> str | None:
+    """
+    Validate booth_id for the given role.
+
+    - booth_volunteer: booth_id is required and must be a known booth.
+    - any other role: booth_id is forced to None (we don't store stale
+      assignments on accounts that were demoted to non-booth roles).
+    """
+    if role == AdminRole.BOOTH_VOLUNTEER.value:
+        if not booth_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="booth_id is required when role is 'booth_volunteer'",
+            )
+        if booth_id not in BOOTH_SOURCE_MAP:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"booth_id '{booth_id}' is not a known booth. "
+                    f"Valid options: {sorted(BOOTH_SOURCE_MAP.keys())}"
+                ),
+            )
+        return booth_id
+    return None
 
 
 _MEAL_KEY_RE = re.compile(r"^meal(\d+)$")
@@ -568,6 +595,7 @@ async def get_admin_users(supabase: AsyncClient) -> list[dict]:
             "phone": m.phone,
             "mail": m.mail,
             "events": m.events or [],
+            "booth_id": m.booth_id,
         }
         for m in managers
     ]
@@ -582,6 +610,7 @@ async def create_admin_user(
     mail: str | None,
     phone: str | None,
     events: list[str],
+    booth_id: str | None = None,
 ) -> dict:
     """
     Create a new Admin row.
@@ -614,6 +643,8 @@ async def create_admin_user(
                 detail=f"Email '{mail}' is already registered",
             )
 
+    resolved_booth_id = _validate_booth_assignment(role, booth_id)
+
     payload = {
         "role": role,
         "username": username,
@@ -622,6 +653,7 @@ async def create_admin_user(
         "mail": mail,
         "phone": phone,
         "events": events,
+        "booth_id": resolved_booth_id,
     }
     insert_resp = await (
         supabase.table("admins")
@@ -638,6 +670,7 @@ async def create_admin_user(
         "phone": row.get("phone"),
         "mail": row["mail"],
         "events": row.get("events") or [],
+        "booth_id": row.get("booth_id"),
         "message": "Admin created successfully",
     }
 
@@ -651,6 +684,8 @@ async def update_admin_user(
     mail: str | None,
     phone: str | None,
     events: list[str] | None,
+    booth_id: str | None = None,
+    booth_id_provided: bool = False,
 ) -> dict:
     """
     Update an admin's profile fields.
@@ -698,6 +733,13 @@ async def update_admin_user(
     if events is not None:
         patch["events"] = events
 
+    # Re-validate booth assignment when role or booth_id is in flight.
+    # If the admin is being moved off booth_volunteer, clear any stale booth_id.
+    if role is not None or booth_id_provided:
+        effective_role = role if role is not None else row.get("role")
+        effective_booth = booth_id if booth_id_provided else row.get("booth_id")
+        patch["booth_id"] = _validate_booth_assignment(effective_role, effective_booth)
+
     if patch:
         update_resp = await (
             supabase.table("admins")
@@ -717,6 +759,7 @@ async def update_admin_user(
         "phone": updated.get("phone"),
         "mail": updated["mail"],
         "events": updated.get("events") or [],
+        "booth_id": updated.get("booth_id"),
         "message": "Admin updated successfully",
     }
 

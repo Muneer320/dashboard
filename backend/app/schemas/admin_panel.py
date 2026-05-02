@@ -137,6 +137,7 @@ class AdminUserItem(BaseModel):
     phone: Optional[str]
     mail: Optional[str]
     events: list                 # list as stored in JSONB (names or IDs)
+    booth_id: Optional[str] = None   # only set for booth_volunteer rows
 
 
 # ── Admin User CRUD ───────────────────────────────────────────────────────────
@@ -151,6 +152,8 @@ class AdminUserCreate(BaseModel):
     phone: Optional[str] = None
     # list of event ID strings to assign immediately
     events: list[str] = []
+    # booth assignment — required when role is booth_volunteer, ignored otherwise
+    booth_id: Optional[str] = None
 
 
 class AdminUserUpdate(BaseModel):
@@ -161,6 +164,7 @@ class AdminUserUpdate(BaseModel):
     mail: Optional[str] = None
     phone: Optional[str] = None
     events: Optional[list[str]] = None  # full replacement of the events list
+    booth_id: Optional[str] = None      # only meaningful when role==booth_volunteer
 
 
 class AdminUserResponse(BaseModel):
@@ -172,6 +176,7 @@ class AdminUserResponse(BaseModel):
     phone: Optional[str]
     mail: Optional[str]
     events: list
+    booth_id: Optional[str] = None
     message: str
 
 

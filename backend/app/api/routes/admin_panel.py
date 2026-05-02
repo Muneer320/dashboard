@@ -364,6 +364,7 @@ async def create_admin(
         mail=body.mail,
         phone=body.phone,
         events=body.events,
+        booth_id=body.booth_id,
     )
     return AdminUserResponse(**data)
 
@@ -388,6 +389,9 @@ async def update_admin(
         mail=body.mail,
         phone=body.phone,
         events=body.events,
+        booth_id=body.booth_id,
+        # Pydantic v2 — distinguish "field omitted" from "explicit null"
+        booth_id_provided="booth_id" in body.model_fields_set,
     )
     return AdminUserResponse(**data)
 

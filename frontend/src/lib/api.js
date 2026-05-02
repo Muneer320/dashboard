@@ -245,6 +245,90 @@ export const adminPanel = {
     post('/admin-panel/uncovered-users/regenerate', { user_ids }, { adminAuth: true }),
 };
 
+// ─── Notifications (in-app bell) ─────────────────────────────────────────────
+
+export const notifications = {
+  list:        (limit = 50) => get(`/notifications?limit=${limit}`),
+  markRead:    (id) => post(`/notifications/${id}/read`, {}),
+  markAllRead: () => post('/notifications/read-all', {}),
+};
+
+// ─── Sidequest — admin-side ──────────────────────────────────────────────────
+
+export const adminCoins = {
+  // UGC queue
+  ugcQueue:    (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return get(`/admin/ugc/queue${q ? `?${q}` : ''}`, { adminAuth: true });
+  },
+  approveUGC:  (submission_id) => post('/admin/ugc/approve', { submission_id }, { adminAuth: true }),
+  rejectUGC:   (submission_id, reason) => post('/admin/ugc/reject', { submission_id, reason }, { adminAuth: true }),
+
+  // Manual / leaderboard / snapshot
+  manualAdjust: (student_id, coins, reason) =>
+    post('/admin/coins/manual-adjust', { student_id, coins, reason }, { adminAuth: true }),
+  leaderboard:  () => get('/admin/leaderboard', { adminAuth: true }),
+  snapshotTake: (snapshot_type, force = false, force_reason = null) =>
+    post('/admin/snapshot/take', { snapshot_type, force, force_reason }, { adminAuth: true }),
+
+  // Surprise drops
+  triggerDrop: (body) => post('/admin/surprise-drop/trigger', body, { adminAuth: true }),
+  cancelDrop:  (drop_id) => post('/admin/surprise-drop/cancel', { drop_id }, { adminAuth: true }),
+
+  // Booth activity, disputes, inventory, engagement, audit
+  boothActivity: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return get(`/admin/booth/activity${q ? `?${q}` : ''}`, { adminAuth: true });
+  },
+  disputes:        (status = 'open') => get(`/admin/disputes?status=${encodeURIComponent(status)}`, { adminAuth: true }),
+  resolveDispute:  (ticket_id, resolution_note, action) =>
+    post('/admin/disputes/resolve', { ticket_id, resolution_note, action }, { adminAuth: true }),
+  inventory:       () => get('/admin/inventory', { adminAuth: true }),
+  engagementSubmit:(body) => post('/admin/engagement/submit', body, { adminAuth: true }),
+  auditLog:        (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return get(`/admin/audit-log${q ? `?${q}` : ''}`, { adminAuth: true });
+  },
+};
+
+// ─── Sidequest — booth volunteer ────────────────────────────────────────────
+
+export const boothApi = {
+  // booth_volunteer JWT used as adminAuth
+  me:      () => get('/booth/me', { adminAuth: true }),
+  award:   (student_id, client_uuid) => post('/booth/award', { student_id, client_uuid }, { adminAuth: true }),
+  sync:    (awards) => post('/booth/sync', { awards }, { adminAuth: true }),
+  student: (student_id) => get(`/booth/student/${student_id}`, { adminAuth: true }),
+  search:  (q) => get(`/booth/search?q=${encodeURIComponent(q)}`, { adminAuth: true }),
+  awards:  (todayOnly = true, limit = 50) =>
+    get(`/booth/awards?today_only=${todayOnly}&limit=${limit}`, { adminAuth: true }),
+};
+
+// ─── Sidequest — Ascent Coins (student-facing) ───────────────────────────────
+
+export const coins = {
+  balance:          () => get('/coins/balance'),
+  history:          () => get('/coins/history'),
+  leaderboard:      () => get('/coins/leaderboard'),
+  powerHourStatus:  () => get('/coins/power-hour-status'),
+  dispute:          (ledger_entry_id, description) =>
+    post('/coins/dispute', { ledger_entry_id, description }),
+  redeemSticker:    () => post('/coins/redeem-sticker', {}),
+  activeDrops:      () => get('/coins/surprise-drops/active'),
+  claimDrop:        (drop_id) => post('/coins/surprise-drops/claim', { drop_id }),
+};
+
+// ─── Sidequest — UGC submission (student-facing) ─────────────────────────────
+
+export const ugc = {
+  eligibility: () => get('/ugc/eligibility'),
+  submit: ({ source_type, url, participant_2_id }) =>
+    post('/ugc/submit', { source_type, url, participant_2_id }),
+  confirmCollab:        (collab_id) =>
+    post('/ugc/creator-collab/confirm', { collab_id }),
+  pendingConfirmations: () => get('/ugc/pending-confirmations'),
+};
+
 // ─── QR Scan ──────────────────────────────────────────────────────────────────
 
 // Frontend uses `scan_type` internally (entry / attendance / food). The backend

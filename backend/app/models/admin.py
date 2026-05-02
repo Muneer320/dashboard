@@ -14,6 +14,11 @@ class AdminRole(str, enum.Enum):
     ADMIN = "admin"
     EVENT_MANAGER = "eventManager"
     SCANNER = "Scanner"
+    # Sidequest roles
+    BOOTH_VOLUNTEER = "booth_volunteer"
+    PRM_VOLUNTEER = "prm_volunteer"
+    PRM_LEAD = "prm_lead"
+    OPS_LEAD = "ops_lead"
 
 
 @dataclass
@@ -26,6 +31,7 @@ class Admin:
     role: AdminRole = AdminRole.ADMIN
     events: list = field(default_factory=list)
     phone: str | None = None
+    booth_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -45,6 +51,7 @@ class Admin:
             role=role,
             events=row.get("events") or [],
             phone=row.get("phone"),
+            booth_id=row.get("booth_id"),
             created_at=coerce_datetime(row.get("created_at")),
             updated_at=coerce_datetime(row.get("updated_at")),
         )
@@ -59,4 +66,5 @@ class Admin:
             "role": self.role.value,
             "events": self.events,
             "phone": self.phone,
+            "booth_id": self.booth_id,
         }

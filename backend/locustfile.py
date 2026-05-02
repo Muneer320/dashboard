@@ -84,3 +84,51 @@ class ParticipantUser(HttpUser):
     def view_me(self):
         if USER_TOKEN:
             self.client.get("/api/v1/auth/me", name="User Me")
+
+
+class SidequestPowerHourUser(HttpUser):
+    """Simulates the Power Hour spike — 500 students hammering the
+    dashboard, leaderboard, and submitting UGC posts.
+
+    Run with `--host` pointing at the deployed API and a higher weight
+    when targeting the Power Hour scenario:
+
+        locust -f locustfile.py --tags sidequest --users 500 --spawn-rate 50
+    """
+    wait_time = between(0.5, 2.0)
+    weight = 5
+    tags = ["sidequest"]
+
+    def on_start(self):
+        if USER_TOKEN:
+            self.client.headers.update({"Authorization": f"Bearer {USER_TOKEN}"})
+
+    @task(5)
+    def coins_balance(self):
+        if USER_TOKEN:
+            self.client.get("/api/v1/coins/balance", name="Coins Balance")
+
+    @task(3)
+    def coins_leaderboard(self):
+        if USER_TOKEN:
+            self.client.get("/api/v1/coins/leaderboard", name="Coins Leaderboard")
+
+    @task(2)
+    def coins_history(self):
+        if USER_TOKEN:
+            self.client.get("/api/v1/coins/history", name="Coins History")
+
+    @task(2)
+    def power_hour_status(self):
+        # Public endpoint — no auth needed.
+        self.client.get("/api/v1/coins/power-hour-status", name="Power Hour Status")
+
+    @task(1)
+    def ugc_eligibility(self):
+        if USER_TOKEN:
+            self.client.get("/api/v1/ugc/eligibility", name="UGC Eligibility")
+
+    @task(1)
+    def active_drops(self):
+        if USER_TOKEN:
+            self.client.get("/api/v1/coins/surprise-drops/active", name="Active Drops")
