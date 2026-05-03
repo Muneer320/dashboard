@@ -141,9 +141,9 @@ _EVENTS_LEAN_COLS = (
     "max_participants,meals_count,community_link,rules,judges,rounds,questions"
 )
 
-# users: excludes `password_hash`, `details`, `unstop_id`, `is_profile_complete`,
+# users: excludes `password_hash`, `unstop_id`, `is_profile_complete`,
 # `cents`, timestamps — only what aggregation code actually reads
-_USERS_LEAN_COLS = "id,name,username,is_attending,events,food"
+_USERS_LEAN_COLS = "id,name,username,is_attending,events,food,details"
 
 
 _PAGE_SIZE = 1000  # Supabase default max per request
