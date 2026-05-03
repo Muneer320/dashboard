@@ -234,6 +234,8 @@ async def get_overview_stats(supabase: AsyncClient, admin: Admin) -> dict:
     submitted = 0
     entry_scanned = 0
     food_claimed = 0
+    submitted_teams_seen: set[tuple[str, str]] = set()
+    registered_teams_seen: set[tuple[str, str]] = set()  # (eid, team_id)
 
     for user in all_users:
         user_events: dict = user.events or {}
@@ -243,12 +245,21 @@ async def get_overview_stats(supabase: AsyncClient, admin: Admin) -> dict:
             if eid not in scoped_ids:
                 continue
             user_in_scope = True
+            team_id = entry.get("teamId")
+            if team_id:
+                registered_teams_seen.add((eid, str(team_id)))
             if entry.get("isAttending"):
                 attending += 1
             if entry.get("restricted"):
                 restricted += 1
             if _has_any_submission(entry):
-                submitted += 1
+                if team_id:
+                    key = (eid, str(team_id))
+                    if key not in submitted_teams_seen:
+                        submitted_teams_seen.add(key)
+                        submitted += 1
+                else:
+                    submitted += 1
 
         if user_in_scope:
             registered_ids.add(str(user.id))
@@ -260,11 +271,13 @@ async def get_overview_stats(supabase: AsyncClient, admin: Admin) -> dict:
 
     return {
         "totalRegistered": len(registered_ids),
+        "totalTeams": len(registered_teams_seen),
         "attending": attending,
         "restricted": restricted,
         "foodClaimed": food_claimed,
         "entryScanned": entry_scanned,
         "submitted": submitted,
+        "submittedTeams": submitted,
         "eventCount": len(scoped_ids),
     }
 
@@ -285,16 +298,26 @@ async def get_events_with_stats(
     for event in scoped_events:
         eid = str(event.id)
         registered = attended = submitted_count = restricted_count = 0
+        submitted_teams_seen: set[str] = set()
+        registered_teams: set[str] = set()
 
         for user in all_users:
             entry = (user.events or {}).get(eid)
             if entry is None:
                 continue
             registered += 1
+            team_id = entry.get("teamId")
+            if team_id:
+                registered_teams.add(str(team_id))
             if entry.get("isAttending"):
                 attended += 1
             if _has_any_submission(entry):
-                submitted_count += 1
+                if team_id:
+                    if str(team_id) not in submitted_teams_seen:
+                        submitted_teams_seen.add(str(team_id))
+                        submitted_count += 1
+                else:
+                    submitted_count += 1
             if entry.get("restricted"):
                 restricted_count += 1
 
@@ -307,8 +330,10 @@ async def get_events_with_stats(
             "venue": event.venue or [],
             "maxParticipants": event.max_participants,
             "registered": registered,
+            "teams": len(registered_teams),
             "attended": attended,
             "submitted": submitted_count,
+            "submittedTeams": submitted_count,
             "restricted": restricted_count,
             "communityLink": event.community_link,
         })
@@ -564,6 +589,8 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
         eid = str(event.id)
         participants: list[dict] = []
         registered = attended = submitted_count = 0
+        submitted_teams_seen: set[str] = set()
+        registered_teams: set[str] = set()
 
         for user in all_users:
             entry = (user.events or {}).get(eid)
@@ -571,10 +598,18 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
                 continue
 
             registered += 1
+            team_id = entry.get("teamId")
+            if team_id:
+                registered_teams.add(str(team_id))
             is_submitted = _has_any_submission(entry)
             is_attending = bool(entry.get("isAttending", False))
             if is_submitted:
-                submitted_count += 1
+                if team_id:
+                    if str(team_id) not in submitted_teams_seen:
+                        submitted_teams_seen.add(str(team_id))
+                        submitted_count += 1
+                else:
+                    submitted_count += 1
             if is_attending:
                 attended += 1
 
@@ -596,7 +631,9 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
             "date": event.start_date.isoformat() if event.start_date else None,
             "maxParticipants": event.max_participants,
             "registered": registered,
+            "teams": len(registered_teams),
             "submitted": submitted_count,
+            "submittedTeams": submitted_count,
             "attended": attended,
             "participants": participants,
             "communityLink": event.community_link,
@@ -1150,17 +1187,27 @@ async def get_event_detail(
 
     participants: list[dict] = []
     registered = attended = submitted_count = restricted_count = 0
+    submitted_teams_seen: set[str] = set()
+    registered_teams: set[str] = set()
 
     for user in all_users:
         entry = (user.events or {}).get(event_id)
         if entry is None:
             continue
         registered += 1
+        team_id = entry.get("teamId")
+        if team_id:
+            registered_teams.add(str(team_id))
         is_submitted = _has_any_submission(entry)
         is_attending = bool(entry.get("isAttending", False))
         is_restricted = bool(entry.get("restricted", False))
         if is_submitted:
-            submitted_count += 1
+            if team_id:
+                if str(team_id) not in submitted_teams_seen:
+                    submitted_teams_seen.add(str(team_id))
+                    submitted_count += 1
+            else:
+                submitted_count += 1
         if is_attending:
             attended += 1
         if is_restricted:
@@ -1187,8 +1234,10 @@ async def get_event_detail(
         "venue": event.venue or [],
         "maxParticipants": event.max_participants,
         "registered": registered,
+        "teams": len(registered_teams),
         "attended": attended,
         "submitted": submitted_count,
+        "submittedTeams": submitted_count,
         "restricted": restricted_count,
         "communityLink": event.community_link,
         "rules": event.rules or "",

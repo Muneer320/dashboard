@@ -103,6 +103,7 @@
 .ed-stat-val.stat-green   { color: var(--success); }
 .ed-stat-val.stat-violet  { color: var(--accent-light); }
 .ed-stat-val.stat-red     { color: var(--danger); }
+.ed-stat-val.stat-cyan    { color: #06b6d4; }
 
 .ed-stat-label {
   font-size: 0.65rem;

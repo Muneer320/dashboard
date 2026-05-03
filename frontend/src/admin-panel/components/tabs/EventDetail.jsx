@@ -737,8 +737,15 @@ export default function EventDetail() {
           <div className="ed-header-stats">
             {[
               { label: 'Registered', val: fmtStat(event.registered) },
+              ...(event.teams > 0 ? [{ label: 'Teams', val: fmtStat(event.teams), cls: 'stat-cyan' }] : []),
               { label: 'Attended',   val: fmtStat(event.attended),   cls: 'stat-green' },
-              { label: 'Submitted',  val: fmtStat(event.submitted),  cls: 'stat-violet' },
+              {
+                label: 'Submitted',
+                val: event.teams > 0
+                  ? `${fmtStat(event.submitted)}/${fmtStat(event.teams)}`
+                  : fmtStat(event.submitted),
+                cls: 'stat-violet',
+              },
               { label: 'Restricted', val: fmtStat(event.restricted), cls: fmtStat(event.restricted)>0?'stat-red':'' },
             ].map(s => (
               <div key={s.label} className="ed-stat">
