@@ -262,6 +262,24 @@ export const adminPanel = {
     post('/admin-panel/uncovered-users', { emails }, { adminAuth: true }),
   regenerateUncovered: (user_ids) =>
     post('/admin-panel/uncovered-users/regenerate', { user_ids }, { adminAuth: true }),
+
+  // ── Submissions CSV download ─────────────────────────────────────────────
+  // Returns a Blob URL that the caller can trigger as a download, then revoke.
+  downloadSubmissions: async (eventId) => {
+    const tok = token.getAdmin();
+    const res = await fetch(`${BASE}/admin-panel/events/${eventId}/submissions/download`, {
+      headers: tok ? { Authorization: `Bearer ${tok}` } : {},
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new ApiError(d?.detail ?? `HTTP ${res.status}`, res.status, d);
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename=([^;]+)/);
+    const filename = match ? match[1].trim() : `submissions_${eventId.slice(0, 8)}.csv`;
+    return { blobUrl: URL.createObjectURL(blob), filename };
+  },
 };
 
 // ─── QR Scan ──────────────────────────────────────────────────────────────────

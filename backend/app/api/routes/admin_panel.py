@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import io
 import re
@@ -312,6 +313,149 @@ async def list_events_meals(
     """
     rows = await get_events_meals_counts(supabase, admin)
     return [EventMealsItem(**r) for r in rows]
+
+
+# ── Submissions CSV Download ──────────────────────────────────────────────────
+
+@router.get("/events/{event_id}/submissions/download")
+async def download_event_submissions(
+    event_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+):
+    """
+    Download a CSV of all submissions for a single event.
+
+    Layout:
+    - Columns: Name, Email, Team ID, Phase, Submitted At, <question_id…>
+    - Rows with submissions come first (one row per phase submitted).
+    - Participants who registered but never submitted are appended at the
+      bottom with "not submitted" in every answer column.
+
+    admin → any event; eventManager → assigned events only.
+    """
+    from app.services.admin_panel_service import (
+        _all_events_lean,
+        _all_users_lean,
+        _get_scoped_event_ids,
+        _has_any_submission,
+    )
+
+    all_events, all_users = await asyncio.gather(
+        _all_events_lean(supabase),
+        _all_users_lean(supabase),
+    )
+    all_event_ids = [str(e.id) for e in all_events]
+    scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
+
+    if event_id not in scoped_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this event",
+        )
+
+    event = next((e for e in all_events if str(e.id) == event_id), None)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    # ── Pass 1: collect all question IDs in order of first appearance ─────────
+    # We do a single scan so the column headers are stable regardless of which
+    # user/phase we see first.
+    ordered_question_ids: list[str] = []
+    seen_question_ids: set[str] = set()
+
+    submitted_rows: list[dict] = []   # users who have ≥1 submission
+    no_submission_users: list[dict] = []  # registered but never submitted
+
+    for user in all_users:
+        entry = (user.events or {}).get(event_id)
+        if entry is None:
+            continue  # not registered for this event
+
+        submission = entry.get("submission")
+        has_sub = _has_any_submission(entry)
+
+        if has_sub and isinstance(submission, dict):
+            for phase_key, phase_data in submission.items():
+                if not isinstance(phase_data, dict) or not phase_data.get("submitted"):
+                    continue
+                for ans in phase_data.get("answers") or []:
+                    qid = ans.get("question_id", "")
+                    if qid and qid not in seen_question_ids:
+                        seen_question_ids.add(qid)
+                        ordered_question_ids.append(qid)
+            submitted_rows.append({
+                "user": user,
+                "entry": entry,
+                "submission": submission,
+            })
+        else:
+            no_submission_users.append({
+                "user": user,
+                "entry": entry,
+            })
+
+    # ── Pass 2: build CSV rows ────────────────────────────────────────────────
+    fixed_headers = ["Name", "Email", "Team ID", "Phase", "Submitted At"]
+    all_headers = fixed_headers + ordered_question_ids
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(all_headers)
+
+    # Submitted users — one CSV row per phase
+    for item in submitted_rows:
+        user = item["user"]
+        entry = item["entry"]
+        submission = item["submission"]
+
+        for phase_key, phase_data in submission.items():
+            if not isinstance(phase_data, dict) or not phase_data.get("submitted"):
+                continue
+
+            # Build answer lookup for this phase
+            answer_map: dict[str, str] = {}
+            for ans in phase_data.get("answers") or []:
+                qid = ans.get("question_id", "")
+                raw_val = ans.get("answer", "")
+                answer_map[qid] = str(raw_val) if raw_val is not None else ""
+
+            row = [
+                user.name,
+                user.username,
+                entry.get("teamId") or "",
+                phase_key,
+                phase_data.get("submitted_at") or "",
+            ] + [answer_map.get(qid, "") for qid in ordered_question_ids]
+
+            writer.writerow(row)
+
+    # Non-submitted users — one row each, answers are "not submitted"
+    for item in no_submission_users:
+        user = item["user"]
+        entry = item["entry"]
+        row = [
+            user.name,
+            user.username,
+            entry.get("teamId") or "",
+            "",  # phase
+            "not submitted",
+        ] + ["not submitted"] * len(ordered_question_ids)
+        writer.writerow(row)
+
+    output.seek(0)
+
+    safe_event_name = _SAFE_FILENAME_RE.sub("_", event.name)[:40]
+    filename = f"Ascent_{safe_event_name}_Submissions_{event_id[:8]}.csv"
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
 
 
 # ── Individual Event Detail ────────────────────────────────────────────────────

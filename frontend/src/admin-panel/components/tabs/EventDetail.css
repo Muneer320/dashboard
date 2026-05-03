@@ -112,6 +112,55 @@
   font-weight: 500;
 }
 
+/* ── Header right column (stats + download button) ────────────────────────── */
+
+.ed-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+/* ── Download CSV button ──────────────────────────────────────────────────── */
+
+.ed-download-csv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(124, 58, 237, 0.35);
+  background: rgba(124, 58, 237, 0.08);
+  color: var(--accent-light);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.18s, border-color 0.18s, color 0.18s, opacity 0.18s;
+  letter-spacing: 0.01em;
+}
+
+.ed-download-csv-btn:hover:not(:disabled) {
+  background: rgba(124, 58, 237, 0.18);
+  border-color: rgba(124, 58, 237, 0.6);
+  color: #c4b5fd;
+}
+
+.ed-download-csv-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ed-dl-spinner {
+  animation: dl-spin 0.75s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes dl-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Sub-tabs ─────────────────────────────────────────────────────────────── */
 
 .ed-tabs {
@@ -385,7 +434,9 @@
 
 @media (max-width: 768px) {
   .ed-header { flex-direction: column; }
+  .ed-header-right { align-items: flex-start; width: 100%; }
   .ed-header-stats { gap: 16px; }
+  .ed-download-csv-btn { width: 100%; justify-content: center; }
   .ed-form-grid { grid-template-columns: 1fr; }
   .ed-field-full { grid-column: 1; }
   .ed-stat-val { font-size: 1.2rem; }

@@ -650,10 +650,11 @@ export default function EventDetail() {
   const { user, isAdmin } = useAuth()
   const { events, participants } = useData()
 
-  const [event, setEvent]     = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState('')
+  const [event, setEvent]       = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState('')
   const [activeTab, setActiveTab] = useState('details')
+  const [downloading, setDownloading] = useState(false)
 
   const loadEvent = useCallback(async () => {
     setLoading(true); setError('')
@@ -671,6 +672,25 @@ export default function EventDetail() {
 
   // Check if this EM is assigned to this event
   const canEdit = isAdmin || (user?.events?.includes(eventId) ?? false)
+
+  async function handleDownload() {
+    setDownloading(true)
+    try {
+      const { blobUrl, filename } = await adminPanel.downloadSubmissions(eventId)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      // Small delay so the browser has time to start the download before revoke
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
+    } catch (e) {
+      alert(e?.message || 'Failed to download submissions CSV.')
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   function fmtStat(n) { return n ?? 0 }
 
@@ -713,18 +733,40 @@ export default function EventDetail() {
             )}
           </div>
         </div>
-        <div className="ed-header-stats">
-          {[
-            { label: 'Registered', val: fmtStat(event.registered) },
-            { label: 'Attended',   val: fmtStat(event.attended),   cls: 'stat-green' },
-            { label: 'Submitted',  val: fmtStat(event.submitted),  cls: 'stat-violet' },
-            { label: 'Restricted', val: fmtStat(event.restricted), cls: fmtStat(event.restricted)>0?'stat-red':'' },
-          ].map(s => (
-            <div key={s.label} className="ed-stat">
-              <span className={`ed-stat-val ${s.cls||''}`}>{s.val}</span>
-              <span className="ed-stat-label">{s.label}</span>
-            </div>
-          ))}
+        <div className="ed-header-right">
+          <div className="ed-header-stats">
+            {[
+              { label: 'Registered', val: fmtStat(event.registered) },
+              { label: 'Attended',   val: fmtStat(event.attended),   cls: 'stat-green' },
+              { label: 'Submitted',  val: fmtStat(event.submitted),  cls: 'stat-violet' },
+              { label: 'Restricted', val: fmtStat(event.restricted), cls: fmtStat(event.restricted)>0?'stat-red':'' },
+            ].map(s => (
+              <div key={s.label} className="ed-stat">
+                <span className={`ed-stat-val ${s.cls||''}`}>{s.val}</span>
+                <span className="ed-stat-label">{s.label}</span>
+              </div>
+            ))}
+          </div>
+          <button
+            id="btn-download-submissions-csv"
+            className="ed-download-csv-btn"
+            onClick={handleDownload}
+            disabled={downloading}
+            title="Download all submissions as CSV"
+          >
+            {downloading ? (
+              <svg className="ed-dl-spinner" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/>
+              </svg>
+            ) : (
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            )}
+            {downloading ? 'Preparing…' : 'Download CSV'}
+          </button>
         </div>
       </div>
 
