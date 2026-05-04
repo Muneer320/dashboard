@@ -51,7 +51,7 @@ function buildInitialPhases(rounds, questions) {
   }))
 }
 
-const QUESTION_TYPES = ['text', 'text-long', 'url', 'file', 'number']
+const QUESTION_TYPES = ['text', 'text-long', 'url', 'file', 'numeric']
 
 function PhaseQuestionsEditor({ questions, onChange, canEdit }) {
   function addQuestion() {
