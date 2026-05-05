@@ -358,19 +358,46 @@ async def download_event_submissions(
     if event is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
 
-    # ── Pass 1: collect all question IDs in order of first appearance ─────────
+    # ── Fetch Team Names ──────────────────────────────────────────────────────
+    teams_resp = await (
+        supabase.table("teams")
+        .select("id, name")
+        .eq("event_id", event_id)
+        .execute()
+    )
+    team_name_map = {str(r["id"]): r["name"] for r in teams_resp.data}
+
+    # ── Pass 1: Group users by team and collect submissions / questions ───────
     # We do a single scan so the column headers are stable regardless of which
-    # user/phase we see first.
+    # team/phase we see first.
+    class TeamData:
+        def __init__(self, t_id: str, t_name: str):
+            self.id = t_id
+            self.name = t_name
+            self.members = []
+            self.submissions = {}
+
+    teams_map: dict[str, TeamData] = {}
     ordered_question_ids: list[str] = []
     seen_question_ids: set[str] = set()
-
-    submitted_rows: list[dict] = []   # users who have ≥1 submission
-    no_submission_users: list[dict] = []  # registered but never submitted
 
     for user in all_users:
         entry = (user.events or {}).get(event_id)
         if entry is None:
             continue  # not registered for this event
+
+        team_id = entry.get("teamId")
+        if team_id:
+            group_key = team_id
+            team_name = team_name_map.get(team_id, f"Team {team_id[:8]}")
+        else:
+            group_key = f"solo_{user.id}"
+            team_name = "Solo Participant"
+
+        if group_key not in teams_map:
+            teams_map[group_key] = TeamData(team_id or "", team_name)
+
+        teams_map[group_key].members.append(user)
 
         submission = entry.get("submission")
         has_sub = _has_any_submission(entry)
@@ -379,69 +406,60 @@ async def download_event_submissions(
             for phase_key, phase_data in submission.items():
                 if not isinstance(phase_data, dict) or not phase_data.get("submitted"):
                     continue
+                
+                if phase_key not in teams_map[group_key].submissions:
+                    teams_map[group_key].submissions[phase_key] = phase_data
+
                 for ans in phase_data.get("answers") or []:
                     qid = ans.get("question_id", "")
                     if qid and qid not in seen_question_ids:
                         seen_question_ids.add(qid)
                         ordered_question_ids.append(qid)
-            submitted_rows.append({
-                "user": user,
-                "entry": entry,
-                "submission": submission,
-            })
-        else:
-            no_submission_users.append({
-                "user": user,
-                "entry": entry,
-            })
 
     # ── Pass 2: build CSV rows ────────────────────────────────────────────────
-    fixed_headers = ["Name", "Email", "Team ID", "Phase", "Submitted At"]
+    fixed_headers = ["Team Name", "Team ID"]
+    for i in range(1, 5):
+        fixed_headers.extend([f"Member {i} Name", f"Member {i} Email", f"Member {i} Phone"])
+    fixed_headers.extend(["Phase", "Submitted At"])
+    
     all_headers = fixed_headers + ordered_question_ids
 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(all_headers)
 
-    # Submitted users — one CSV row per phase
-    for item in submitted_rows:
-        user = item["user"]
-        entry = item["entry"]
-        submission = item["submission"]
+    for team in teams_map.values():
+        member_cols = []
+        for i in range(4):
+            if i < len(team.members):
+                u = team.members[i]
+                phone = (u.details or {}).get("phone", "")
+                member_cols.extend([u.name, u.username, phone])
+            else:
+                member_cols.extend(["", "", ""])
+                
+        base_row = [team.name, team.id] + member_cols
 
-        for phase_key, phase_data in submission.items():
-            if not isinstance(phase_data, dict) or not phase_data.get("submitted"):
-                continue
+        if team.submissions:
+            for phase_key, phase_data in team.submissions.items():
+                answer_map: dict[str, str] = {}
+                for ans in phase_data.get("answers") or []:
+                    qid = ans.get("question_id", "")
+                    raw_val = ans.get("answer", "")
+                    answer_map[qid] = str(raw_val) if raw_val is not None else ""
 
-            # Build answer lookup for this phase
-            answer_map: dict[str, str] = {}
-            for ans in phase_data.get("answers") or []:
-                qid = ans.get("question_id", "")
-                raw_val = ans.get("answer", "")
-                answer_map[qid] = str(raw_val) if raw_val is not None else ""
+                row = base_row + [
+                    phase_key,
+                    phase_data.get("submitted_at") or "",
+                ] + [answer_map.get(qid, "") for qid in ordered_question_ids]
 
-            row = [
-                user.name,
-                user.username,
-                entry.get("teamId") or "",
-                phase_key,
-                phase_data.get("submitted_at") or "",
-            ] + [answer_map.get(qid, "") for qid in ordered_question_ids]
-
+                writer.writerow(row)
+        else:
+            row = base_row + [
+                "",  # phase
+                "not submitted",
+            ] + ["not submitted"] * len(ordered_question_ids)
             writer.writerow(row)
-
-    # Non-submitted users — one row each, answers are "not submitted"
-    for item in no_submission_users:
-        user = item["user"]
-        entry = item["entry"]
-        row = [
-            user.name,
-            user.username,
-            entry.get("teamId") or "",
-            "",  # phase
-            "not submitted",
-        ] + ["not submitted"] * len(ordered_question_ids)
-        writer.writerow(row)
 
     output.seek(0)
 
