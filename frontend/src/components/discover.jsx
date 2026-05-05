@@ -113,6 +113,8 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
       "https://unstop.com/hackathons/synapse-the-kaggle-competition-ascent-scaler-school-of-technology-bengaluru-karnataka-1669636",
     "override.exe":
       "https://unstop.com/hackathons/overrideexe-ascent-scaler-school-of-technology-bengaluru-karnataka-1669645",
+    "promptwars: ai build sprint":
+      "https://hack2skill.com/event/promptwars-x-ascent",
   };
 
   const handleCardClick = (e) => {
@@ -121,6 +123,7 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
       navigate(`/event-detail/${ev.id}`);
     } else {
       const nameKey = (ev.name || "").toLowerCase().trim();
+      console.log(nameKey);
       const url = unstopUrls[nameKey];
       if (url) {
         window.open(url, "_blank");
