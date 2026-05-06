@@ -34,11 +34,8 @@ build/
 backend/.venv/
 backend/__pycache__/
 
-<<<<<<< HEAD
-# Stress Test logs
-loadtest*
-=======
 # Stress testing logs
 stress_testing/
 loadtest*
->>>>>>> fbf3e600bd6c72e40a8f3a7c110f144f5f669c07
+
+backup/

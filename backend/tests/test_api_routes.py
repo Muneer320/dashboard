@@ -115,7 +115,6 @@ def test_event_register_and_participants_routes(monkeypatch, client):
         venue=["Hall A"],
         judges=["Judge"],
         rounds={"phase1": {"is_active": True, "is_locked": False}},
-        participants={},
         questions={},
         rules="Rules",
         max_participants=50,
@@ -131,12 +130,6 @@ def test_event_register_and_participants_routes(monkeypatch, client):
     monkeypatch.setattr(events_routes, "get_event", fake_get_event)
     monkeypatch.setattr(events_routes, "register_for_event",
                         fake_register_for_event)
-    monkeypatch.setattr(
-        events_routes,
-        "get_event_participants_payload",
-        lambda event: {"event_id": str(
-            event.id), "participants_count": 0, "participants": {}},
-    )
     app.dependency_overrides[get_current_user] = lambda: current_user
 
     token = _token(current_user, role="admin")
@@ -147,8 +140,7 @@ def test_event_register_and_participants_routes(monkeypatch, client):
     assert register_response.status_code == 200
     assert register_response.json()["event_id"] == str(event.id)
 
-    # participants endpoint requires an admin JWT — skip check here; tested separately
-    # (the dep is get_scanner_or_above which goes through get_current_admin)
+    # /events/{event_id}/participants was removed with the events.participants cleanup.
     assert register_response.status_code == 200
 
 
@@ -245,7 +237,6 @@ def test_submission_routes(monkeypatch, client):
         venue=["Hall A"],
         judges=["Judge"],
         rounds={"phase1": {"is_active": True, "is_locked": False}},
-        participants={str(current_user.id): {"submission": {}}},
         questions={"phase1": phase1_questions},
         rules="Rules",
         max_participants=50,
@@ -304,7 +295,6 @@ def test_question_routes(monkeypatch, client):
         venue=["Hall A"],
         judges=["Judge"],
         rounds={"phase1": {"is_active": True, "is_locked": False}},
-        participants={},
         questions={"phase1": phase1_questions},
         rules="Rules",
         max_participants=50,
@@ -362,8 +352,6 @@ def test_admin_sync_and_qr_routes(monkeypatch, client):
         venue=["Hall A"],
         judges=["Judge"],
         rounds={"phase1": {"is_active": True, "is_locked": False}},
-        participants={str(target_user.id): {
-            "attendance": {}, "submission": {}}},
         questions={},
         rules="Rules",
         max_participants=50,

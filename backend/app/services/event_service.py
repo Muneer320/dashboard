@@ -19,6 +19,11 @@ from app.models.event import Event
 from app.models.user import User
 
 _PAGE_SIZE = 1000
+_EVENT_LIST_COLS = (
+    "id,name,title,description,start_date,end_date,venue,judges,category,"
+    "rounds,schedule,rules,community_link,max_participants,meals_count,"
+    "registration_deadline,questions,created_at,updated_at"
+)
 
 
 async def _fetch_all_user_event_rows(supabase: AsyncClient) -> list[dict]:
@@ -59,29 +64,10 @@ async def get_event_registration_counts(
     return counts
 
 
-async def get_event_participant_entries(
-    supabase: AsyncClient,
-    event_id: str,
-) -> dict[str, dict]:
-    """Build the participant map for an event from ``users.events``."""
-    participants: dict[str, dict] = {}
-    event_key = str(event_id)
-    for row in await _fetch_all_user_event_rows(supabase):
-        events_map = row.get("events") or {}
-        if not isinstance(events_map, dict) or event_key not in events_map:
-            continue
-        entry = events_map.get(event_key)
-        participant_entry = dict(entry) if isinstance(entry, dict) else {}
-        participant_entry.setdefault("name", row.get("name") or "")
-        participant_entry.setdefault("username", row.get("username") or "")
-        participants[str(row["id"])] = participant_entry
-    return participants
-
-
 async def list_events(supabase: AsyncClient) -> list[Event]:
     resp = await (
         supabase.table("events")
-        .select("*")
+        .select(_EVENT_LIST_COLS)
         .order("created_at", desc=True)
         .execute()
     )
@@ -99,7 +85,7 @@ async def get_event(supabase: AsyncClient, event_id: str) -> Event:
 
     resp = await (
         supabase.table("events")
-        .select("*")
+        .select(_EVENT_LIST_COLS)
         .eq("id", str(event_uuid))
         .limit(1)
         .execute()
@@ -163,15 +149,6 @@ async def register_for_event(
     )
 
     user.events = user_events
-
-
-def get_event_participants_payload(event: Event, participants: dict | None = None) -> dict:
-    participant_map = participants or getattr(event, "participants", {}) or {}
-    return {
-        "event_id": str(event.id),
-        "participants_count": len(participant_map),
-        "participants": participant_map,
-    }
 
 
 async def set_event_phase_state(

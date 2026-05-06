@@ -28,7 +28,6 @@ class Event:
     judges: list[str] = field(default_factory=list)
     category: str = ""
     rounds: dict = field(default_factory=dict)
-    participants: dict = field(default_factory=dict)
     schedule: list = field(default_factory=list)
     rules: str = ""
     community_link: str | None = None
@@ -53,7 +52,6 @@ class Event:
             venue=list(row.get("venue") or []),
             judges=list(row.get("judges") or []),
             rounds=row.get("rounds") or {},
-            participants=row.get("participants") or {},
             schedule=row.get("schedule") or [],
             rules=row.get("rules") or "",
             community_link=row.get("community_link") or None,

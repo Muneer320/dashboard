@@ -1,17 +1,14 @@
 from fastapi import APIRouter, Depends
-from supabase import AsyncClient
 from fastapi_cache.decorator import cache
+from supabase import AsyncClient
 
-from app.api.deps import get_current_user, get_scanner_or_above
+from app.api.deps import get_current_user
 from app.db.supabase_client import get_supabase
-from app.models.admin import Admin
 from app.models.user import User
-from app.schemas.event import EventParticipantsResponse, EventRegisterResponse, EventResponse
+from app.schemas.event import EventRegisterResponse, EventResponse
 from app.schemas.team import MyTeamResponse
 from app.services.event_service import (
     get_event,
-    get_event_participant_entries,
-    get_event_participants_payload,
     get_event_registration_counts,
     list_events,
     register_for_event,
@@ -35,7 +32,7 @@ def _build_event_response(event, participants_count: int) -> EventResponse:
 
 
 @router.get("", response_model=list[EventResponse])
-@cache(expire=60)
+@cache(expire=120)
 async def get_events(
     supabase: AsyncClient = Depends(get_supabase),
     _: User = Depends(get_current_user),
@@ -46,7 +43,7 @@ async def get_events(
 
 
 @router.get("/public", response_model=list[EventResponse])
-@cache(expire=60)
+@cache(expire=120)
 async def get_public_events(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> list[EventResponse]:
@@ -81,16 +78,8 @@ async def register_event(
     )
 
 
-@router.get("/{event_id}/participants", response_model=EventParticipantsResponse)
-async def get_event_participants(
-    event_id: str,
-    supabase: AsyncClient = Depends(get_supabase),
-    _: Admin = Depends(get_scanner_or_above),  # scanner, eventManager, or admin only
-) -> EventParticipantsResponse:
-    event = await get_event(supabase, event_id)
-    participants = await get_event_participant_entries(supabase, str(event.id))
-    payload = get_event_participants_payload(event, participants)
-    return EventParticipantsResponse(**payload)
+# /events/{event_id}/participants endpoint removed — events.participants column dropped.
+# Use the admin-panel /participants endpoint which queries users.events instead.
 
 
 @router.get("/{event_id}/my-team", response_model=MyTeamResponse | None)

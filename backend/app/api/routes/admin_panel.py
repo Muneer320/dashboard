@@ -1,3 +1,4 @@
+import asyncio
 import csv
 import io
 import re
@@ -194,7 +195,7 @@ async def post_regenerate_uncovered(
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)
-@cache(expire=30)
+@cache(expire=60)
 async def overview_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -209,6 +210,7 @@ async def overview_stats(
 
 
 @router.get("/events/stats", response_model=list[EventStatsItem])
+@cache(expire=60)
 async def events_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -294,6 +296,184 @@ async def my_events(
     """
     rows = await get_my_events(supabase, admin)
     return [MyEventItem(**r) for r in rows]
+
+
+# ── Meals count — must be BEFORE /{event_id} wildcard ────────────────────────
+
+@router.get("/events/meals-count", response_model=list[EventMealsItem])
+async def list_events_meals(
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+) -> list[EventMealsItem]:
+    """
+    Per-event meals_count list.
+    admin       → all events
+    eventManager → assigned events only
+    NOTE: must stay above /events/{event_id} or FastAPI will shadow it.
+    """
+    rows = await get_events_meals_counts(supabase, admin)
+    return [EventMealsItem(**r) for r in rows]
+
+
+# ── Submissions CSV Download ──────────────────────────────────────────────────
+
+@router.get("/events/{event_id}/submissions/download")
+async def download_event_submissions(
+    event_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+):
+    """
+    Download a CSV of all submissions for a single event.
+
+    Layout:
+    - Columns: Name, Email, Team ID, Phase, Submitted At, <question_id…>
+    - Rows with submissions come first (one row per phase submitted).
+    - Participants who registered but never submitted are appended at the
+      bottom with "not submitted" in every answer column.
+
+    admin → any event; eventManager → assigned events only.
+    """
+    from app.services.admin_panel_service import (
+        _all_events_lean,
+        _all_users_lean,
+        _get_scoped_event_ids,
+        _has_any_submission,
+    )
+
+    all_events, all_users = await asyncio.gather(
+        _all_events_lean(supabase),
+        _all_users_lean(supabase),
+    )
+    all_event_ids = [str(e.id) for e in all_events]
+    scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
+
+    if event_id not in scoped_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this event",
+        )
+
+    event = next((e for e in all_events if str(e.id) == event_id), None)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+
+    # ── Fetch Team Names ──────────────────────────────────────────────────────
+    teams_resp = await (
+        supabase.table("teams")
+        .select("id, name")
+        .eq("event_id", event_id)
+        .execute()
+    )
+    team_name_map = {str(r["id"]): r["name"] for r in teams_resp.data}
+
+    # ── Pass 1: Group users by team and collect submissions / questions ───────
+    # We do a single scan so the column headers are stable regardless of which
+    # team/phase we see first.
+    class TeamData:
+        def __init__(self, t_id: str, t_name: str):
+            self.id = t_id
+            self.name = t_name
+            self.members = []
+            self.submissions = {}
+
+    teams_map: dict[str, TeamData] = {}
+    ordered_question_ids: list[str] = []
+    seen_question_ids: set[str] = set()
+
+    for user in all_users:
+        entry = (user.events or {}).get(event_id)
+        if entry is None:
+            continue  # not registered for this event
+
+        team_id = entry.get("teamId")
+        if team_id:
+            group_key = team_id
+            team_name = team_name_map.get(team_id, f"Team {team_id[:8]}")
+        else:
+            group_key = f"solo_{user.id}"
+            team_name = "Solo Participant"
+
+        if group_key not in teams_map:
+            teams_map[group_key] = TeamData(team_id or "", team_name)
+
+        teams_map[group_key].members.append(user)
+
+        submission = entry.get("submission")
+        has_sub = _has_any_submission(entry)
+
+        if has_sub and isinstance(submission, dict):
+            for phase_key, phase_data in submission.items():
+                if not isinstance(phase_data, dict) or not phase_data.get("submitted"):
+                    continue
+                
+                if phase_key not in teams_map[group_key].submissions:
+                    teams_map[group_key].submissions[phase_key] = phase_data
+
+                for ans in phase_data.get("answers") or []:
+                    qid = ans.get("question_id", "")
+                    if qid and qid not in seen_question_ids:
+                        seen_question_ids.add(qid)
+                        ordered_question_ids.append(qid)
+
+    # ── Pass 2: build CSV rows ────────────────────────────────────────────────
+    fixed_headers = ["Team Name", "Team ID"]
+    for i in range(1, 5):
+        fixed_headers.extend([f"Member {i} Name", f"Member {i} Email", f"Member {i} Phone"])
+    fixed_headers.extend(["Phase", "Submitted At"])
+    
+    all_headers = fixed_headers + ordered_question_ids
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(all_headers)
+
+    for team in teams_map.values():
+        member_cols = []
+        for i in range(4):
+            if i < len(team.members):
+                u = team.members[i]
+                phone = (u.details or {}).get("phone", "")
+                member_cols.extend([u.name, u.username, phone])
+            else:
+                member_cols.extend(["", "", ""])
+                
+        base_row = [team.name, team.id] + member_cols
+
+        if team.submissions:
+            for phase_key, phase_data in team.submissions.items():
+                answer_map: dict[str, str] = {}
+                for ans in phase_data.get("answers") or []:
+                    qid = ans.get("question_id", "")
+                    raw_val = ans.get("answer", "")
+                    answer_map[qid] = str(raw_val) if raw_val is not None else ""
+
+                row = base_row + [
+                    phase_key,
+                    phase_data.get("submitted_at") or "",
+                ] + [answer_map.get(qid, "") for qid in ordered_question_ids]
+
+                writer.writerow(row)
+        else:
+            row = base_row + [
+                "",  # phase
+                "not submitted",
+            ] + ["not submitted"] * len(ordered_question_ids)
+            writer.writerow(row)
+
+    output.seek(0)
+
+    safe_event_name = _SAFE_FILENAME_RE.sub("_", event.name)[:40]
+    filename = f"Ascent_{safe_event_name}_Submissions_{event_id[:8]}.csv"
+
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
 
 
 # ── Individual Event Detail ────────────────────────────────────────────────────
@@ -413,18 +593,6 @@ async def delete_admin(
 # auto-assign the next slot; admins can still toggle slots here manually.
 
 
-@router.get("/events/meals-count", response_model=list[EventMealsItem])
-async def list_events_meals(
-    supabase: AsyncClient = Depends(get_supabase),
-    admin: Admin = Depends(get_admin_or_em),
-) -> list[EventMealsItem]:
-    """
-    Per-event meals_count list.
-    admin       → all events
-    eventManager → assigned events only
-    """
-    rows = await get_events_meals_counts(supabase, admin)
-    return [EventMealsItem(**r) for r in rows]
 
 
 @router.patch("/events/{event_id}/meals-count", response_model=EventMealsItem)

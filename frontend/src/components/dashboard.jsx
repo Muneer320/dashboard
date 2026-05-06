@@ -1,5 +1,5 @@
 // Ascent — Dashboard + Event Detail (fully wired to backend)
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   useMobile,
@@ -1024,6 +1024,20 @@ export function EventDetail() {
   // Track if a submission just succeeded (to refresh the "submitted" badge)
   const [submittedPhases, setSubmittedPhases] = useState(new Set());
 
+  // Stable reference: prevents SubmissionPanel's loadQuestions effect from
+  // re-firing on every parent render (it has userData in its dependency array).
+  const userData = useMemo(() => ({
+    email:    profile?.username || user?.username || '',
+    name:     profile?.name    || user?.name    || '',
+    teamName: team?.name || '',
+    college:  profile?.details?.college || '',
+    phone:    profile?.details?.phone   || '',
+    year:     profile?.details?.year    || '',
+    branch:   profile?.details?.branch  || '',
+    gender:   profile?.details?.gender  || '',
+    city:     profile?.details?.city    || '',
+  }), [profile, user, team]);
+
   const load = useCallback(async () => {
     if (!user || !eventId) return;
     setLoading(true);
@@ -1688,17 +1702,7 @@ export function EventDetail() {
                     phaseData={selectedRound?.phaseData}
                     isRegistered={isRegistered}
                     isRestricted={isRestricted}
-                    userData={{
-                      email: profile?.username || user?.username || '',
-                      name: profile?.name || user?.name || '',
-                      teamName: team?.name || '',
-                      college: profile?.details?.college || '',
-                      phone: profile?.details?.phone || '',
-                      year: profile?.details?.year || '',
-                      branch: profile?.details?.branch || '',
-                      gender: profile?.details?.gender || '',
-                      city: profile?.details?.city || '',
-                    }}
+                    userData={userData}
                     onSuccess={() => {
                       setSubmittedPhases(
                         (prev) => new Set([...prev, `phase${currentPhase}`]),
