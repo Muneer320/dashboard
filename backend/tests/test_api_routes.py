@@ -152,6 +152,79 @@ def test_event_register_and_participants_routes(monkeypatch, client):
     assert register_response.status_code == 200
 
 
+def test_public_events_uses_registration_counts(monkeypatch, client):
+    from app.api.routes import events as events_routes
+
+    event = Event(
+        id=uuid4(),
+        name="Launchpad",
+        description="Event",
+        venue=["Hall A"],
+        judges=["Judge"],
+        rounds={"phase1": {"is_active": True, "is_locked": False}},
+        questions={},
+        rules="Rules",
+    )
+
+    async def fake_list_events(*args, **kwargs):
+        return [event]
+
+    async def fake_counts(*args, **kwargs):
+        return {str(event.id): 42}
+
+    monkeypatch.setattr(events_routes, "list_events", fake_list_events)
+    monkeypatch.setattr(events_routes, "get_event_registration_counts", fake_counts)
+
+    response = client.get("/api/v1/events/public")
+    assert response.status_code == 200
+    assert response.json()[0]["participants_count"] == 42
+
+
+def test_my_events_uses_registration_counts(monkeypatch, client):
+    from app.api.routes import users as users_routes
+
+    current_user = _make_user("member-user")
+    event = Event(
+        id=uuid4(),
+        name="Launchpad",
+        description="Event",
+        venue=["Hall A"],
+        judges=["Judge"],
+        rounds={"phase1": {"is_active": True, "is_locked": False}},
+        questions={},
+        rules="Rules",
+    )
+    current_user.events = {
+        str(event.id): {
+            "isAttending": False,
+            "phase": 1,
+            "status": "active",
+            "restricted": False,
+            "submission": None,
+            "teamId": None,
+            "score": 0,
+            "rank": None,
+        }
+    }
+
+    async def fake_list_events(*args, **kwargs):
+        return [event]
+
+    async def fake_counts(*args, **kwargs):
+        return {str(event.id): 17}
+
+    monkeypatch.setattr(users_routes, "list_events", fake_list_events)
+    monkeypatch.setattr(users_routes, "get_event_registration_counts", fake_counts)
+    app.dependency_overrides[get_current_user] = lambda: current_user
+
+    response = client.get(
+        "/api/v1/users/me/my-events",
+        headers={"Authorization": f"Bearer {_token(current_user)}"},
+    )
+    assert response.status_code == 200
+    assert response.json()[0]["participants_count"] == 17
+
+
 # ---------------------------------------------------------------------------
 # Submission routes
 # ---------------------------------------------------------------------------
@@ -354,3 +427,21 @@ def test_admin_sync_and_qr_routes(monkeypatch, client):
     )
     assert qr_response.status_code == 200
     assert qr_response.json()["status"] == "accepted"
+
+
+def test_global_schedule_day_defaults_to_empty(monkeypatch, client):
+    from app.api.routes import schedule as schedule_routes
+
+    async def fake_get_global_schedule_by_date(*args, **kwargs):
+        return {"id": "global-2026-05-06", "date": "2026-05-06", "items": []}
+
+    monkeypatch.setattr(
+        schedule_routes,
+        "get_global_schedule_by_date",
+        fake_get_global_schedule_by_date,
+    )
+
+    response = client.get("/api/v1/schedule/global/2026-05-06")
+    assert response.status_code == 200
+    assert response.json()["date"] == "2026-05-06"
+    assert response.json()["items"] == []

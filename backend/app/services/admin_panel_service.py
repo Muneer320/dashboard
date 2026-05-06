@@ -327,7 +327,6 @@ async def restrict_participant(
 ) -> dict:
     """
     Set or clear user.events[event_id]["restricted"].
-    Also syncs event.participants[user_id]["status"] for consistency.
     eventManager must own the event.
     """
     if admin.role == AdminRole.EVENT_MANAGER:
@@ -370,26 +369,6 @@ async def restrict_participant(
         .eq("id", str(user.id))
         .execute()
     )
-
-    event_uuid = _parse_event_uuid(event_id)
-    event_resp = await (
-        supabase.table("events")
-        .select("*")
-        .eq("id", str(event_uuid))
-        .limit(1)
-        .execute()
-    )
-    event_row = first_row(event_resp)
-    if event_row is not None:
-        participants: dict = event_row.get("participants") or {}
-        if user_id in participants:
-            participants[user_id]["status"] = "eliminated" if restricted else "active"
-            await (
-                supabase.table("events")
-                .update({"participants": participants})
-                .eq("id", str(event_uuid))
-                .execute()
-            )
 
     return {"user_id": user_id, "event_id": event_id, "restricted": restricted}
 

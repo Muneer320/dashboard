@@ -51,11 +51,6 @@ async def get_global_schedule_day(
 ) -> GlobalScheduleItem:
     """Return the global schedule for a specific date (YYYY-MM-DD)."""
     row = await get_global_schedule_by_date(supabase, day)
-    if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No global schedule found for {day}",
-        )
     return GlobalScheduleItem(**row)
 
 
