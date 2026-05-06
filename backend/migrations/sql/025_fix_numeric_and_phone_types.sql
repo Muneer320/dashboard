@@ -3,19 +3,28 @@
 
 BEGIN;
 
--- 1. Standardize 'number' to 'numeric' in events.questions JSONB array
 UPDATE events
-SET questions = (
-  SELECT jsonb_agg(
-    CASE 
-      WHEN q->>'question_type' = 'number' 
-      THEN jsonb_set(q, '{question_type}', '"numeric"')
-      ELSE q
-    END
+SET questions = jsonb_set(
+  questions,
+  '{phase1}',
+  (
+    SELECT jsonb_agg(
+      CASE
+        WHEN q->>'question_type' = 'number'
+        THEN jsonb_set(q, '{question_type}', '"numeric"')
+        ELSE q
+      END
+    )
+    FROM jsonb_array_elements(questions->'phase1') q
   )
-  FROM jsonb_array_elements(questions) AS q
 )
-WHERE questions @> '[{"question_type": "number"}]'::jsonb;
+WHERE EXISTS (
+  SELECT 1
+  FROM jsonb_array_elements(questions->'phase1') q
+  WHERE q->>'question_type' = 'number'
+);
+
+COMMIT;
 
 
 -- 2. Explicitly enforce phone fields to be text (varchar)
