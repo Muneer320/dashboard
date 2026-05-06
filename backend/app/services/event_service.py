@@ -12,9 +12,7 @@ from app.db.supabase_client import first_row, rows
 from app.models.event import Event
 from app.models.user import User
 
-# Columns returned for event listings — excludes the heavy `participants` JSONB
-# (can be many KB per event as it holds all users' submission answers).
-# Single-event fetches (get_event) still use select("*") so submissions work.
+# Columns returned for event listings — participants was removed from this table.
 _EVENT_LIST_COLS = (
     "id,name,description,category,venue,rounds,community_link,"
     "max_participants,start_date,end_date,registration_deadline,"
@@ -41,7 +39,7 @@ async def get_event(supabase: AsyncClient, event_id: str) -> Event:
 
     resp = await (
         supabase.table("events")
-        .select("*")
+        .select(_EVENT_LIST_COLS)
         .eq("id", str(event_uuid))
         .limit(1)
         .execute()
@@ -53,17 +51,28 @@ async def get_event(supabase: AsyncClient, event_id: str) -> Event:
     return Event.from_row(row)
 
 
+async def _count_event_registrations(supabase: AsyncClient, event_id: str) -> int:
+    """
+    Count users registered for an event by scanning users.events JSONB.
+    Used for capacity checks — replaces the old events.participants count.
+    """
+    resp = await (
+        supabase.table("users")
+        .select("id")
+        .execute()
+    )
+    # Count users whose events map contains this event_id as a key.
+    count = sum(1 for r in (resp.data or []) if event_id in (r.get("events") or {}))
+    return count
+
+
 async def register_for_event(
     supabase: AsyncClient, user: User, event: Event
 ) -> None:
     """
-    Register `user` for `event`. Writes to TWO tables (events.participants,
-    users.events) — without SQL transactions those two writes are independent.
-    We persist the event row first because that's the one we checked capacity
-    against; if the user row write fails, a stale entry in event.participants
-    is recoverable, the other way around leaks quota.
+    Register `user` for `event`. Only writes to users.events — the old
+    events.participants mirror column has been removed.
     """
-    participants = event.participants or {}
     user_events = user.events or {}
     event_key = str(event.id)
     user_key = str(user.id)
@@ -72,45 +81,26 @@ async def register_for_event(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
                             detail="Registration deadline passed")
 
-    if user_key in participants:
+    if event_key in user_events:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Already registered")
 
-    if len(participants) >= event.max_participants:
+    registered_count = await _count_event_registrations(supabase, event_key)
+    if registered_count >= event.max_participants:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Event is at capacity")
 
-    now_iso = datetime.now(timezone.utc).isoformat()
-
-    participants[user_key] = {
-        "registeredAt": now_iso,
-        "currentPhase": 1,
-        "status": "active",
-        "attendance": {},
-        "submission": {},
-    }
     user_events[event_key] = {
         "isAttending": False,           # flipped to True at the event gate scanner
         "phase": 1,
         "status": "active",             # active | completed | eliminated
         "restricted": False,            # set True to ban from further participation
-        # submission: null = not submitted; object = submitted
-        # Shape: { repoLink: str, deployLink: str, submittedAt: iso | null }
         "submission": None,
         "teamId": None,                 # assigned when the user joins a team for this event
         "score": 0,
         "rank": None,
     }
 
-    # Write the event row first (source of truth for capacity).
-    await (
-        supabase.table("events")
-        .update({"participants": participants})
-        .eq("id", event_key)
-        .execute()
-    )
-
-    # Then the user row.
     await (
         supabase.table("users")
         .update({"events": user_events})
@@ -118,17 +108,11 @@ async def register_for_event(
         .execute()
     )
 
-    event.participants = participants
     user.events = user_events
 
 
-def get_event_participants_payload(event: Event) -> dict:
-    participants = event.participants or {}
-    return {
-        "event_id": str(event.id),
-        "participants_count": len(participants),
-        "participants": participants,
-    }
+# get_event_participants_payload removed — events.participants column dropped.
+# Use the admin-panel /participants endpoint which queries users.events instead.
 
 
 async def set_event_phase_state(

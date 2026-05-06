@@ -2,15 +2,13 @@ from fastapi import APIRouter, Depends
 from supabase import AsyncClient
 from fastapi_cache.decorator import cache
 
-from app.api.deps import get_current_user, get_scanner_or_above
+from app.api.deps import get_current_user
 from app.db.supabase_client import get_supabase
-from app.models.admin import Admin
 from app.models.user import User
-from app.schemas.event import EventParticipantsResponse, EventRegisterResponse, EventResponse
+from app.schemas.event import EventRegisterResponse, EventResponse
 from app.schemas.team import MyTeamResponse
 from app.services.event_service import (
     get_event,
-    get_event_participants_payload,
     list_events,
     register_for_event,
 )
@@ -34,7 +32,7 @@ async def get_events(
             description=event.description,
             venue=event.venue or [],
             rounds=event.rounds or {},
-            participants_count=len(event.participants or {}),
+            participants_count=0,  # deprecated — events.participants column removed
             community_link=event.community_link,
         )
         for event in events
@@ -76,7 +74,7 @@ async def get_single_event(
         description=event.description,
         venue=event.venue or [],
         rounds=event.rounds or {},
-        participants_count=len(event.participants or {}),
+        participants_count=0,  # deprecated — events.participants column removed
         community_link=event.community_link,
     )
 
@@ -96,15 +94,8 @@ async def register_event(
     )
 
 
-@router.get("/{event_id}/participants", response_model=EventParticipantsResponse)
-async def get_event_participants(
-    event_id: str,
-    supabase: AsyncClient = Depends(get_supabase),
-    _: Admin = Depends(get_scanner_or_above),  # scanner, eventManager, or admin only
-) -> EventParticipantsResponse:
-    event = await get_event(supabase, event_id)
-    payload = get_event_participants_payload(event)
-    return EventParticipantsResponse(**payload)
+# /events/{event_id}/participants endpoint removed — events.participants column dropped.
+# Use the admin-panel /participants endpoint which queries users.events instead.
 
 
 @router.get("/{event_id}/my-team", response_model=MyTeamResponse | None)
