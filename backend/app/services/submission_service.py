@@ -6,10 +6,9 @@ Flow
 1.  Load event.questions[phaseN] to get question definitions.
 2.  Validate every submitted answer against its question definition.
 3.  Enforce that all *required* questions have a non-empty answer.
-4.  Write the submission into both:
-      users.events[event_id].submission.phaseN   (latest snapshot, user row)
-      events.participants[user_id].submission.phaseN  (history + scoring slot)
-    User row first -- failure on the event row leaves a recoverable state.
+4.  Write the submission into users.events[event_id].submission.phaseN
+    for the whole team. Event-level submission history used to live on
+    events.participants, but that column has been removed from the schema.
 """
 
 from __future__ import annotations
@@ -254,10 +253,6 @@ async def submit_for_event(
 
     Stores:
       users.events[event_id].submission.phaseN = { submitted, submitted_at, answers }
-      events.participants[user_id].submission.phaseN = { submitted, submitted_at,
-                                                          answers, score, feedback }
-
-    Writes user row first; failure on the event row leaves a recoverable state.
     """
     event_entry = validate_event_access(user, event, phase)
 
@@ -292,9 +287,7 @@ async def submit_for_event(
             team_members = [m for m in fetched_members if str(m.id) != str(user.id)]
             team_members.insert(0, user)
 
-    # 3. Propagate the submission
-    participants = event.participants or {}
-    
+    # 3. Propagate the submission across the team in user.events
     for member in team_members:
         member_key = str(member.id)
         member_events = member.events or {}
@@ -314,26 +307,6 @@ async def submit_for_event(
         member_events[event_key] = member_event_entry
         member.events = member_events
 
-        # Event row: per-phase history with scoring slots
-        participant_entry = participants.get(member_key, {})
-        phase_submissions = participant_entry.get("submission", {})
-        if not isinstance(phase_submissions, dict):
-            phase_submissions = {}
-
-        # Preserve existing score/feedback if an admin already wrote them
-        existing_phase = phase_submissions.get(phase_key, {})
-        phase_submissions[phase_key] = {
-            "submitted": True,
-            "submitted_at": submitted_iso,
-            "answers": answers_payload,
-            "score": existing_phase.get("score"),
-            "feedback": existing_phase.get("feedback"),
-        }
-        participant_entry["submission"] = phase_submissions
-        participants[member_key] = participant_entry
-
-    event.participants = participants
-
     # 4. Persist: update each team member's user row individually
     for member in team_members:
         await (
@@ -342,14 +315,6 @@ async def submit_for_event(
             .eq("id", str(member.id))
             .execute()
         )
-
-    # Persist: event row (contains all participants)
-    await (
-        supabase.table("events")
-        .update({"participants": participants})
-        .eq("id", event_key)
-        .execute()
-    )
 
     return submitted_at, normalised_answers
 

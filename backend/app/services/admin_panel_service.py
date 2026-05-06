@@ -408,7 +408,6 @@ async def restrict_participant(
 ) -> dict:
     """
     Set or clear user.events[event_id]["restricted"].
-    Also syncs event.participants[user_id]["status"] for consistency.
     eventManager must own the event.
     """
     if admin.role == AdminRole.EVENT_MANAGER:

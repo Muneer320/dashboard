@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
-from supabase import AsyncClient
 from fastapi_cache.decorator import cache
+from supabase import AsyncClient
 
 from app.api.deps import get_current_user
 from app.db.supabase_client import get_supabase
@@ -9,12 +9,26 @@ from app.schemas.event import EventRegisterResponse, EventResponse
 from app.schemas.team import MyTeamResponse
 from app.services.event_service import (
     get_event,
+    get_event_registration_counts,
     list_events,
     register_for_event,
 )
 from app.services.team_service import get_my_team
 
 router = APIRouter()
+
+
+def _build_event_response(event, participants_count: int) -> EventResponse:
+    return EventResponse(
+        id=str(event.id),
+        name=event.name,
+        title=event.title or "",
+        description=event.description,
+        venue=event.venue or [],
+        rounds=event.rounds or {},
+        participants_count=participants_count,
+        community_link=event.community_link,
+    )
 
 
 @router.get("", response_model=list[EventResponse])
@@ -24,19 +38,8 @@ async def get_events(
     _: User = Depends(get_current_user),
 ) -> list[EventResponse]:
     events = await list_events(supabase)
-    return [
-        EventResponse(
-            id=str(event.id),
-            name=event.name,
-            title=event.title or "",
-            description=event.description,
-            venue=event.venue or [],
-            rounds=event.rounds or {},
-            participants_count=0,  # deprecated — events.participants column removed
-            community_link=event.community_link,
-        )
-        for event in events
-    ]
+    counts = await get_event_registration_counts(supabase, [str(event.id) for event in events])
+    return [_build_event_response(event, counts.get(str(event.id), 0)) for event in events]
 
 
 @router.get("/public", response_model=list[EventResponse])
@@ -45,19 +48,8 @@ async def get_public_events(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> list[EventResponse]:
     events = await list_events(supabase)
-    return [
-        EventResponse(
-            id=str(event.id),
-            name=event.name,
-            title=event.title or "",
-            description=event.description,
-            venue=event.venue or [],
-            rounds=event.rounds or {},
-            participants_count=len(event.participants or {}),
-            community_link=event.community_link,
-        )
-        for event in events
-    ]
+    counts = await get_event_registration_counts(supabase, [str(event.id) for event in events])
+    return [_build_event_response(event, counts.get(str(event.id), 0)) for event in events]
 
 
 @router.get("/{event_id}", response_model=EventResponse)
@@ -67,16 +59,8 @@ async def get_single_event(
     _: User = Depends(get_current_user),
 ) -> EventResponse:
     event = await get_event(supabase, event_id)
-    return EventResponse(
-        id=str(event.id),
-        name=event.name,
-        title=event.title or "",
-        description=event.description,
-        venue=event.venue or [],
-        rounds=event.rounds or {},
-        participants_count=0,  # deprecated — events.participants column removed
-        community_link=event.community_link,
-    )
+    counts = await get_event_registration_counts(supabase, [str(event.id)])
+    return _build_event_response(event, counts.get(str(event.id), 0))
 
 
 @router.post("/{event_id}/register", response_model=EventRegisterResponse)
