@@ -67,7 +67,8 @@ export function AuthProvider({ children }) {
       engagement:   ['admin', 'prm_lead', 'ops_lead'],
       disputes:     ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
       inventory:    ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
-      auditLog:     ['admin', 'ops_lead'],
+      auditLog:      ['admin', 'ops_lead'],
+      coinsOverview: ['admin', 'prm_lead', 'ops_lead'],
     }
     return (matrix[feature] || []).includes(user.role)
   }

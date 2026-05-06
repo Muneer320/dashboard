@@ -56,6 +56,14 @@ async def run_auto_check(
     try:
         async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        if resp.status_code == 400:
+            # Bad request from the server — URL is structurally valid but the
+            # server rejected it (e.g. tracking links, redirect URLs). Send to
+            # admin for manual verification.
+            result["needs_manual_check"] = True
+            result["flags"].append("url_returned_400")
+            result["passed"] = True
+            return result
         if resp.status_code == 404:
             result["reason"] = "post_not_found"
             return result
@@ -63,12 +71,16 @@ async def run_auto_check(
             result["reason"] = "post_private_or_restricted"
             return result
         if resp.status_code >= 500:
-            # Server error — do not reject. Flag for manual check.
             result["needs_manual_check"] = True
             result["flags"].append("url_check_server_error")
             result["passed"] = True
             return result
         page_text = resp.text
+    except httpx.InvalidURL:
+        # Completely unparseable — not a URL at all (e.g. "password123").
+        # Reject immediately so the user knows to paste a proper link.
+        result["reason"] = "invalid_url_format"
+        return result
     except httpx.TimeoutException:
         result["needs_manual_check"] = True
         result["flags"].append("url_check_timeout")
@@ -80,18 +92,44 @@ async def run_auto_check(
         result["passed"] = True
         return result
 
-    # CHECK 2: Handle match — URL belongs to student's linked account
+    # CHECK 2: Handle match — URL belongs to student's linked account.
+    # Search both the raw URL and fetched page text (covers redirect/tracking
+    # URLs like linkedin.com/authwall?trk=... where the handle only appears
+    # in the page source, not the URL string itself).
+    page_lower = page_text.lower()
     handle_found = False
-    if student_linkedin_handle and student_linkedin_handle.lower() in url.lower():
+    li = (student_linkedin_handle or "").lower()
+    ig = (student_instagram_handle or "").lower()
+    if li and (li in url.lower() or li in page_lower):
         handle_found = True
-    if student_instagram_handle and student_instagram_handle.lower() in url.lower():
+    if not handle_found and ig and (ig in url.lower() or ig in page_lower):
         handle_found = True
+
     if not handle_found:
+        # Authwall or tracking redirect — LinkedIn hides post content behind a
+        # login wall so we cannot confirm the handle server-side. Send to admin
+        # for manual review rather than hard-rejecting.
+        is_authwall = (
+            "authwall" in url.lower()
+            or "/authwall" in page_lower
+            or ("trk=" in url.lower() and "linkedin.com" in url.lower())
+        )
+        # Also treat the case where the student has no linked handles yet —
+        # we cannot check, so flag for manual review.
+        no_handles = not li and not ig
+        if is_authwall or no_handles:
+            result["needs_manual_check"] = True
+            result["flags"].append(
+                "authwall_or_redirect" if is_authwall else "no_linked_handles"
+            )
+            result["passed"] = True
+            # Skip the rest of the per-source checks — admin will verify.
+            return result
+
         result["reason"] = "handle_mismatch"
         return result
 
     # CHECK 3: Required hashtag present
-    page_lower = page_text.lower()
     if "#ascent26" not in page_lower and "%23ascent26" not in page_lower:
         # LinkedIn may not expose hashtags in scraped HTML
         # Flag for admin instead of hard reject

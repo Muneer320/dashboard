@@ -62,6 +62,39 @@ async def _ledger_sum_coins(
     return sum(r["coins"] for r in rows(resp))
 
 
+async def _verified_submission_count(
+    supabase: AsyncClient, student_id: str, source_type: str
+) -> int:
+    """Count submissions for this student+source currently in 'verified' state.
+    Used for cap enforcement so that an admin re-verification rejection
+    (which flips status back to 'rejected') frees up the slot."""
+    resp = await (
+        supabase.table("ugc_submissions")
+        .select("id")
+        .eq("student_id", student_id)
+        .eq("source_type", source_type)
+        .eq("status", "verified")
+        .execute()
+    )
+    return len(rows(resp))
+
+
+async def _verified_submission_coins(
+    supabase: AsyncClient, student_id: str, source_types: list[str]
+) -> int:
+    """Sum of base coin values for currently-verified submissions across the
+    given sources. Used for the MVP_MUSEUM + JOBS_WALL shared cap."""
+    resp = await (
+        supabase.table("ugc_submissions")
+        .select("source_type")
+        .eq("student_id", student_id)
+        .in_("source_type", source_types)
+        .eq("status", "verified")
+        .execute()
+    )
+    return sum(COIN_VALUES.get(r["source_type"], 0) for r in rows(resp))
+
+
 async def _has_pending_submission(
     supabase: AsyncClient, student_id: str, source_type: str
 ) -> bool:
@@ -93,16 +126,37 @@ async def _has_round_registration(supabase: AsyncClient, user: User) -> bool:
 async def get_eligibility(
     user: User = Depends(get_current_user),
     supabase: AsyncClient = Depends(get_supabase),
-) -> dict[str, bool | str]:
+) -> dict[str, Any]:
     student_id = str(user.id)
-    rsvp_count = await _ledger_count(supabase, student_id, "RSVP_POST")
-    round1_count = await _ledger_count(supabase, student_id, "ROUND1_PROJECT")
-    fv_count = await _ledger_count(supabase, student_id, "FUTURE_VISION")
-    cc_count = await _ledger_count(supabase, student_id, "CREATOR_COLLAB")
-    mvp_jobs_total = await _ledger_sum_coins(
+    rsvp_count = await _verified_submission_count(supabase, student_id, "RSVP_POST")
+    round1_count = await _verified_submission_count(supabase, student_id, "ROUND1_PROJECT")
+    fv_count = await _verified_submission_count(supabase, student_id, "FUTURE_VISION")
+    cc_count = await _verified_submission_count(supabase, student_id, "CREATOR_COLLAB")
+    mvp_jobs_total = await _verified_submission_coins(
         supabase, student_id, ["MVP_MUSEUM", "JOBS_WALL"]
     )
     has_round = await _has_round_registration(supabase, user)
+
+    # Fetch the most recent submission per source for this student so the
+    # frontend can render IN-REVIEW / VERIFIED / REJECTED state on each tile.
+    subs_resp = await (
+        supabase.table("ugc_submissions")
+        .select("source_type, status, url, rejection_reason, submitted_at, verified_at")
+        .eq("student_id", student_id)
+        .order("submitted_at", desc=True)
+        .execute()
+    )
+    latest: dict[str, dict[str, Any]] = {}
+    for row in rows(subs_resp):
+        src = row["source_type"]
+        if src not in latest:
+            latest[src] = {
+                "status": row["status"],
+                "url": row.get("url"),
+                "rejection_reason": row.get("rejection_reason"),
+                "submitted_at": row.get("submitted_at"),
+                "verified_at": row.get("verified_at"),
+            }
 
     return {
         "rsvp":            rsvp_count == 0,
@@ -111,6 +165,7 @@ async def get_eligibility(
         "mvp_museum":      mvp_jobs_total < MVP_JOBS_SHARED_CAP,
         "jobs_wall":       mvp_jobs_total < MVP_JOBS_SHARED_CAP,
         "creator_collab":  cc_count == 0,
+        "latest_submissions": latest,
     }
 
 
@@ -139,18 +194,20 @@ async def submit_ugc(
 
     student_id = str(user.id)
 
-    # 1. Per-student caps
+    # 1. Per-student caps — counted from currently-verified submissions so
+    # that a re-verification rejection (which sets status back to rejected)
+    # frees up the slot for re-submission.
     if src in PER_STUDENT_CAPPED_SOURCES:
-        existing = await _ledger_count(supabase, student_id, src)
+        existing = await _verified_submission_count(supabase, student_id, src)
         if existing > 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"{src} already credited for this student",
             )
 
-    # 2. MVP + Jobs Wall shared cap
+    # 2. MVP + Jobs Wall shared cap (shared across the two sources)
     if src in {"MVP_MUSEUM", "JOBS_WALL"}:
-        combined = await _ledger_sum_coins(
+        combined = await _verified_submission_coins(
             supabase, student_id, ["MVP_MUSEUM", "JOBS_WALL"]
         )
         if combined >= MVP_JOBS_SHARED_CAP:
@@ -194,9 +251,9 @@ async def submit_ugc(
         )
 
     # 5b. Pre-check the (url, source_type) unique constraint so we surface a
-    # 400 instead of a generic 500. This catches the case where a previous
-    # submission of the same URL (often by a different student) already
-    # exists — including ones that were already rejected.
+    # 400 instead of a generic 500. Same-user re-submission of an exact URL
+    # is allowed when the prior row was rejected or flagged for re-verification
+    # — we reuse that row instead of inserting a duplicate.
     existing_url = await (
         supabase.table("ugc_submissions")
         .select("id, student_id, status")
@@ -206,36 +263,46 @@ async def submit_ugc(
         .execute()
     )
     existing_url_row = first_row(existing_url)
+    reusable_row_id: str | None = None
     if existing_url_row is not None:
         same_user = existing_url_row["student_id"] == student_id
-        if same_user:
+        prior_status = existing_url_row["status"]
+        if same_user and prior_status in {"rejected", "needs_review"}:
+            reusable_row_id = existing_url_row["id"]
+        elif same_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
                     "You've already submitted this exact URL for "
-                    f"{src} (status: {existing_url_row['status']}). "
-                    "Pick a different URL."
+                    f"{src} (status: {prior_status}). Pick a different URL."
                 ),
             )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This URL has already been submitted by another student.",
-        )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This URL has already been submitted by another student.",
+            )
 
     # 6. Run auto-check
     existing_resp = await (
         supabase.table("ugc_submissions")
-        .select("url, source_type, student_id")
+        .select("id, url, source_type, student_id")
         .eq("source_type", src)
         .execute()
     )
+    # If we're re-submitting on top of our own prior row, drop it from the
+    # existing-submissions list — otherwise the auto-check duplicate-URL rule
+    # would always reject re-submits of the same URL.
+    existing_submissions = [
+        r for r in rows(existing_resp) if r.get("id") != reusable_row_id
+    ]
     auto_result = await run_auto_check(
         url=payload.url,
         source_type=src,
         student_linkedin_handle=(user.details or {}).get("linkedinHandle"),
         student_instagram_handle=(user.details or {}).get("instagramHandle"),
         submitted_at=datetime.now(timezone.utc),
-        existing_submissions=rows(existing_resp),
+        existing_submissions=existing_submissions,
         current_student_id=student_id,
     )
 
@@ -258,7 +325,7 @@ async def submit_ugc(
             else str(auto_result["published_timestamp"])
         )
 
-    insert_resp = await supabase.table("ugc_submissions").insert({
+    submission_payload = {
         "student_id": student_id,
         "source_type": src,
         "url": payload.url,
@@ -268,8 +335,27 @@ async def submit_ugc(
         "power_hour_eligible": auto_result["power_hour_eligible"],
         "content_fingerprint": auto_result["fingerprint"],
         "metadata": metadata,
-    }).execute()
-    submission = rows(insert_resp)[0]
+    }
+    if reusable_row_id is not None:
+        # Re-submission of the same URL: refresh the existing row so the
+        # admin queue / per-source state machine sees a clean record. Clears
+        # the prior rejection_reason and bumps submitted_at to "now".
+        update_resp = await (
+            supabase.table("ugc_submissions")
+            .update({
+                **submission_payload,
+                "rejection_reason": None,
+                "verified_at": None,
+                "verified_by": None,
+                "submitted_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .eq("id", reusable_row_id)
+            .execute()
+        )
+        submission = rows(update_resp)[0]
+    else:
+        insert_resp = await supabase.table("ugc_submissions").insert(submission_payload).execute()
+        submission = rows(insert_resp)[0]
 
     # 8. Creator Collab — create pending invite for participant_2
     if src == "CREATOR_COLLAB":

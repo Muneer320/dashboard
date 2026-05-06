@@ -214,6 +214,16 @@ async def redeem_sticker(
             detail=str(exc),
         ) from exc
 
+    # Deduct the redemption cost from the student's balance.
+    debit = await credit_coins(
+        supabase,
+        student_id=user.id,
+        source_type="REDEMPTION",
+        coins=-TIER_THRESHOLDS["STICKER"],
+        verified_by=None,
+        metadata={"tier": "STICKER", "redemption_id": result["redemption_id"]},
+    )
+
     await write_audit(
         supabase,
         actor_id=user.id,
@@ -221,9 +231,9 @@ async def redeem_sticker(
         action="CODE_GENERATED",
         entity_type="reward_redemptions",
         entity_id=result["redemption_id"],
-        after_state={"tier": "STICKER"},
+        after_state={"tier": "STICKER", "coins_deducted": TIER_THRESHOLDS["STICKER"]},
     )
-    return result
+    return {**result, "coins_deducted": TIER_THRESHOLDS["STICKER"]}
 
 
 # ----------------------------- surprise drops -----------------------------

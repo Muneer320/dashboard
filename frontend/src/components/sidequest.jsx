@@ -15,6 +15,7 @@ import { useUserAuth } from "../lib/UserAuthContext";
 import { useMobile, AscentLogo, NavBar, PageBackground } from "./shared";
 import { QRCodeSVG } from "qrcode.react";
 import { coins as coinsApi, ugc as ugcApi } from "../lib/api";
+import ascentCoinImg from "../assets/ascent-coin.png";
 
 // ─────────────────────────────────────────────────────────────
 // Source labels & coin/tier reference
@@ -41,6 +42,7 @@ const SOURCE_LABEL = {
   REVERSAL:         "Reversal",
   RESTORE:          "Restore",
   MANUAL_ADJUSTMENT:"Manual Adjustment",
+  REDEMPTION:       "Redemption",
 };
 
 const COIN_VALUES = {
@@ -88,6 +90,89 @@ function fmtCountdown(seconds) {
   return `${s}s`;
 }
 
+// ─────────────────────────────────────────────────────────────
+// FlipCoin — 3-D Y-axis flip on hover.
+//   size      : px number for width/height (default 64)
+//   float     : adds a gentle idle bob + ambient glow (for hero display)
+// ─────────────────────────────────────────────────────────────
+const COIN_CSS = `
+@keyframes coinFlipHover {
+  0%   { transform: rotateY(0deg); }
+  100% { transform: rotateY(360deg); }
+}
+@keyframes coinFloat {
+  0%,100% { transform: translateY(0px) rotateY(0deg); }
+  50%      { transform: translateY(-10px) rotateY(0deg); }
+}
+@keyframes coinGlow {
+  0%,100% { box-shadow: 0 0 22px 6px rgba(212,175,55,0.25), 0 0 60px 10px rgba(212,175,55,0.10); }
+  50%      { box-shadow: 0 0 36px 10px rgba(212,175,55,0.48), 0 0 90px 18px rgba(212,175,55,0.22); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.coin-flip-wrap {
+  display: inline-block;
+  perspective: 700px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.coin-flip-inner {
+  position: relative;
+  transform-style: preserve-3d;
+  transition: none;
+  border-radius: 50%;
+}
+.coin-flip-wrap:hover .coin-flip-inner {
+  animation: coinFlipHover 0.65s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.coin-flip-inner img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  pointer-events: none;
+  user-select: none;
+}
+.coin-flip-wrap.coin-hero .coin-flip-inner {
+  animation: coinFloat 3.2s ease-in-out infinite;
+  border-radius: 50%;
+}
+.coin-flip-wrap.coin-hero {
+  filter: drop-shadow(0 0 18px rgba(212,175,55,0.45)) drop-shadow(0 0 6px rgba(212,175,55,0.30));
+  transition: filter 0.3s ease;
+}
+.coin-flip-wrap.coin-hero:hover {
+  filter: drop-shadow(0 0 28px rgba(212,175,55,0.70)) drop-shadow(0 0 10px rgba(212,175,55,0.55));
+}
+.coin-flip-wrap.coin-hero:hover .coin-flip-inner {
+  animation: coinFlipHover 0.65s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+`;
+
+let _coinStyleInjected = false;
+function injectCoinStyles() {
+  if (_coinStyleInjected) return;
+  _coinStyleInjected = true;
+  const el = document.createElement("style");
+  el.textContent = COIN_CSS;
+  document.head.appendChild(el);
+}
+
+function FlipCoin({ size = 64, hero = false }) {
+  useEffect(() => { injectCoinStyles(); }, []);
+  return (
+    <div
+      className={`coin-flip-wrap${hero ? " coin-hero" : ""}`}
+      style={{ width: size, height: size }}
+    >
+      <div className="coin-flip-inner" style={{ width: size, height: size }}>
+        <img src={ascentCoinImg} alt="Ascent Cent" draggable={false} />
+      </div>
+    </div>
+  );
+}
+
 function Spinner() {
   return (
     <div style={{ display: "flex", justifyContent: "center", padding: 32, color: "var(--ink-mute)" }}>
@@ -95,7 +180,6 @@ function Spinner() {
         strokeWidth="2" style={{ animation: "spin 1s linear infinite" }}>
         <path d="M21 12a9 9 0 1 1-6.219-8.56" />
       </svg>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -390,14 +474,16 @@ export function CoinsHomePage() {
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
                 <div>
                   <div className="eyebrow">§ LIVE BALANCE</div>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 16, marginTop: 12 }}>
-                    <span style={{ color: "var(--teal)", display: "inline-flex" }}><NavIcon k="coin" /></span>
-                    <span className="display" style={{ fontSize: isMobile ? 56 : 72, color: "var(--ink)" }}>
-                      {(balance?.balance ?? 0).toLocaleString()}
-                    </span>
-                    <span className="mono" style={{ fontSize: 12, color: "var(--ink-mute)", letterSpacing: "0.18em" }}>
-                      COINS
-                    </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 14 }}>
+                    <FlipCoin size={isMobile ? 72 : 96} hero />
+                    <div>
+                      <span className="display" style={{ fontSize: isMobile ? 56 : 76, color: "var(--ink)", lineHeight: 1, display: "block" }}>
+                        {(balance?.balance ?? 0).toLocaleString()}
+                      </span>
+                      <span className="mono" style={{ fontSize: 11, color: "var(--ink-mute)", letterSpacing: "0.22em", marginTop: 4, display: "block" }}>
+                        ASCENT CENTS
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -593,6 +679,156 @@ function DisputeModal({ onCancel, text, setText, onSubmit }) {
 // ─────────────────────────────────────────────────────────────
 // UGCSubmitPage  →  /coins/submit   (Verification)
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Submission state helpers — render LOCK / REJECTED / NEEDS-REVIEW
+// pills on the source tiles and a contextual banner above the form.
+// ─────────────────────────────────────────────────────────────
+function tileStateFor(latest, eligible) {
+  // No prior submission for this source.
+  if (!latest) {
+    return eligible
+      ? { kind: "open",   label: "OPEN",   pillTone: "var(--teal)",
+          borderColor: "var(--glass-border)", bg: "rgba(255,255,255,0.025)",
+          textColor: "var(--ink)", opacity: 1 }
+      : { kind: "capped", label: "CAPPED", pillTone: "var(--ink-mute)",
+          borderColor: "var(--glass-border)", bg: "rgba(255,255,255,0.025)",
+          textColor: "var(--ink-mute)", opacity: 0.6 };
+  }
+  switch (latest.status) {
+    case "verified":
+      return { kind: "verified", label: "VERIFIED", pillTone: "var(--teal)",
+        borderColor: "rgba(64,212,196,0.35)", bg: "rgba(64,212,196,0.08)",
+        textColor: "var(--ink)", opacity: 1,
+        subtext: "Locked — coins credited.", subtextColor: "var(--teal)" };
+    case "submitted":
+    case "auto_checked":
+    case "admin_queued":
+    case "pending_manual":
+      return { kind: "review", label: "IN REVIEW", pillTone: "var(--violet)",
+        borderColor: "rgba(127,119,221,0.45)", bg: "rgba(127,119,221,0.08)",
+        textColor: "var(--ink)", opacity: 1,
+        subtext: "Awaiting admin verification.", subtextColor: "var(--violet)" };
+    case "rejected":
+      return { kind: "rejected", label: "REJECTED", pillTone: "var(--amber)",
+        borderColor: "rgba(232,185,116,0.45)", bg: "rgba(232,185,116,0.06)",
+        textColor: "var(--ink)", opacity: 1,
+        subtext: latest.rejection_reason
+          ? `Reason: ${latest.rejection_reason}`
+          : "Tap to re-submit.",
+        subtextColor: "var(--amber)" };
+    case "needs_review":
+      return { kind: "needs_review", label: "RE-VERIFY", pillTone: "var(--amber)",
+        borderColor: "rgba(232,185,116,0.45)", bg: "rgba(232,185,116,0.06)",
+        textColor: "var(--ink)", opacity: 1,
+        subtext: "Post changed — re-submit to restore coins.",
+        subtextColor: "var(--amber)" };
+    default:
+      return eligible
+        ? { kind: "open", label: "OPEN", pillTone: "var(--teal)",
+            borderColor: "var(--glass-border)", bg: "rgba(255,255,255,0.025)",
+            textColor: "var(--ink)", opacity: 1 }
+        : { kind: "capped", label: "CAPPED", pillTone: "var(--ink-mute)",
+            borderColor: "var(--glass-border)", bg: "rgba(255,255,255,0.025)",
+            textColor: "var(--ink-mute)", opacity: 0.6 };
+  }
+}
+
+function TileStatusPill({ state }) {
+  const isLocked = state.kind === "verified" || state.kind === "review";
+  return (
+    <span className="mono" style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      fontSize: 9, letterSpacing: "0.12em",
+      padding: "2px 7px", borderRadius: 999,
+      border: `1px solid ${state.pillTone}`,
+      color: state.pillTone,
+      background: "transparent",
+    }}>
+      {isLocked && (
+        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+      )}
+      {state.label}
+    </span>
+  );
+}
+
+function SubmissionStateBanner({ source, latest, eligible }) {
+  if (!latest) {
+    if (!eligible) {
+      return (
+        <div style={{
+          marginTop: 14, padding: "10px 12px", borderRadius: "var(--r-md)",
+          background: "rgba(232,185,116,0.08)", border: "1px solid rgba(232,185,116,0.4)",
+          color: "var(--amber)", fontSize: 12.5,
+        }}>
+          {source === "ROUND1_PROJECT"
+            ? "Register for a build event first."
+            : (source === "MVP_MUSEUM" || source === "JOBS_WALL")
+            ? "MVP + Jobs Wall shared cap reached."
+            : "Submission window is closed for this source."}
+        </div>
+      );
+    }
+    return null;
+  }
+
+  const wrap = (tone, body) => (
+    <div style={{
+      marginTop: 14, padding: "12px 14px", borderRadius: "var(--r-md)",
+      background: tone.bg, border: `1px solid ${tone.border}`,
+      color: tone.text, fontSize: 12.5,
+    }}>
+      {body}
+    </div>
+  );
+
+  if (latest.status === "verified") {
+    return wrap(
+      { bg: "rgba(64,212,196,0.10)", border: "rgba(64,212,196,0.4)", text: "var(--teal)" },
+      <>
+        <strong style={{ color: "var(--ink)" }}>Verified.</strong>{" "}
+        Coins are credited and locked. You can't re-submit this source unless
+        admin re-verification flags it.
+      </>
+    );
+  }
+  if (["submitted", "auto_checked", "admin_queued", "pending_manual"].includes(latest.status)) {
+    return wrap(
+      { bg: "rgba(127,119,221,0.10)", border: "rgba(127,119,221,0.4)", text: "var(--violet)" },
+      <>
+        <strong style={{ color: "var(--ink)" }}>In review.</strong>{" "}
+        Auto-check passed — awaiting admin verification. Submission is locked
+        until they decide.
+      </>
+    );
+  }
+  if (latest.status === "rejected") {
+    return wrap(
+      { bg: "rgba(232,185,116,0.10)", border: "rgba(232,185,116,0.4)", text: "var(--amber)" },
+      <>
+        <strong style={{ color: "var(--ink)" }}>Rejected by admin.</strong>{" "}
+        {latest.rejection_reason ? `Reason: ${latest.rejection_reason}.` : ""}{" "}
+        Fix the issue and submit a new URL below.
+      </>
+    );
+  }
+  if (latest.status === "needs_review") {
+    return wrap(
+      { bg: "rgba(232,185,116,0.10)", border: "rgba(232,185,116,0.4)", text: "var(--amber)" },
+      <>
+        <strong style={{ color: "var(--ink)" }}>Re-verification required.</strong>{" "}
+        Your previously verified post failed the 24h re-check. Re-submit
+        within the grace window to restore your coins.
+      </>
+    );
+  }
+  return null;
+}
+
 export function UGCSubmitPage() {
   const isMobile = useMobile();
   const [eligibility, setEligibility] = useState(null);
@@ -626,10 +862,20 @@ export function UGCSubmitPage() {
     JOBS_WALL: "jobs_wall", CREATOR_COLLAB: "creator_collab",
   }[selected];
   const isEligible = eligibility?.[eligibilityKey];
+  const latestForSelected = eligibility?.latest_submissions?.[selected];
+  // A source is "locked" while a submission is in review or already verified.
+  // Rejected and needs_review (re-verification needed) are treated as open
+  // so the user can re-submit a fresh URL.
+  const lockedStatuses = new Set(["submitted", "auto_checked", "admin_queued", "pending_manual", "verified"]);
+  const isLocked = !!latestForSelected && lockedStatuses.has(latestForSelected.status);
+  const canSubmit = isEligible && !isLocked;
 
   const submit = async () => {
     if (!url.trim()) {
       setResult({ ok: false, message: "Paste a public post URL." }); return;
+    }
+    if (!/^https?:\/\/.+\..+/i.test(url.trim())) {
+      setResult({ ok: false, message: "That doesn't look like a URL — paste a valid link starting with https://" }); return;
     }
     if (isCollab && !partner.trim()) {
       setResult({ ok: false, message: "Partner user ID required for Creator Collab." }); return;
@@ -642,7 +888,10 @@ export function UGCSubmitPage() {
       });
       const reason = res.auto_check_result?.reason;
       if (res.status === "rejected") {
-        setResult({ ok: false, message: `Rejected: ${reason || "auto-check failed"}` });
+        const msg = reason === "invalid_url_format"
+          ? "That doesn't look like a URL — paste a valid link starting with https://"
+          : `Rejected: ${reason || "auto-check failed"}`;
+        setResult({ ok: false, message: msg });
       } else {
         setResult({
           ok: true,
@@ -705,31 +954,52 @@ export function UGCSubmitPage() {
                 }[src];
                 const eligibleHere = eligibility[key];
                 const active = selected === src;
+                const latest = eligibility.latest_submissions?.[src];
+                const tileState = tileStateFor(latest, eligibleHere);
                 return (
                   <button key={src} onClick={() => { setSelected(src); setResult(null); }}
                     style={{
                       textAlign: "left",
                       padding: "12px 14px",
                       borderRadius: "var(--r-md)",
-                      border: `1px solid ${active ? "rgba(127,119,221,0.55)" : "var(--glass-border)"}`,
-                      background: active ? "rgba(127,119,221,0.10)" : "rgba(255,255,255,0.025)",
-                      color: eligibleHere ? "var(--ink)" : "var(--ink-mute)",
-                      cursor: "pointer", opacity: eligibleHere ? 1 : 0.6,
+                      border: `1px solid ${
+                        active ? "rgba(127,119,221,0.55)"
+                        : tileState.borderColor
+                      }`,
+                      background: active ? "rgba(127,119,221,0.10)"
+                        : tileState.bg,
+                      color: tileState.textColor,
+                      cursor: "pointer", opacity: tileState.opacity,
                     }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 12.5 }}>{SOURCE_LABEL[src]}</span>
-                      <span className="mono" style={{
-                        fontSize: 10, letterSpacing: "0.05em",
-                        color: active ? "var(--violet)" : "var(--ink-mute)",
-                      }}>{eligibleHere ? "●" : "🔒"}</span>
+                      <TileStatusPill state={tileState} />
                     </div>
                     <div className="mono" style={{ fontSize: 10, color: "var(--ink-mute)", marginTop: 4 }}>
                       +{COIN_VALUES[src] || 0} COINS
                     </div>
+                    {tileState.subtext && (
+                      <div style={{
+                        fontSize: 10.5,
+                        color: tileState.subtextColor || "var(--ink-mute)",
+                        marginTop: 6,
+                        lineHeight: 1.35,
+                        wordBreak: "break-word",
+                      }}>
+                        {tileState.subtext}
+                      </div>
+                    )}
                   </button>
                 );
               })}
             </div>
+
+            {/* Per-source state banner — supersedes the eligibility note */}
+            <SubmissionStateBanner
+              source={selected}
+              latest={latestForSelected}
+              eligible={isEligible}
+            />
 
             {/* URL field */}
             <div style={{ marginTop: 22 }}>
@@ -737,7 +1007,7 @@ export function UGCSubmitPage() {
               <input
                 className="input" placeholder="https://linkedin.com/posts/…"
                 value={url} onChange={(e) => setUrl(e.target.value)}
-                disabled={!isEligible}
+                disabled={!canSubmit}
               />
             </div>
 
@@ -747,7 +1017,7 @@ export function UGCSubmitPage() {
                 <input
                   className="input" placeholder="UUID of your collab partner"
                   value={partner} onChange={(e) => setPartner(e.target.value)}
-                  disabled={!isEligible}
+                  disabled={!canSubmit}
                 />
               </div>
             )}
@@ -757,25 +1027,15 @@ export function UGCSubmitPage() {
             </p>
 
             <button className="btn primary sm"
-              disabled={submitting || !isEligible}
+              disabled={submitting || !canSubmit}
               onClick={submit}
-              style={{ marginTop: 14, opacity: submitting || !isEligible ? 0.6 : 1 }}>
-              {submitting ? "Checking…" : "SUBMIT & AUTO-CHECK"}
+              style={{ marginTop: 14, opacity: submitting || !canSubmit ? 0.6 : 1 }}>
+              {submitting
+                ? "Checking…"
+                : (latestForSelected?.status === "rejected" || latestForSelected?.status === "needs_review")
+                ? "RE-SUBMIT & AUTO-CHECK"
+                : "SUBMIT & AUTO-CHECK"}
             </button>
-
-            {!isEligible && (
-              <div style={{
-                marginTop: 14, padding: "10px 12px", borderRadius: "var(--r-md)",
-                background: "rgba(232,185,116,0.08)", border: "1px solid rgba(232,185,116,0.4)",
-                color: "var(--amber)", fontSize: 12.5,
-              }}>
-                {selected === "ROUND1_PROJECT"
-                  ? "Register for a build event first."
-                  : (selected === "MVP_MUSEUM" || selected === "JOBS_WALL")
-                  ? "MVP + Jobs Wall shared cap reached."
-                  : "Already submitted for this source."}
-              </div>
-            )}
 
             {result && (
               <div style={{
@@ -942,7 +1202,10 @@ export function LeaderboardPage() {
             }} className="mono">
               <span style={{ fontSize: 10, color: "var(--ink-mute)", letterSpacing: "0.18em" }}>RANK</span>
               <span style={{ fontSize: 10, color: "var(--ink-mute)", letterSpacing: "0.18em" }}>OPERATIVE</span>
-              <span style={{ fontSize: 10, color: "var(--ink-mute)", letterSpacing: "0.18em", textAlign: "right" }}>COINS EARNED</span>
+              <span style={{ fontSize: 10, color: "var(--ink-mute)", letterSpacing: "0.18em", textAlign: "right", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
+                <FlipCoin size={13} />
+                CENTS
+              </span>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column" }}>
@@ -1194,6 +1457,312 @@ function LeaderboardRow({ rank, row, isMe }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Reward journey — road of checkpoints from 0 to top tier.
+// ─────────────────────────────────────────────────────────────
+const TIER_ICONS = {
+  STICKER: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6" />
+      <path d="M21 11l-10 10v-6a4 4 0 0 1 4-4h6z" />
+    </svg>
+  ),
+  MUG: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 8h13v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8z" />
+      <path d="M16 11h2a3 3 0 0 1 0 6h-2" />
+      <path d="M7 4v2M11 4v2" />
+    </svg>
+  ),
+  TSHIRT: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 3l5 3-2 5-3-1v11H8V10L5 11 3 6l5-3 4 2 4-2z" />
+    </svg>
+  ),
+  PREMIUM_KIT: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="8" width="18" height="13" rx="1" />
+      <path d="M3 12h18M12 8v13" />
+      <path d="M12 8c-1.5-3-5-3-5-1s3 1 5 1zM12 8c1.5-3 5-3 5-1s-3 1-5 1z" />
+    </svg>
+  ),
+};
+
+function RewardJourney({ balance }) {
+  const isMobile = useMobile();
+  const tiers = [
+    { key: "STICKER",     label: "Sticker",     threshold: TIER_THRESHOLDS.STICKER },
+    { key: "MUG",         label: "Mug",         threshold: TIER_THRESHOLDS.MUG },
+    { key: "TSHIRT",      label: "T-shirt",     threshold: TIER_THRESHOLDS.TSHIRT },
+    { key: "PREMIUM_KIT", label: "Premium Kit", threshold: TIER_THRESHOLDS.PREMIUM_KIT },
+  ];
+  const max = tiers[tiers.length - 1].threshold;
+  const pct = Math.max(0, Math.min(100, (balance / max) * 100));
+  const nextTier = tiers.find((t) => balance < t.threshold);
+  const remaining = nextTier ? nextTier.threshold - balance : 0;
+
+  const headline = nextTier ? (
+    <>
+      Next stop ·{" "}
+      <span style={{ color: "var(--ink)" }}>{nextTier.label}</span>
+      <span className="mono" style={{ color: "var(--ink-mute)", marginLeft: 8 }}>
+        {remaining.toLocaleString()} coins to go
+      </span>
+    </>
+  ) : (
+    <span style={{ color: "var(--teal)" }}>All checkpoints cleared — legendary.</span>
+  );
+
+  // ── Mobile: vertical list with even spacing ─────────────────────────
+  if (isMobile) {
+    const ROW_H = 72;   // fixed height per checkpoint row (px)
+    const totalH = tiers.length * ROW_H;
+    const TRACK_X = 20; // horizontal center of the vertical track
+    const filledH = Math.round((pct / 100) * totalH);
+
+    return (
+      <div className="glass" style={{ padding: 18, marginTop: 22 }}>
+        <div className="eyebrow">§ JOURNEY MAP</div>
+        <div style={{ fontSize: 13, color: "var(--ink-dim)", marginTop: 8 }}>{headline}</div>
+
+        <div style={{ position: "relative", marginTop: 20, height: totalH }}>
+          {/* Track base */}
+          <div style={{
+            position: "absolute", left: TRACK_X - 2, top: 0, bottom: 0, width: 4,
+            borderRadius: 999, background: "rgba(255,255,255,0.06)",
+          }} />
+          {/* Track fill */}
+          <div style={{
+            position: "absolute", left: TRACK_X - 2, top: 0, width: 4,
+            height: filledH, maxHeight: totalH,
+            background: "linear-gradient(180deg, var(--teal), var(--violet))",
+            boxShadow: "0 0 10px var(--violet-glow)",
+            borderRadius: 999, transition: "height 700ms ease",
+          }} />
+
+          {tiers.map((t, i) => {
+            const reached = balance >= t.threshold;
+            const isNext  = nextTier?.key === t.key;
+            const dotColor = reached ? "var(--teal)" : isNext ? "var(--amber)" : "var(--ink-mute)";
+            // Centre each row evenly
+            const top = i * ROW_H + ROW_H / 2 - 8;
+            return (
+              <div key={t.key} style={{
+                position: "absolute", top, left: 0, right: 0,
+                display: "flex", alignItems: "center", gap: 14,
+              }}>
+                {/* Dot */}
+                <div style={{
+                  flexShrink: 0,
+                  width: 16, height: 16, borderRadius: "50%",
+                  background: reached ? "var(--violet)" : "rgba(20,20,28,0.9)",
+                  border: `2px solid ${dotColor}`,
+                  boxShadow: reached ? "0 0 10px var(--violet-glow)" : isNext ? "0 0 8px rgba(245,176,76,0.4)" : "none",
+                  marginLeft: TRACK_X - 8,
+                }} />
+                {/* Label */}
+                <div>
+                  <div className="mono" style={{
+                    fontSize: 9.5, letterSpacing: "0.16em", color: dotColor,
+                  }}>
+                    {reached ? "UNLOCKED" : isNext ? "NEXT UP" : "LOCKED"}
+                  </div>
+                  <div style={{ fontSize: 13.5, color: "var(--ink)", marginTop: 1 }}>{t.label}</div>
+                  <div className="mono" style={{ fontSize: 10.5, color: "var(--ink-mute)", marginTop: 1 }}>
+                    {t.threshold.toLocaleString()} coins
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Desktop: horizontal road ─────────────────────────────────────────
+  //
+  // Three-zone layout:
+  //   Zone A (0 → TRACK_Y-8):    icon discs
+  //   Zone B (TRACK_Y±3):        track + dots
+  //   Zone C (TRACK_Y+16 → end): status / name / threshold labels
+  //   Zone D (below labels):     YOU chip (never overlaps)
+  //
+  const TRACK_Y   = 58;   // px from container top — track centre
+  const ICON_SZ   = 38;   // icon disc diameter
+  const DOT_SZ    = 14;   // checkpoint dot diameter
+  const ICON_TOP  = TRACK_Y - 10 - ICON_SZ;      // = 10
+  const DOT_TOP   = TRACK_Y - DOT_SZ / 2;        // = 51
+  const STATUS_Y  = TRACK_Y + DOT_SZ / 2 + 7;   // = 72
+  const NAME_Y    = STATUS_Y + 13;               // = 85
+  const THRESH_Y  = NAME_Y + 17;                 // = 102
+  const YOU_Y     = THRESH_Y + 18;               // = 120  ← below all labels
+  const CONT_H    = YOU_Y + 22;                  // = 142
+
+  // Track spans 5%…95%
+  const toX = (v) => 5 + (Math.min(v, max) / max) * 90;
+  const youX = toX(balance);
+
+  return (
+    <div className="glass" style={{ padding: 24, marginTop: 22 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <div className="eyebrow">§ JOURNEY MAP</div>
+          <div style={{ fontSize: 14, color: "var(--ink-dim)", marginTop: 8 }}>{headline}</div>
+        </div>
+        <div className="mono" style={{ fontSize: 11, color: "var(--ink-mute)", letterSpacing: "0.18em" }}>
+          {balance.toLocaleString()} / {max.toLocaleString()} COINS
+        </div>
+      </div>
+
+      <div style={{ position: "relative", height: CONT_H, marginTop: 24 }}>
+        {/* Track base */}
+        <div style={{
+          position: "absolute", left: "5%", right: "5%",
+          top: TRACK_Y - 3, height: 6, borderRadius: 999,
+          background: "rgba(255,255,255,0.06)",
+          backgroundImage: "repeating-linear-gradient(90deg,rgba(255,255,255,0.09) 0 8px,transparent 8px 18px)",
+        }} />
+        {/* Filled track */}
+        <div style={{
+          position: "absolute", left: "5%", top: TRACK_Y - 3, height: 6,
+          width: `${youX - 5}%`,
+          background: "linear-gradient(90deg, var(--teal), var(--violet))",
+          boxShadow: "0 0 12px var(--violet-glow)",
+          borderRadius: 999, transition: "width 700ms ease",
+        }} />
+
+        {/* Checkpoints */}
+        {tiers.map((t) => {
+          const reached = balance >= t.threshold;
+          const isNext  = nextTier?.key === t.key;
+          const x = toX(t.threshold);
+          const accentColor = reached ? "var(--teal)" : isNext ? "var(--amber)" : "var(--ink-mute)";
+
+          return (
+            <div key={t.key} style={{
+              position: "absolute", left: `${x}%`, top: 0, height: CONT_H,
+              transform: "translateX(-50%)", width: 96, pointerEvents: "none",
+            }}>
+              {/* Icon disc */}
+              <div style={{
+                position: "absolute", top: ICON_TOP,
+                left: "50%", transform: "translateX(-50%)",
+                width: ICON_SZ, height: ICON_SZ, borderRadius: "50%",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: reached
+                  ? "linear-gradient(140deg,rgba(127,119,221,0.22),rgba(64,212,196,0.16))"
+                  : "rgba(255,255,255,0.04)",
+                border: `1.5px solid ${reached ? "var(--violet)" : isNext ? "var(--amber)" : "rgba(255,255,255,0.10)"}`,
+                color: reached ? "var(--ink)" : isNext ? "var(--amber)" : "var(--ink-mute)",
+                boxShadow: reached ? "0 0 12px var(--violet-glow)" : "none",
+              }}>
+                {TIER_ICONS[t.key]}
+              </div>
+
+              {/* Checkpoint dot on track */}
+              <div style={{
+                position: "absolute", top: DOT_TOP,
+                left: "50%", transform: "translateX(-50%)",
+                width: DOT_SZ, height: DOT_SZ, borderRadius: "50%",
+                background: reached ? "var(--violet)" : "rgba(16,16,24,0.95)",
+                border: `2px solid ${reached ? "var(--violet)" : isNext ? "var(--amber)" : "rgba(255,255,255,0.18)"}`,
+                boxShadow: reached ? "0 0 10px var(--violet-glow)" : isNext ? "0 0 8px rgba(245,176,76,0.4)" : "none",
+                zIndex: 1,
+              }} />
+
+              {/* Status */}
+              <div className="mono" style={{
+                position: "absolute", top: STATUS_Y,
+                left: "50%", transform: "translateX(-50%)",
+                fontSize: 8.5, letterSpacing: "0.18em",
+                color: accentColor, whiteSpace: "nowrap",
+              }}>
+                {reached ? "UNLOCKED" : isNext ? "NEXT UP" : "LOCKED"}
+              </div>
+
+              {/* Name */}
+              <div style={{
+                position: "absolute", top: NAME_Y,
+                left: "50%", transform: "translateX(-50%)",
+                fontSize: 12, color: "var(--ink)", whiteSpace: "nowrap",
+              }}>
+                {t.label}
+              </div>
+
+              {/* Threshold */}
+              <div className="mono" style={{
+                position: "absolute", top: THRESH_Y,
+                left: "50%", transform: "translateX(-50%)",
+                fontSize: 9.5, color: "var(--ink-mute)", whiteSpace: "nowrap",
+              }}>
+                {t.threshold.toLocaleString()}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* YOU chip — sits below all labels, rides along the x axis */}
+        {balance > 0 && (
+          <div style={{
+            position: "absolute", top: YOU_Y, left: `${youX}%`,
+            transform: "translateX(-50%)",
+            transition: "left 700ms ease", pointerEvents: "none", zIndex: 2,
+          }}>
+            <div className="mono" style={{
+              fontSize: 9, letterSpacing: "0.2em", whiteSpace: "nowrap",
+              padding: "3px 8px", borderRadius: 999,
+              background: "rgba(127,119,221,0.18)", border: "1px solid var(--violet-dim)",
+              color: "var(--ink)",
+            }}>
+              ▲ YOU · {balance.toLocaleString()}
+            </div>
+          </div>
+        )}
+
+        {/* Pulsing dot at fill tip */}
+        {balance > 0 && (
+          <div style={{
+            position: "absolute", top: TRACK_Y - 6,
+            left: `calc(5% + ${youX - 5}% - 6px)`,
+            width: 12, height: 12, borderRadius: "50%",
+            background: "var(--ink)", border: "2.5px solid var(--violet)",
+            boxShadow: "0 0 10px var(--violet-glow)",
+            animation: "pulseDot 1.6s ease-in-out infinite",
+            transition: "left 700ms ease",
+            zIndex: 2, pointerEvents: "none",
+          }} />
+        )}
+      </div>
+
+      <style>{`
+        @keyframes pulseDot {
+          0%,100%{box-shadow:0 0 8px var(--violet-glow);}
+          50%    {box-shadow:0 0 18px var(--violet-glow);}
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function CheckpointDot({ reached, isNext }) {
+  return (
+    <div style={{
+      width: 16, height: 16, borderRadius: "50%",
+      background: reached ? "var(--violet)" : "rgba(20,20,28,0.9)",
+      border: `2px solid ${reached ? "var(--violet)" : isNext ? "var(--amber)" : "rgba(255,255,255,0.18)"}`,
+      boxShadow: reached
+        ? "0 0 12px var(--violet-glow)"
+        : isNext ? "0 0 10px rgba(245,176,76,0.45)" : "none",
+      flex: "0 0 auto",
+    }} />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // RewardsPage  →  /coins/rewards   (Inventory)
 // ─────────────────────────────────────────────────────────────
 export function RewardsPage() {
@@ -1225,6 +1794,8 @@ export function RewardsPage() {
         Your <span style={{ color: "var(--violet)" }}>{balance.balance.toLocaleString()}</span>{" "}
         <span style={{ color: "var(--ink-dim)" }}>coins.</span>
       </h1>
+
+      <RewardJourney balance={balance.balance} />
 
       <div style={{
         marginTop: 24,
@@ -1272,14 +1843,6 @@ export function RewardsPage() {
         <RankRewardCard tier="PREMIUM_KIT"  level="LEVEL 4 · PREMIUM KIT" balance={balance.balance} rank={balance.rank} />
       </div>
 
-      {/* DIGITAL SAFETY NET */}
-      <div className="glass" style={{ marginTop: 26, padding: 22 }}>
-        <div className="eyebrow">§ DIGITAL SAFETY NET</div>
-        <p style={{ fontSize: 13, color: "var(--ink-dim)", marginTop: 10, maxWidth: 580 }}>
-          Cross a coin threshold but miss the rank cut? You still earn a certificate
-          plus a LinkedIn badge. Issued automatically after each snapshot.
-        </p>
-      </div>
     </SidequestLayout>
   );
 }

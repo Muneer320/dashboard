@@ -12,6 +12,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     server: {
       port: 5173,
+
+      //Only for the development phase.
+      allowedHosts:'all',
       proxy: {
         // Proxy /api/v1/* → http://localhost:8000/api/v1/*
         // No rewrite needed — the backend itself uses /api/v1 as its prefix.

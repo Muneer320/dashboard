@@ -16,7 +16,7 @@ import RequestedMembers from './tabs/RequestedMembers'
 import AdminUsers from './tabs/AdminUsers'
 import {
   UGCQueue, SnapshotTool, SurpriseDrop, BoothMonitor,
-  Engagement, Disputes, Inventory, AuditLog,
+  Engagement, Disputes, Inventory, AuditLog, CoinsOverview,
 } from './tabs/sidequest/Sidequest'
 import './Dashboard.css'
 
@@ -63,6 +63,7 @@ export default function Dashboard() {
             <Route path="disputes"      element={canAccess('disputes')     ? <Disputes />     : <Forbidden />} />
             <Route path="inventory"     element={canAccess('inventory')    ? <Inventory />    : <Forbidden />} />
             <Route path="audit-log"     element={canAccess('auditLog')     ? <AuditLog />     : <Forbidden />} />
+            <Route path="coins-overview" element={canAccess('coinsOverview') ? <CoinsOverview /> : <Forbidden />} />
           </Routes>
         </main>
       </div>

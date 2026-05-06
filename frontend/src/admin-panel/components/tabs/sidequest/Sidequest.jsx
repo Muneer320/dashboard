@@ -5,6 +5,32 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { adminCoins } from '../../../../lib/api'
+import ascentCoinImg from '../../../../assets/ascent-coin.png'
+
+const ADMIN_COIN_CSS = `
+@keyframes adminCoinFlip { 0% { transform:rotateY(0deg); } 100% { transform:rotateY(360deg); } }
+.admin-coin-wrap { display:inline-block; perspective:600px; cursor:pointer; flex-shrink:0; }
+.admin-coin-inner { border-radius:50%; transform-style:preserve-3d; }
+.admin-coin-wrap:hover .admin-coin-inner { animation:adminCoinFlip 0.6s cubic-bezier(0.4,0,0.2,1) both; }
+.admin-coin-inner img { display:block; width:100%; height:100%; object-fit:contain; border-radius:50%; pointer-events:none; user-select:none; }
+`;
+let _adminCoinStyleInjected = false;
+function AdminFlipCoin({ size = 16 }) {
+  useEffect(() => {
+    if (_adminCoinStyleInjected) return;
+    _adminCoinStyleInjected = true;
+    const el = document.createElement('style');
+    el.textContent = ADMIN_COIN_CSS;
+    document.head.appendChild(el);
+  }, []);
+  return (
+    <div className="admin-coin-wrap" style={{ width: size, height: size }}>
+      <div className="admin-coin-inner" style={{ width: size, height: size }}>
+        <img src={ascentCoinImg} alt="" draggable={false} />
+      </div>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────
 // Shared helpers
@@ -28,6 +54,7 @@ const SOURCE_LABEL = {
   REVERSAL: 'Reversal',
   RESTORE: 'Restore',
   MANUAL_ADJUSTMENT: 'Manual Adjustment',
+  REDEMPTION: 'Redemption',
 }
 
 const REJECT_TEMPLATES = [
@@ -74,6 +101,23 @@ function ErrorBanner({ message }) {
   )
 }
 
+function StudentCell({ row }) {
+  const name = row?.student_name
+  const username = row?.student_username
+  const idTail = row?.student_id ? `${row.student_id.slice(0, 8)}…` : ''
+  if (name) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>{name}</span>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+          {username ? `@${username}` : idTail}
+        </span>
+      </div>
+    )
+  }
+  return <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{idTail}</span>
+}
+
 function PageHeader({ title, sub, action }) {
   return (
     <div className="section-header" style={{ alignItems: 'flex-start' }}>
@@ -89,9 +133,45 @@ function PageHeader({ title, sub, action }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 1. UGC Verification Queue
+// 1. UGC Verification Queue — split into two panels:
+//    • New Verification — submissions awaiting first review.
+//    • Re-verify — already-verified URLs older than 24h plus rows the
+//      automated 24h job flagged as needs_review.
 // ─────────────────────────────────────────────────────────────
 export function UGCQueue() {
+  const [tab, setTab] = useState('new')
+  return (
+    <div className="fade-in">
+      <PageHeader
+        title="UGC Verification Queue"
+        sub="First-time approvals + re-verification of URLs older than 24h."
+      />
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+        <QueueTabButton active={tab === 'new'} onClick={() => setTab('new')}>
+          New Verification
+        </QueueTabButton>
+        <QueueTabButton active={tab === 'reverify'} onClick={() => setTab('reverify')}>
+          Re-verify
+        </QueueTabButton>
+      </div>
+      {tab === 'new' ? <NewVerificationView /> : <ReVerifyView />}
+    </div>
+  )
+}
+
+function QueueTabButton({ active, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={active ? 'btn btn-primary' : 'btn btn-ghost'}
+      style={{ padding: '8px 14px', fontSize: 13 }}
+    >
+      {children}
+    </button>
+  )
+}
+
+function NewVerificationView() {
   const [queue, setQueue] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -137,16 +217,10 @@ export function UGCQueue() {
   }
 
   return (
-    <div className="fade-in">
-      <PageHeader
-        title="Verification Queue"
-        sub="Approve or reject UGC submissions awaiting review."
-        action={<button className="btn btn-ghost" onClick={load}>Refresh</button>}
-      />
-
+    <div>
       <ErrorBanner message={error} />
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
         <select className="input-field" value={filter.source_type}
           onChange={(e) => setFilter({ ...filter, source_type: e.target.value })}
           style={{ width: 180 }}>
@@ -160,6 +234,9 @@ export function UGCQueue() {
           <option value="true">Auto-check passed</option>
           <option value="false">Auto-check failed</option>
         </select>
+        <button className="btn btn-ghost" onClick={() => load(true)} style={{ marginLeft: 'auto' }}>
+          Refresh
+        </button>
       </div>
 
       <div className="card no-scrollbar" style={{ padding: 0, overflowX: 'auto' }}>
@@ -190,7 +267,7 @@ export function UGCQueue() {
                       <span className="badge badge-warning" style={{ marginLeft: 6, fontSize: 9 }}>2×</span>
                     )}
                   </td>
-                  <td><span style={{ fontFamily: 'monospace', fontSize: 11 }}>{s.student_id?.slice(0, 8)}…</span></td>
+                  <td><StudentCell row={s} /></td>
                   <td>
                     <a href={s.url} target="_blank" rel="noreferrer"
                       style={{ color: 'var(--accent-light)', textDecoration: 'none', fontSize: 12 }}>
@@ -873,6 +950,173 @@ export function AuditLog() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// 9b. Coins Overview — per-student balance + redemptions
+// ─────────────────────────────────────────────────────────────
+
+const TIER_LABEL = { STICKER: 'Sticker', MUG: 'Mug', TSHIRT: 'T-shirt', PREMIUM_KIT: 'Premium Kit', COINS: 'Coins' }
+
+export function CoinsOverview() {
+  const [students, setStudents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [expanded, setExpanded] = useState(null)
+
+  // Debounce search to avoid hammering the API on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('')
+    try {
+      const data = await adminCoins.studentsOverview(debouncedSearch)
+      setStudents(data || [])
+    } catch (e) { setError(e.message) }
+    finally { setLoading(false) }
+  }, [debouncedSearch])
+  useEffect(() => { load() }, [load])
+
+  const totalCoins = useMemo(() => students.reduce((s, r) => s + (r.coins || 0), 0), [students])
+  const totalRedemptions = useMemo(() => students.reduce((s, r) => s + (r.redemptions?.length || 0), 0), [students])
+
+  return (
+    <div className="fade-in">
+      <PageHeader
+        title="Coins Overview"
+        sub="Live balance and redemptions for every participant."
+        action={
+          <button className="btn btn-ghost" onClick={() => load()} style={{ fontSize: 12 }}>Refresh</button>
+        }
+      />
+      <ErrorBanner message={error} />
+
+      {/* Summary stats */}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 18, flexWrap: 'wrap' }}>
+        <div className="card" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <AdminFlipCoin size={32} />
+          <div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Total Coins Earned</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{totalCoins.toLocaleString()}</div>
+          </div>
+        </div>
+        <div className="card" style={{ padding: '12px 20px' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Participants</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{students.length}</div>
+        </div>
+        <div className="card" style={{ padding: '12px 20px' }}>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Total Redemptions</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{totalRedemptions}</div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ marginBottom: 14 }}>
+        <input
+          className="input-field"
+          placeholder="Search by name or username…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ maxWidth: 360 }}
+        />
+      </div>
+
+      <div className="card no-scrollbar" style={{ padding: 0, overflowX: 'auto' }}>
+        {loading ? <Spinner /> : students.length === 0 ? (
+          <div className="empty-state"><p>No participants with coin activity found.</p></div>
+        ) : (
+          <table className="data-table" style={{ minWidth: 700 }}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Student</th>
+                <th style={{ textAlign: 'right' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <AdminFlipCoin size={14} />
+                    Coins
+                  </span>
+                </th>
+                <th>Sources</th>
+                <th>Redeemed</th>
+                <th>Last Activity</th>
+              </tr>
+            </thead>
+            <tbody>
+              {students.map((s, idx) => (
+                <React.Fragment key={s.student_id}>
+                  <tr
+                    style={{ cursor: s.redemptions?.length ? 'pointer' : 'default' }}
+                    onClick={() => setExpanded(expanded === s.student_id ? null : s.student_id)}
+                  >
+                    <td style={{ color: 'var(--text-muted)', fontSize: 11 }}>{idx + 1}</td>
+                    <td><StudentCell row={s} /></td>
+                    <td style={{ textAlign: 'right' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                        <AdminFlipCoin size={16} />
+                        {(s.coins || 0).toLocaleString()}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="badge badge-info">{s.distinct_sources || 0}</span>
+                    </td>
+                    <td>
+                      {s.redemptions?.length > 0 ? (
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {s.redemptions.map((r, i) => (
+                            <span key={i} className={`badge badge-${r.status === 'pending' ? 'warning' : 'success'}`}>
+                              {TIER_LABEL[r.tier] || r.tier}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{relTime(s.last_entry)}</td>
+                  </tr>
+
+                  {/* Expanded redemptions detail */}
+                  {expanded === s.student_id && s.redemptions?.length > 0 && (
+                    <tr>
+                      <td colSpan={6} style={{ padding: '0 0 8px 40px', background: 'rgba(0,0,0,0.15)' }}>
+                        <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Tier</th>
+                              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Code</th>
+                              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Status</th>
+                              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Code Expires</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {s.redemptions.map((r, i) => (
+                              <tr key={i}>
+                                <td style={{ padding: '4px 10px' }}>{TIER_LABEL[r.tier] || r.tier}</td>
+                                <td style={{ padding: '4px 10px', fontFamily: 'monospace' }}>{r.redemption_code || '—'}</td>
+                                <td style={{ padding: '4px 10px' }}>
+                                  <span className={`badge badge-${r.status === 'pending' ? 'warning' : 'success'}`}>{r.status}</span>
+                                </td>
+                                <td style={{ padding: '4px 10px', color: 'var(--text-muted)' }}>{fmtTime(r.expires_at)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
 // Shared mini-components
 // ─────────────────────────────────────────────────────────────
 function Modal({ children, onClose }) {
@@ -911,6 +1155,211 @@ function Stat({ label, value, highlight }) {
         fontSize: 22, fontWeight: 700, marginTop: 4,
         color: highlight ? 'var(--warning)' : 'var(--text-primary)',
       }}>{value}</div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// 9. Re-Verification — fingerprint-flagged needs_review queue +
+//    a window onto already-verified URLs (with manual re-check).
+// ─────────────────────────────────────────────────────────────
+const REVERIFY_REJECT_TEMPLATES = [
+  'Post no longer reachable',
+  'Hashtag #ASCENT26 was removed',
+  'Post visibility changed to private',
+  'Content edited away from ASCENT’26',
+  'Account or handle no longer matches',
+]
+
+function ReVerifyView() {
+  const [data, setData] = useState({ needs_review: [], verified: [] })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [working, setWorking] = useState(false)
+  const [rejectFor, setRejectFor] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [hours, setHours] = useState(24)
+
+  const load = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setLoading(true)
+    setError('')
+    try {
+      const res = await adminCoins.reverificationQueue(hours)
+      setData(res || { needs_review: [], verified: [] })
+    } catch (e) { setError(e.message) }
+    finally { if (showSpinner) setLoading(false) }
+  }, [hours])
+  useEffect(() => { load(true) }, [load])
+  useEffect(() => {
+    const id = setInterval(() => load(false), 30000)
+    return () => clearInterval(id)
+  }, [load])
+
+  const approve = async (id) => {
+    setWorking(true); setError('')
+    try { await adminCoins.approveUGC(id); await load() }
+    catch (e) { setError(e.message) }
+    finally { setWorking(false) }
+  }
+  const reject = async () => {
+    if (!rejectReason.trim()) return
+    setWorking(true); setError('')
+    try {
+      await adminCoins.rejectUGC(rejectFor, rejectReason)
+      setRejectFor(null); setRejectReason('')
+      await load()
+    } catch (e) { setError(e.message) }
+    finally { setWorking(false) }
+  }
+  const needs = data.needs_review || []
+  const verified = data.verified || []
+
+  return (
+    <div>
+      <ErrorBanner message={error} />
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14, alignItems: 'center' }}>
+        <Stat label="NEEDS REVIEW" value={needs.length} highlight />
+        <Stat label={`VERIFIED >${hours}H`} value={verified.length} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+          <label style={{ fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            Verified older than
+          </label>
+          <select
+            className="input-field"
+            value={hours}
+            onChange={(e) => setHours(Number(e.target.value))}
+            style={{ width: 90 }}
+          >
+            <option value={6}>6 hours</option>
+            <option value={12}>12 hours</option>
+            <option value={24}>24 hours</option>
+          </select>
+          <button className="btn btn-ghost" onClick={() => load(true)}>Refresh</button>
+        </div>
+      </div>
+
+      <div className="section-header"><span className="section-title">Needs review</span></div>
+      <div className="card no-scrollbar" style={{ padding: 0, overflowX: 'auto', marginBottom: 18 }}>
+        {loading ? <Spinner /> : needs.length === 0 ? (
+          <div className="empty-state">
+            <p>Nothing flagged — every verified post still matches its fingerprint.</p>
+          </div>
+        ) : (
+          <table className="data-table" style={{ minWidth: 900 }}>
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Student</th>
+                <th>URL</th>
+                <th>Original verified</th>
+                <th>Coins at risk</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {needs.map((s) => (
+                <tr key={s.id}>
+                  <td>{SOURCE_LABEL[s.source_type] || s.source_type}</td>
+                  <td><StudentCell row={s} /></td>
+                  <td>
+                    <a href={s.url} target="_blank" rel="noreferrer"
+                      style={{ color: 'var(--accent-light)', textDecoration: 'none', fontSize: 12 }}>
+                      {s.url?.length > 40 ? `${s.url.slice(0, 40)}…` : s.url}
+                    </a>
+                  </td>
+                  <td>{relTime(s.verified_at)}</td>
+                  <td>{s.coins_if_approved}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn btn-success" disabled={working}
+                      onClick={() => { if (window.confirm('Re-approve — keeps coins credited?')) approve(s.id) }}
+                      style={{ padding: '6px 10px', fontSize: 12, marginRight: 6 }}>
+                      Re-approve
+                    </button>
+                    <button className="btn btn-danger" disabled={working}
+                      onClick={() => setRejectFor(s.id)}
+                      style={{ padding: '6px 10px', fontSize: 12 }}>
+                      Reject &amp; reverse
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="section-header"><span className="section-title">Verified more than {hours}h ago</span></div>
+      <div className="card no-scrollbar" style={{ padding: 0, overflowX: 'auto' }}>
+        {loading ? <Spinner /> : verified.length === 0 ? (
+          <div className="empty-state">
+            <p>No verified UGC submissions yet.</p>
+          </div>
+        ) : (
+          <table className="data-table" style={{ minWidth: 900 }}>
+            <thead>
+              <tr>
+                <th>Source</th>
+                <th>Student</th>
+                <th>URL</th>
+                <th>Verified</th>
+                <th style={{ textAlign: 'right' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {verified.map((s) => (
+                <tr key={s.id}>
+                  <td>{SOURCE_LABEL[s.source_type] || s.source_type}</td>
+                  <td><StudentCell row={s} /></td>
+                  <td>
+                    <a href={s.url} target="_blank" rel="noreferrer"
+                      style={{ color: 'var(--accent-light)', textDecoration: 'none', fontSize: 12 }}>
+                      {s.url?.length > 40 ? `${s.url.slice(0, 40)}…` : s.url}
+                    </a>
+                  </td>
+                  <td>{fmtTime(s.verified_at)}<div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{relTime(s.verified_at)}</div></td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="btn btn-success" disabled={working}
+                      onClick={() => { if (window.confirm('Confirm this verified post still looks good?')) approve(s.id) }}
+                      style={{ padding: '6px 10px', fontSize: 12, marginRight: 6 }}>
+                      Accept
+                    </button>
+                    <button className="btn btn-danger" disabled={working}
+                      onClick={() => setRejectFor(s.id)}
+                      style={{ padding: '6px 10px', fontSize: 12 }}>
+                      Reject
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {rejectFor && (
+        <Modal onClose={() => setRejectFor(null)}>
+          <h3>Reject re-verification</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>
+            Coins are reversed with a 24h grace window. The student is told to re-submit; if they re-verify in time, the credit returns.
+          </p>
+          <select className="input-field" value="" onChange={(e) => setRejectReason(e.target.value)}
+            style={{ marginTop: 12 }}>
+            <option value="">— Select template —</option>
+            {REVERIFY_REJECT_TEMPLATES.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+          <textarea className="input-field" value={rejectReason} rows={3}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Or write your own reason…"
+            style={{ marginTop: 8, resize: 'vertical' }} />
+          <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+            <button className="btn btn-ghost" onClick={() => setRejectFor(null)}>Cancel</button>
+            <button className="btn btn-danger" onClick={reject} disabled={!rejectReason.trim() || working}>
+              {working ? '…' : 'Reject & reverse'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }

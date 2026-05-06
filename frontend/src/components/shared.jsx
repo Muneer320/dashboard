@@ -2,7 +2,24 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUserAuth } from "../lib/UserAuthContext";
-import { notifications as notificationsApi } from "../lib/api";
+import { notifications as notificationsApi, coins as coinsApi } from "../lib/api";
+import ascentCoinImg from "../assets/ascent-coin.png";
+
+let _navCoinStyleInjected = false;
+function injectNavCoinStyles() {
+  if (_navCoinStyleInjected) return;
+  _navCoinStyleInjected = true;
+  const el = document.createElement("style");
+  el.textContent = `
+    @keyframes navCoinFlip { 0%{transform:rotateY(0deg)} 100%{transform:rotateY(360deg)} }
+    .nav-coin-wrap { perspective:500px; display:inline-flex; align-items:center; }
+    .nav-coin-inner { border-radius:50%; transform-style:preserve-3d; }
+    .nav-coin-wrap:hover .nav-coin-inner { animation:navCoinFlip 0.55s cubic-bezier(0.4,0,0.2,1) both; }
+    .nav-coin-inner img { display:block; border-radius:50%; pointer-events:none; user-select:none; }
+  `;
+  document.head.appendChild(el);
+}
+
 // ─────────────────────────────────────────────────────────────
 // Responsive hook
 // ─────────────────────────────────────────────────────────────
@@ -35,6 +52,7 @@ export function AscentLogo({ size = 22, withMark = true }) {
 // Sticky Navbar used across all app-internal pages
 // ─────────────────────────────────────────────────────────────
 export function NavBar({ active, variant = "app" }) {
+  useEffect(() => { injectNavCoinStyles(); }, []);
   const isMobile = useMobile();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -42,6 +60,10 @@ export function NavBar({ active, variant = "app" }) {
   const [bellOpen, setBellOpen] = useState(false);
   const bellRef = useRef(null);
   const [notifs, setNotifs] = useState({ items: [], unread: 0 });
+  const [coinBalance, setCoinBalance] = useState(() => {
+    const cached = localStorage.getItem("ascentCoinBalance");
+    return cached !== null ? Number(cached) : null;
+  });
   const navigate = useNavigate();
   const { user, logout } = useUserAuth() || {};
 
@@ -85,6 +107,30 @@ export function NavBar({ active, variant = "app" }) {
       window.removeEventListener("focus", onFocus);
     };
   }, [loadNotifs, user]);
+
+  // Coin balance — pulled into the topbar chip. Only meaningful when the
+  // user is logged in; backend returns 401/403 otherwise.
+  const loadCoins = useCallback(() => {
+    if (!user) return;
+    coinsApi.balance()
+      .then((b) => {
+        const val = typeof b?.balance === "number" ? b.balance : null;
+        setCoinBalance(val);
+        if (val !== null) localStorage.setItem("ascentCoinBalance", String(val));
+      })
+      .catch(() => {});
+  }, [user]);
+  useEffect(() => { loadCoins(); }, [loadCoins]);
+  useEffect(() => {
+    if (!user) return;
+    const id = setInterval(loadCoins, 30000);
+    const onFocus = () => loadCoins();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadCoins, user]);
 
   const onBellOpen = () => {
     setBellOpen((v) => {
@@ -332,6 +378,41 @@ export function NavBar({ active, variant = "app" }) {
                   </div>
                 )}
               </div>
+
+              {/* Coin balance chip — between bell and profile.
+                  Hidden until first load to avoid a flash of "0". */}
+              {coinBalance != null && (
+                <button
+                  onClick={() => navigate("/coins/rewards")}
+                  aria-label={`Coin balance ${coinBalance.toLocaleString()}`}
+                  className="mono"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                    padding: "6px 11px", height: 30, borderRadius: 999,
+                    background: "linear-gradient(135deg, rgba(127,119,221,0.18), rgba(64,212,196,0.12))",
+                    border: "1px solid var(--violet-dim)",
+                    color: "var(--ink)", fontSize: 12, letterSpacing: "0.06em",
+                    cursor: "pointer",
+                    boxShadow: "0 0 0 0 var(--violet-glow)",
+                    transition: "box-shadow .2s, transform .15s, border-color .2s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = "0 0 14px var(--violet-glow)";
+                    e.currentTarget.style.borderColor = "var(--violet)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = "0 0 0 0 var(--violet-glow)";
+                    e.currentTarget.style.borderColor = "var(--violet-dim)";
+                  }}
+                >
+                  <div className="nav-coin-wrap">
+                    <div className="nav-coin-inner">
+                      <img src={ascentCoinImg} alt="" width={18} height={18} />
+                    </div>
+                  </div>
+                  <span style={{ fontWeight: 600 }}>{coinBalance.toLocaleString()}</span>
+                </button>
+              )}
 
               <div ref={profileRef} style={{ position: "relative" }}>
                 <button

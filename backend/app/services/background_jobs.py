@@ -318,11 +318,6 @@ async def run_background_jobs_once() -> None:
         except Exception:
             logger.exception("creator_collab_deadline_checker failed")
 
-    if _due("daily_url_recheck", 24 * 60 * 60):
-        try:
-            await daily_url_recheck()
-        except Exception:
-            logger.exception("daily_url_recheck failed")
 
 
 async def run_background_jobs_loop() -> None:

@@ -263,6 +263,7 @@ export const adminCoins = {
   },
   approveUGC:  (submission_id) => post('/admin/ugc/approve', { submission_id }, { adminAuth: true }),
   rejectUGC:   (submission_id, reason) => post('/admin/ugc/reject', { submission_id, reason }, { adminAuth: true }),
+  reverificationQueue: (hours = 24) => get(`/admin/ugc/reverification-queue?hours=${hours}`, { adminAuth: true }),
 
   // Manual / leaderboard / snapshot
   manualAdjust: (student_id, coins, reason) =>
@@ -288,6 +289,10 @@ export const adminCoins = {
   auditLog:        (params = {}) => {
     const q = new URLSearchParams(params).toString();
     return get(`/admin/audit-log${q ? `?${q}` : ''}`, { adminAuth: true });
+  },
+  studentsOverview: (search = '') => {
+    const q = search ? `?search=${encodeURIComponent(search)}` : '';
+    return get(`/admin/coins/students${q}`, { adminAuth: true });
   },
 };
 

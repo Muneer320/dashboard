@@ -547,12 +547,12 @@ function QRScanner({ onDecoded, onError }) {
 
   const [status, setStatus] = useState("starting"); // starting | running | stopped | error
   const [errMsg, setErrMsg] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
 
   // Safely stop the scanner — html5-qrcode throws synchronously when the
   // scanner isn't running yet, so guard with the library's own state enum.
   const safeStop = (scanner) => {
     try {
-      // Html5QrcodeScannerState: NOT_STARTED=1, SCANNING=2, PAUSED=3
       const state = scanner.getState?.();
       if (state === 2 /* SCANNING */ || state === 3 /* PAUSED */) {
         return scanner.stop().then(() => scanner.clear()).catch(() => {});
@@ -564,83 +564,134 @@ function QRScanner({ onDecoded, onError }) {
 
   useEffect(() => {
     let cancelled = false;
+    stoppedRef.current = false;
+    setStatus("starting");
+    setErrMsg("");
+
     const scanner = new Html5Qrcode(elementId, /* verbose */ false);
     scannerRef.current = scanner;
 
+    const fail = (e) => {
+      if (cancelled) return;
+      let msg;
+      if (!window.isSecureContext) {
+        msg = "Camera requires HTTPS. Ask your admin to serve the booth page over https://.";
+      } else if (e?.name === "NotAllowedError" || e?.name === "PermissionDeniedError") {
+        msg = "Camera permission denied — tap the camera icon in your browser address bar and allow access, then retry.";
+      } else if (e?.name === "NotFoundError" || e?.name === "DevicesNotFoundError") {
+        msg = "No camera detected on this device.";
+      } else if (e?.name === "NotReadableError" || e?.name === "TrackStartError") {
+        msg = "Camera is in use by another app — close it and retry.";
+      } else {
+        msg = e?.message || "Camera unavailable.";
+      }
+      setStatus("error");
+      setErrMsg(msg);
+      onErrorRef.current?.(msg);
+    };
+
     const start = async () => {
-      try {
-        const config = {
-          fps: 10,
-          qrbox: (vw, vh) => {
-            const min = Math.min(vw, vh);
-            const size = Math.floor(min * 0.7);
-            return { width: size, height: size };
-          },
-          aspectRatio: 1.0,
-        };
-        const onDecode = (decoded) => {
-          if (stoppedRef.current) return;
-          stoppedRef.current = true;
-          safeStop(scanner);
-          setStatus("stopped");
-          onDecodedRef.current?.(decoded);
-        };
-        // Prefer rear camera on phones; fall back to whatever is available.
+      // Camera requires a secure context on all mobile browsers.
+      if (!window.isSecureContext) { fail(null); return; }
+      if (!navigator.mediaDevices?.getUserMedia) { fail({ name: "NotFoundError" }); return; }
+
+      const config = {
+        fps: 10,
+        qrbox: (vw, vh) => {
+          const side = Math.floor(Math.min(vw, vh) * 0.72);
+          return { width: side, height: side };
+        },
+        aspectRatio: 1.0,
+      };
+      const onDecode = (decoded) => {
+        if (stoppedRef.current) return;
+        stoppedRef.current = true;
+        safeStop(scanner);
+        setStatus("stopped");
+        onDecodedRef.current?.(decoded);
+      };
+
+      // Try cameras in order — stop on permission error (retrying won't help).
+      const attempts = [
+        { facingMode: { exact: "environment" } },  // exact rear
+        { facingMode: "environment" },              // preferred rear
+        { facingMode: "user" },                     // front camera
+      ];
+
+      for (const constraint of attempts) {
+        if (cancelled) return;
         try {
-          await scanner.start(
-            { facingMode: { exact: "environment" } },
-            config, onDecode, () => {},
-          );
-        } catch {
-          if (cancelled) return;
-          await scanner.start(
-            { facingMode: "environment" },
-            config, onDecode, () => {},
-          );
+          await scanner.start(constraint, config, onDecode, () => {});
+          if (!cancelled) setStatus("running");
+          return;
+        } catch (e) {
+          if (e?.name === "NotAllowedError" || e?.name === "PermissionDeniedError") {
+            fail(e); return;
+          }
+          // Otherwise try next constraint
         }
+      }
+
+      // Last resort: enumerate cameras and use the first one found.
+      if (cancelled) return;
+      try {
+        const cameras = await Html5Qrcode.getCameras();
+        if (!cameras?.length) throw new Error("No cameras found");
+        await scanner.start(cameras[0].id, config, onDecode, () => {});
         if (!cancelled) setStatus("running");
       } catch (e) {
-        if (cancelled) return;
-        const msg = (e && e.message) || "Camera unavailable";
-        setStatus("error");
-        setErrMsg(msg);
-        onErrorRef.current?.(msg);
+        fail(e);
       }
     };
-    start();
 
+    start();
     return () => {
       cancelled = true;
       stoppedRef.current = true;
       const s = scannerRef.current;
       if (s) safeStop(s);
     };
-  }, []); // run once — callbacks read from refs
+  }, [retryKey]); // retryKey allows the volunteer to retry without a page reload
 
   return (
     <div className="glass" style={{ padding: 12, borderRadius: "var(--r-md)" }}>
       <div
         id={elementId}
         style={{
-          width: "100%",
-          maxWidth: 480,
-          margin: "0 auto",
-          aspectRatio: "1 / 1",
-          borderRadius: 10,
-          overflow: "hidden",
+          width: "100%", maxWidth: 480,
+          margin: "0 auto", aspectRatio: "1 / 1",
+          borderRadius: 10, overflow: "hidden",
           background: "rgba(0,0,0,0.6)",
+          display: status === "error" ? "none" : "block",
         }}
       />
-      <div className="mono" style={{
-        textAlign: "center", marginTop: 10,
-        fontSize: 11, letterSpacing: "0.18em",
-        color: status === "error" ? "var(--amber)" : "var(--ink-mute)",
-      }}>
-        {status === "starting" && "STARTING CAMERA…"}
-        {status === "running" && "POINT AT STUDENT QR"}
-        {status === "stopped" && "DECODED"}
-        {status === "error" && (errMsg || "CAMERA UNAVAILABLE")}
-      </div>
+      {status === "error" ? (
+        <div style={{ padding: "20px 8px", textAlign: "center" }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>📷</div>
+          <div style={{ fontSize: 13, color: "var(--amber)", marginBottom: 16, lineHeight: 1.5 }}>
+            {errMsg}
+          </div>
+          <button
+            onClick={() => setRetryKey((k) => k + 1)}
+            style={{
+              padding: "9px 20px", borderRadius: "var(--r-md)",
+              background: "rgba(127,119,221,0.18)", border: "1px solid var(--violet-dim)",
+              color: "var(--ink)", fontSize: 13, cursor: "pointer", letterSpacing: "0.05em",
+            }}
+          >
+            Retry Camera
+          </button>
+        </div>
+      ) : (
+        <div className="mono" style={{
+          textAlign: "center", marginTop: 10,
+          fontSize: 11, letterSpacing: "0.18em", color: "var(--ink-mute)",
+        }}>
+          {status === "starting" && "STARTING CAMERA…"}
+          {status === "running" && "POINT AT STUDENT QR"}
+          {status === "stopped" && "DECODED"}
+        </div>
+      )}
     </div>
   );
 }

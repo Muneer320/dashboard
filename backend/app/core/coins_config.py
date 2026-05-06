@@ -89,7 +89,7 @@ CREATOR_COLLAB_CONFIRM_HOURS = 24
 STICKER_CODE_TTL_MINUTES = 30
 
 # UGC verification SLA (minutes)
-VERIFICATION_SLA_EVENT_DAY  = 120   # 2 hours
+VERIFICATION_SLA_EVENT_DAY  = 1440  # 24 hours
 VERIFICATION_SLA_PRE_EVENT  = 720   # 12 hours
 
 # Campaign window — set actual dates before go-live

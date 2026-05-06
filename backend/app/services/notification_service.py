@@ -32,6 +32,14 @@ NOTIFICATION_TEMPLATES: dict[str, dict[str, str]] = {
         "title": "Post needs attention",
         "body": "Your {source} post was rejected: {reason}. Please fix and resubmit.",
     },
+    "ugc_reverification_required": {
+        "title": "Re-verification needed",
+        "body": (
+            "Your previously verified {source} post failed re-verification: "
+            "{reason}. {coins} coins have been reversed; restore them by "
+            "re-submitting before {deadline}."
+        ),
+    },
     "post_deleted_reversal": {
         "title": "Post removed — action needed",
         "body": (

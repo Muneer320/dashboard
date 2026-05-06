@@ -31,6 +31,7 @@ from app.core.coins_config import (
     ENGAGEMENT_COMMENT_COINS,
     ENGAGEMENT_LIKE_COINS,
     ENGAGEMENT_REPOST_COINS,
+    TIER_THRESHOLDS,
     VERIFICATION_SLA_EVENT_DAY,
 )
 from app.db.supabase_client import first_row, get_supabase, rows
@@ -38,12 +39,33 @@ from app.models.admin import Admin
 from app.services.coins_service import (
     credit_coins,
     get_live_leaderboard,
+    post_reversal,
     take_leaderboard_snapshot,
     write_audit,
 )
 from app.services.notification_service import notify_student
 
 router = APIRouter()
+
+
+async def _hydrate_student_names(
+    supabase: AsyncClient, entries: list[dict[str, Any]]
+) -> None:
+    """Attach `student_name` and `student_username` to each row in place."""
+    ids = list({e["student_id"] for e in entries if e.get("student_id")})
+    if not ids:
+        return
+    users_resp = await (
+        supabase.table("users")
+        .select("id, name, username")
+        .in_("id", ids)
+        .execute()
+    )
+    name_map = {u["id"]: u for u in rows(users_resp)}
+    for e in entries:
+        u = name_map.get(e.get("student_id")) or {}
+        e["student_name"] = u.get("name")
+        e["student_username"] = u.get("username")
 
 
 # ============================================================
@@ -90,7 +112,56 @@ async def get_ugc_queue(
         entry["coins_if_approved"] = COIN_VALUES.get(entry["source_type"], 0)
         if entry.get("power_hour_eligible"):
             entry["coins_if_approved"] *= 2
+    await _hydrate_student_names(supabase, queue)
     return queue
+
+
+# ============================================================
+# RE-VERIFICATION QUEUE
+# ============================================================
+
+@router.get("/ugc/reverification-queue")
+async def get_reverification_queue(
+    admin: Admin = Depends(get_prm_volunteer_or_above),
+    supabase: AsyncClient = Depends(get_supabase),
+    hours: int = Query(24, ge=1, le=168),
+) -> dict[str, Any]:
+    """
+    Returns:
+      - needs_review: submissions the daily 24h job flagged for re-check.
+      - verified: previously approved submissions, sorted oldest-verified
+        first so admins can see what the next 24h cycle will pick up.
+    """
+    needs_resp = await (
+        supabase.table("ugc_submissions")
+        .select("*")
+        .eq("status", "needs_review")
+        .order("verified_at", desc=False)
+        .execute()
+    )
+    needs_review = rows(needs_resp)
+
+    # Only verified rows older than the requested window appear in the re-verify tab.
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    verified_resp = await (
+        supabase.table("ugc_submissions")
+        .select("*")
+        .eq("status", "verified")
+        .lt("verified_at", cutoff)
+        .order("verified_at", desc=False)
+        .limit(200)
+        .execute()
+    )
+    verified = rows(verified_resp)
+
+    for entry in needs_review + verified:
+        entry["coins_if_approved"] = COIN_VALUES.get(entry["source_type"], 0)
+        if entry.get("power_hour_eligible"):
+            entry["coins_if_approved"] *= 2
+    await _hydrate_student_names(supabase, needs_review + verified)
+
+    return {"needs_review": needs_review, "verified": verified}
+
 
 
 class UGCApproveIn(BaseModel):
@@ -113,10 +184,56 @@ async def approve_ugc(
     submission = first_row(sub_resp)
     if submission is None:
         raise HTTPException(status_code=404, detail="Submission not found")
-    if submission["status"] in {"verified", "rejected"}:
+    if submission["status"] == "rejected":
         raise HTTPException(
             status_code=400, detail=f"Already {submission['status']}"
         )
+
+    # Re-approval after the 24h re-check job flagged the row: just flip back
+    # to verified. The original ledger row is still there, so no fresh credit.
+    if submission["status"] == "needs_review":
+        await (
+            supabase.table("ugc_submissions")
+            .update({
+                "status": "verified",
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+                "verified_by": admin.uid,
+            })
+            .eq("id", submission["id"])
+            .execute()
+        )
+        await write_audit(
+            supabase,
+            actor_id=admin.uid,
+            actor_role=admin.role.value,
+            action="REVERIFICATION_PASSED",
+            entity_type="ugc_submissions",
+            entity_id=submission["id"],
+        )
+        return {"reverification": True, "status": "verified"}
+
+    # Accept on a still-verified row from the re-verification view: bump the
+    # verified_at timestamp so it sorts to the bottom of the "oldest first"
+    # list and write an audit trail. No ledger change.
+    if submission["status"] == "verified":
+        await (
+            supabase.table("ugc_submissions")
+            .update({
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+                "verified_by": admin.uid,
+            })
+            .eq("id", submission["id"])
+            .execute()
+        )
+        await write_audit(
+            supabase,
+            actor_id=admin.uid,
+            actor_role=admin.role.value,
+            action="REVERIFICATION_CONFIRMED",
+            entity_type="ugc_submissions",
+            entity_id=submission["id"],
+        )
+        return {"reverification": True, "status": "verified", "confirmed": True}
 
     base_coins = COIN_VALUES.get(submission["source_type"], 0)
     if base_coins == 0:
@@ -249,10 +366,45 @@ async def reject_ugc(
     submission = first_row(sub_resp)
     if submission is None:
         raise HTTPException(status_code=404, detail="Submission not found")
-    if submission["status"] in {"verified", "rejected"}:
+    if submission["status"] == "rejected":
         raise HTTPException(
             status_code=400, detail=f"Already {submission['status']}"
         )
+
+    # Direct rejection of an already-verified row from the re-verification
+    # view follows the same path as a needs_review rejection: post a 24h
+    # reversal and notify the student to re-submit.
+    is_reverification = submission["status"] in {"needs_review", "verified"}
+
+    # On re-verification reject, post a 24h-grace reversal on the original
+    # ledger entry so the user can restore by re-submitting in time.
+    reversal_entry = None
+    if is_reverification:
+        ledger_resp = await (
+            supabase.table("coins_ledger")
+            .select("id, coins, source_type")
+            .eq("student_id", submission["student_id"])
+            .eq("reference_url", submission["url"])
+            .eq("source_type", submission["source_type"])
+            .eq("status", "verified")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        original_ledger = first_row(ledger_resp)
+        if original_ledger is not None:
+            try:
+                reversal_entry = await post_reversal(
+                    supabase,
+                    original_entry_id=original_ledger["id"],
+                    student_id=submission["student_id"],
+                    reason=f"reverification_failed: {payload.reason}",
+                    grace_hours=24,
+                    actor_id=admin.uid,
+                    actor_role=admin.role.value,
+                )
+            except ValueError:
+                reversal_entry = None
 
     await (
         supabase.table("ugc_submissions")
@@ -270,17 +422,43 @@ async def reject_ugc(
         supabase,
         actor_id=admin.uid,
         actor_role=admin.role.value,
-        action="REJECT_UGC",
+        action="REJECT_UGC_REVERIFICATION" if is_reverification else "REJECT_UGC",
         entity_type="ugc_submissions",
         entity_id=submission["id"],
         reason=payload.reason,
     )
-    await notify_student(
-        submission["student_id"],
-        "ugc_rejected",
-        {"source": submission["source_type"], "reason": payload.reason},
-    )
-    return {"status": "rejected"}
+
+    if is_reverification:
+        deadline_iso = (reversal_entry or {}).get("grace_deadline") or (
+            datetime.now(timezone.utc) + timedelta(hours=24)
+        ).isoformat()
+        try:
+            deadline_display = datetime.fromisoformat(
+                deadline_iso.replace("Z", "+00:00")
+            ).strftime("%d %b, %H:%M UTC")
+        except Exception:
+            deadline_display = deadline_iso
+        await notify_student(
+            submission["student_id"],
+            "ugc_reverification_required",
+            {
+                "source": submission["source_type"],
+                "reason": payload.reason,
+                "coins": abs((reversal_entry or {}).get("coins") or 0),
+                "deadline": deadline_display,
+            },
+        )
+    else:
+        await notify_student(
+            submission["student_id"],
+            "ugc_rejected",
+            {"source": submission["source_type"], "reason": payload.reason},
+        )
+    return {
+        "status": "rejected",
+        "reversal_posted": reversal_entry is not None,
+        "is_reverification": is_reverification,
+    }
 
 
 # ============================================================
@@ -382,10 +560,51 @@ async def snapshot_take(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # Deduct coins from every student who earned merch in this snapshot.
+    await _deduct_merch_coins(supabase, snapshot)
+
     # Trigger digital reward issuance for missed-cutoff students.
-    # Implemented inline here since Step 13 owns the surprise-drop side.
     await _issue_digital_safety_net(supabase, snapshot)
     return snapshot
+
+
+async def _deduct_merch_coins(
+    supabase: AsyncClient, snapshot: dict[str, Any]
+) -> None:
+    """Write a negative REDEMPTION ledger entry for each student who won merch
+    in this snapshot. Skips any student who already has a REDEMPTION entry for
+    this snapshot (idempotent against duplicate calls)."""
+    tier = snapshot["merch_eligibility"]["tier"]
+    cost = TIER_THRESHOLDS.get(tier, 0)
+    if cost <= 0:
+        return
+
+    eligible_ids: list[str] = snapshot["merch_eligibility"]["eligible"]
+    snapshot_id = snapshot["id"]
+
+    for student_id in eligible_ids:
+        # Idempotency check — don't double-deduct if snapshot_take is ever
+        # retried (shouldn't happen but the ledger is append-only so be safe).
+        existing = await (
+            supabase.table("coins_ledger")
+            .select("id")
+            .eq("student_id", student_id)
+            .eq("source_type", "REDEMPTION")
+            .filter("metadata->>snapshot_id", "eq", snapshot_id)
+            .limit(1)
+            .execute()
+        )
+        if rows(existing):
+            continue
+
+        await credit_coins(
+            supabase,
+            student_id=student_id,
+            source_type="REDEMPTION",
+            coins=-cost,
+            verified_by=None,
+            metadata={"tier": tier, "snapshot_id": snapshot_id},
+        )
 
 
 async def _issue_digital_safety_net(
@@ -752,6 +971,57 @@ async def engagement_submit(
 # ============================================================
 # AUDIT LOG  ops_lead / admin only
 # ============================================================
+
+# ============================================================
+# COINS OVERVIEW  admin / ops_lead / prm_lead
+# ============================================================
+
+@router.get("/coins/students")
+async def coins_students_overview(
+    admin: Admin = Depends(get_prm_lead_or_above),
+    supabase: AsyncClient = Depends(get_supabase),
+    search: str | None = Query(None),
+) -> list[dict[str, Any]]:
+    """
+    Returns every student who has at least one ledger entry, with their
+    live coin balance, distinct source count, and any reward redemptions.
+    Optionally filtered by name/username substring (case-insensitive).
+    """
+    leaderboard = await get_live_leaderboard(supabase, limit=None)
+
+    redemptions_resp = await (
+        supabase.table("reward_redemptions")
+        .select("student_id, tier, status, redemption_code, expires_at")
+        .execute()
+    )
+    redemptions_by_student: dict[str, list[dict]] = {}
+    for r in rows(redemptions_resp):
+        sid = r["student_id"]
+        redemptions_by_student.setdefault(sid, []).append(r)
+
+    entries = [
+        {
+            "student_id": e["student_id"],
+            "coins": e["coins"],
+            "distinct_sources": e["distinct_sources"],
+            "last_entry": e.get("last_entry"),
+            "redemptions": redemptions_by_student.get(e["student_id"], []),
+        }
+        for e in leaderboard
+    ]
+
+    await _hydrate_student_names(supabase, entries)
+
+    if search:
+        q = search.lower()
+        entries = [
+            e for e in entries
+            if q in (e.get("student_name") or "").lower()
+            or q in (e.get("student_username") or "").lower()
+        ]
+
+    return entries
+
 
 @router.get("/audit-log")
 async def audit_log(
