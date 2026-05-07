@@ -8,7 +8,7 @@ from app.models.admin import Admin
 from app.models.user import User
 from app.schemas.meals import MealSlot
 from app.schemas.user import MyEventResponse, UserEventsResponse, UserProfileUpdate, UserResponse
-from app.services.event_service import list_events
+from app.services.event_service import get_event_registration_counts, list_events
 from app.services.qr_service import scan_food
 from app.services.user_service import (
     get_user_by_id,
@@ -46,6 +46,7 @@ async def get_my_events(
     # Fetch all events and filter to those the user is part of
     all_events = await list_events(supabase)
     event_map = {str(ev.id): ev for ev in all_events}
+    counts = await get_event_registration_counts(supabase, list(user_events.keys()))
 
     results = []
     for event_id, user_status in user_events.items():
@@ -57,7 +58,7 @@ async def get_my_events(
             name=ev.name,
             description=ev.description or "",
             venue=ev.venue or [],
-            participants_count=len(ev.participants or {}),
+            participants_count=counts.get(event_id, 0),
             user_status=user_status if isinstance(user_status, dict) else {},
         ))
     return results

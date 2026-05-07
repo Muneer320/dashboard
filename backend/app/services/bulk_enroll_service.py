@@ -6,8 +6,17 @@ target event_id and:
   - Creates a ``users`` row for every email we haven't seen before (with a
     fresh 12-char alphanumeric password, hashed into ``password_hash``), and
     enrols them in the event.
-  - Appends the event to ``users.events`` for users whose email already
-    exists, unless they're already registered for this event (duplicate).
+  - If a user already exists in ``users`` but is NOT yet registered for the
+    target event, append the missing event entry to their ``events`` map using
+    a targeted column update. This preserves multi-event registrations without
+    rewriting unrelated profile fields.
+  - If the user is already registered for the target event, treat the row as a
+    duplicate and skip it.
+  - For teams referenced in the file: NEW teams are inserted with the new
+    users as members; EXISTING teams have new user IDs *appended* to the
+    member_ids array — the upsert is non-destructive, never removing any
+    existing member. Stale memberships (e.g. someone who left a team) need
+    to be cleaned up separately.
   - Returns the admin a summary + the list of newly-created credentials so
     they can send login details to the participants.
 
@@ -419,14 +428,15 @@ async def bulk_enroll(
             events_map = dict(user.events or {})
 
             if event_uuid in events_map:
-                # Already registered for this event — skip.
+                # Already registered for this event — keep the current row
+                # untouched so same-event re-uploads remain safe and idempotent.
                 duplicates_detail.append({"row": row_idx, "email": email})
                 continue
 
-            # User exists but not enrolled in this event — add the event.
-            _entry = _default_event_entry(team_uuid=team_uuid)
-            events_map[event_uuid] = _entry
-
+            # Existing user, new event — this is the legitimate multi-event case
+            # that the admin uploader must support. Update only the events JSON;
+            # other profile fields stay as-is.
+            events_map[event_uuid] = _default_event_entry(team_uuid=team_uuid)
             existing_user_updates.append({
                 "id": str(user.id),
                 "email": email,
@@ -477,25 +487,16 @@ async def bulk_enroll(
                     "reason": f"New-user batch insert failed: {exc}",
                 })
 
-    # ── Update existing users' events map (bulk upsert) ──────────────────────
+    # ── Update existing users' events map ───────────────────────────────────
     #
-    # Previously this looped one UPDATE per user — for a roster where 200
-    # rows were repeat participants (Day 2, multi-day events) that's 200
-    # sequential round-trips to Supabase, ~10-16s of pure network wait.
-    #
-    # We collapse it into a single UPSERT per chunk. We have to include the
-    # full row payload (Postgres UPSERT replaces, doesn't merge) which is
-    # why we carry name/username/password_hash/details/etc. through from the
-    # existing_row we already fetched. on_conflict="id" makes this idempotent.
+    # Only the ``events`` JSON column is updated. This restores the intended
+    # "same user can join multiple events" behavior without resurrecting the old
+    # full-row upsert that could clobber unrelated state.
     if existing_user_updates:
-        # Build full upsert payloads from the rows we already have in memory
-        # (existing_map). This avoids a second SELECT round-trip.
-        upsert_payloads: list[dict] = []
-        id_to_existing = {str(r["id"]): r for r in existing_map.values()}
-        for upd in existing_user_updates:
-            base = id_to_existing.get(upd["id"])
-            if base is None:
-                # Shouldn't happen, but fall back to a column-scoped update
+        sem = asyncio.Semaphore(20)
+
+        async def _update_existing_user(upd: dict[str, Any]) -> None:
+            async with sem:
                 try:
                     await (
                         supabase.table("users")
@@ -507,74 +508,122 @@ async def bulk_enroll(
                     errors_detail.append({
                         "row": -1,
                         "email": upd["email"],
-                        "reason": f"Failed to update existing user: {exc}",
+                        "reason": f"Failed to update existing user event map: {exc}",
                     })
-                continue
 
-            # Replace only the events map; everything else stays as-is so the
-            # UPSERT is a no-op for those columns.
-            upsert_payloads.append({
-                **base,
-                "events": upd["events"],
-            })
+        await asyncio.gather(*[_update_existing_user(upd) for upd in existing_user_updates])
 
-        for i in range(0, len(upsert_payloads), 500):
-            batch = upsert_payloads[i : i + 500]
-            try:
-                await supabase.table("users").upsert(
-                    batch, on_conflict="id"
-                ).execute()
-            except Exception as exc:
-                # If the bulk path fails (column type drift, schema mismatch),
-                # fall back to per-row updates for just this batch so a single
-                # bad row doesn't kill 499 good ones.
-                for upd_row in batch:
-                    try:
-                        await (
-                            supabase.table("users")
-                            .update({"events": upd_row["events"]})
-                            .eq("id", upd_row["id"])
-                            .execute()
-                        )
-                    except Exception as inner_exc:
-                        errors_detail.append({
-                            "row": -1,
-                            "email": upd_row.get("username", "?"),
-                            "reason": f"Failed to update existing user: {inner_exc}",
-                        })
-                # Record the bulk failure too so the admin sees the bigger error
-                errors_detail.append({
-                    "row": -1,
-                    "email": "existing-users-upsert",
-                    "reason": f"Bulk upsert failed, fell back to per-row: {exc}",
-                })
-
-    # ── Upsert teams with member_ids now that all user IDs are known ──────────
+    # ── Teams: non-destructive create/append ─────────────────────────────────
+    #
+    # Important: we MUST NOT use bulk upsert with on_conflict="id" the way
+    # this used to. That replaces the entire row, so when an existing team's
+    # roster shrinks in the new CSV (because someone left on Unstop), the
+    # upsert silently destroys the team's previous member_ids — that's the
+    # exact bug we're fixing.
+    #
+    # Instead:
+    #   1. Read the current member_ids of any team UUIDs that already exist.
+    #   2. For existing teams: APPEND new user IDs to their current member_ids
+    #      (dedup-preserving), and only write if there's something to add.
+    #   3. For brand-new teams: insert with the new users as members.
+    #
+    # We never remove anyone from a team here. Stale team membership (from
+    # users who left on Unstop) needs a separate cleanup pass — out of scope
+    # for the bulk upload because we have no ground truth for "who left."
     if teams_to_upsert:
-        # Build email→user_id map from new payloads + existing users
+        # email→user_id map from both newly-created users and existing users
+        # who were legitimately added to this event during this upload.
         email_to_id: dict[str, str] = {}
         for p in new_user_payloads:
             email_to_id[p["username"]] = p["id"]
-        for email_key, existing_row in existing_map.items():
-            email_to_id[email_key] = str(existing_row["id"])
+        for upd in existing_user_updates:
+            email_to_id[upd["email"]] = upd["id"]
 
-        teams_list: list[dict] = []
+        team_uuids = list(teams_to_upsert.keys())
+
+        # Fetch current state of any teams already in DB.
+        existing_teams: dict[str, dict] = {}
+        if team_uuids:
+            for i in range(0, len(team_uuids), 200):
+                chunk = team_uuids[i : i + 200]
+                try:
+                    resp = await (
+                        supabase.table("teams")
+                        .select("id, member_ids")
+                        .in_("id", chunk)
+                        .execute()
+                    )
+                    for r in rows(resp):
+                        existing_teams[str(r["id"])] = r
+                except Exception as exc:
+                    errors_detail.append({
+                        "row": -1,
+                        "email": "teams-prefetch",
+                        "reason": f"Could not prefetch existing teams: {exc}",
+                    })
+
+        new_team_inserts: list[dict] = []
+        existing_team_appends: list[tuple[str, list[str]]] = []  # (team_id, merged_member_ids)
+
         for t_uuid, t_payload in teams_to_upsert.items():
             member_emails = team_email_members.get(t_uuid, [])
-            member_ids = [email_to_id[e] for e in member_emails if e in email_to_id]
-            teams_list.append({**t_payload, "member_ids": member_ids})
+            new_member_ids = [email_to_id[e] for e in member_emails if e in email_to_id]
 
-        for i in range(0, len(teams_list), 200):
+            existing = existing_teams.get(t_uuid)
+            if existing is None:
+                # Brand-new team — only meaningful if it has at least one new
+                # user. (A team with no new members and no existing row would
+                # be an empty stub, which we skip.)
+                if not new_member_ids:
+                    continue
+                new_team_inserts.append({**t_payload, "member_ids": new_member_ids})
+            else:
+                # Team exists. Merge new IDs into current member_ids without
+                # removing anyone. dict.fromkeys preserves order while deduping.
+                current_members = list(existing.get("member_ids") or [])
+                merged = list(dict.fromkeys(current_members + new_member_ids))
+                if merged == current_members:
+                    continue   # nothing to add — leave the team untouched
+                existing_team_appends.append((t_uuid, merged))
+
+        # Insert brand-new teams — safe to bulk-insert; no conflict possible.
+        for i in range(0, len(new_team_inserts), 200):
             try:
-                await supabase.table("teams").upsert(
-                    teams_list[i : i + 200], on_conflict="id"
+                await supabase.table("teams").insert(
+                    new_team_inserts[i : i + 200]
                 ).execute()
             except Exception as exc:
                 errors_detail.append({
                     "row": -1,
-                    "email": "teams-upsert",
-                    "reason": f"Team batch upsert failed: {exc}",
+                    "email": "teams-insert",
+                    "reason": f"New team batch insert failed: {exc}",
                 })
+
+        # Append-only updates for existing teams. We can't bulk-set different
+        # member_ids per row in one Supabase REST call, so fan out under a
+        # semaphore to keep the connection pool sane.
+        if existing_team_appends:
+            sem = asyncio.Semaphore(20)
+
+            async def _append_one(team_id: str, merged_members: list[str]) -> None:
+                async with sem:
+                    try:
+                        await (
+                            supabase.table("teams")
+                            .update({"member_ids": merged_members})
+                            .eq("id", team_id)
+                            .execute()
+                        )
+                    except Exception as exc:
+                        errors_detail.append({
+                            "row": -1,
+                            "email": f"team:{team_id}",
+                            "reason": f"Failed to append to team: {exc}",
+                        })
+
+            await asyncio.gather(*[
+                _append_one(tid, members) for tid, members in existing_team_appends
+            ])
 
     return {
         "event": event,

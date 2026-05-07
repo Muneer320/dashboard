@@ -1,4 +1,10 @@
-"""Supabase-backed event service."""
+"""Supabase-backed event service.
+
+Core event metadata lives on the ``events`` table, while registration state
+now lives in ``users.events``. The old ``events.participants`` JSON column is
+gone from the live database, so participant reads and writes must be derived
+from user rows.
+"""
 
 from __future__ import annotations
 
@@ -12,11 +18,98 @@ from app.db.supabase_client import first_row, rows
 from app.models.event import Event
 from app.models.user import User
 
+_PAGE_SIZE = 1000
+_EVENT_LIST_COLS = (
+    "id,name,description,start_date,end_date,venue,judges,category,"
+    "rounds,schedule,rules,community_link,max_participants,meals_count,"
+    "registration_deadline,questions,created_at,updated_at"
+)
+
+
+async def auto_lock_expired_phases(supabase: AsyncClient, event: Event) -> None:
+    """
+    Lazily lock any active phases whose end_time has passed.
+
+    Sets is_locked=True + is_active=False on each expired phase and writes
+    the updated rounds dict back to the DB.  Designed to be called as a
+    FastAPI BackgroundTask so it never blocks the response.
+    """
+    rounds = dict(event.rounds or {})
+    now = datetime.now(timezone.utc)
+    updated = False
+
+    for key, phase in rounds.items():
+        if not isinstance(phase, dict):
+            continue
+        # Skip phases that are already locked or not active
+        if phase.get("is_locked") or not phase.get("is_active"):
+            continue
+        end_time_str = phase.get("end_time")
+        if not end_time_str:
+            continue
+        try:
+            end_time = datetime.fromisoformat(end_time_str)
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=timezone.utc)
+            if now > end_time:
+                phase["is_locked"] = True
+                phase["is_active"] = False
+                rounds[key] = phase
+                updated = True
+        except ValueError:
+            continue
+
+    if updated:
+        await (
+            supabase.table("events")
+            .update({"rounds": rounds})
+            .eq("id", str(event.id))
+            .execute()
+        )
+
+
+async def _fetch_all_user_event_rows(supabase: AsyncClient) -> list[dict]:
+    """Fetch just enough user data to derive event registrations."""
+    all_rows: list[dict] = []
+    offset = 0
+    while True:
+        resp = await (
+            supabase.table("users")
+            .select("id,username,name,events")
+            .range(offset, offset + _PAGE_SIZE - 1)
+            .execute()
+        )
+        page = rows(resp)
+        all_rows.extend(page)
+        if len(page) < _PAGE_SIZE:
+            break
+        offset += _PAGE_SIZE
+    return all_rows
+
+
+async def get_event_registration_counts(
+    supabase: AsyncClient,
+    event_ids: list[str] | set[str] | tuple[str, ...] | None = None,
+) -> dict[str, int]:
+    """Count registrations per event from ``users.events``."""
+    allowed = {str(event_id) for event_id in event_ids} if event_ids is not None else None
+    counts: dict[str, int] = {}
+    for row in await _fetch_all_user_event_rows(supabase):
+        events_map = row.get("events") or {}
+        if not isinstance(events_map, dict):
+            continue
+        for event_id in events_map.keys():
+            event_key = str(event_id)
+            if allowed is not None and event_key not in allowed:
+                continue
+            counts[event_key] = counts.get(event_key, 0) + 1
+    return counts
+
 
 async def list_events(supabase: AsyncClient) -> list[Event]:
     resp = await (
         supabase.table("events")
-        .select("*")
+        .select(_EVENT_LIST_COLS)
         .order("created_at", desc=True)
         .execute()
     )
@@ -28,11 +121,13 @@ async def get_event(supabase: AsyncClient, event_id: str) -> Event:
         event_uuid = uuid.UUID(event_id)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid event id") from exc
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid event id",
+        ) from exc
 
     resp = await (
         supabase.table("events")
-        .select("*")
+        .select(_EVENT_LIST_COLS)
         .eq("id", str(event_uuid))
         .limit(1)
         .execute()
@@ -40,68 +135,54 @@ async def get_event(supabase: AsyncClient, event_id: str) -> Event:
     row = first_row(resp)
     if row is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found",
+        )
     return Event.from_row(row)
 
 
 async def register_for_event(
-    supabase: AsyncClient, user: User, event: Event
+    supabase: AsyncClient,
+    user: User,
+    event: Event,
 ) -> None:
-    """
-    Register `user` for `event`. Writes to TWO tables (events.participants,
-    users.events) — without SQL transactions those two writes are independent.
-    We persist the event row first because that's the one we checked capacity
-    against; if the user row write fails, a stale entry in event.participants
-    is recoverable, the other way around leaks quota.
-    """
-    participants = event.participants or {}
+    """Register ``user`` for ``event`` using ``users.events`` as source of truth."""
     user_events = user.events or {}
     event_key = str(event.id)
     user_key = str(user.id)
 
     if event.registration_deadline and datetime.now(timezone.utc) > event.registration_deadline:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Registration deadline passed")
-
-    if user_key in participants:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Already registered")
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registration deadline passed",
+        )
 
-    if len(participants) >= event.max_participants:
+    if event_key in user_events:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Event is at capacity")
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Already registered",
+        )
+
+    counts = await get_event_registration_counts(supabase, [event_key])
+    if counts.get(event_key, 0) >= event.max_participants:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Event is at capacity",
+        )
 
     now_iso = datetime.now(timezone.utc).isoformat()
-
-    participants[user_key] = {
-        "registeredAt": now_iso,
-        "currentPhase": 1,
-        "status": "active",
-        "attendance": {},
-        "submission": {},
-    }
     user_events[event_key] = {
-        "isAttending": False,           # flipped to True at the event gate scanner
+        "registeredAt": now_iso,
+        "isAttending": False,
         "phase": 1,
-        "status": "active",             # active | completed | eliminated
-        "restricted": False,            # set True to ban from further participation
-        # submission: null = not submitted; object = submitted
-        # Shape: { repoLink: str, deployLink: str, submittedAt: iso | null }
+        "status": "active",
+        "restricted": False,
         "submission": None,
-        "teamId": None,                 # assigned when the user joins a team for this event
+        "teamId": None,
         "score": 0,
         "rank": None,
     }
 
-    # Write the event row first (source of truth for capacity).
-    await (
-        supabase.table("events")
-        .update({"participants": participants})
-        .eq("id", event_key)
-        .execute()
-    )
-
-    # Then the user row.
     await (
         supabase.table("users")
         .update({"events": user_events})
@@ -109,17 +190,7 @@ async def register_for_event(
         .execute()
     )
 
-    event.participants = participants
     user.events = user_events
-
-
-def get_event_participants_payload(event: Event) -> dict:
-    participants = event.participants or {}
-    return {
-        "event_id": str(event.id),
-        "participants_count": len(participants),
-        "participants": participants,
-    }
 
 
 async def set_event_phase_state(
@@ -135,7 +206,9 @@ async def set_event_phase_state(
     round_data = rounds.get(phase_key)
     if round_data is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Phase not found")
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Phase not found",
+        )
 
     if is_active is not None:
         round_data["is_active"] = is_active
@@ -154,6 +227,5 @@ async def set_event_phase_state(
     if row is not None:
         return Event.from_row(row)
 
-    # Fallback: return the locally-mutated event if the SDK didn't echo the row
     event.rounds = rounds
     return event

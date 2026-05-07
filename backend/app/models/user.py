@@ -53,7 +53,7 @@ class User:
         return cls(
             id=coerce_uuid(row["id"]),
             username=row["username"],
-            password_hash=row["password_hash"],
+            password_hash=row.get("password_hash", ""),
             name=row["name"],
             unstop_id=row.get("unstop_id"),
             is_attending=bool(row.get("is_attending", False)),

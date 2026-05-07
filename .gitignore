@@ -49,3 +49,4 @@ processor/piyush/train/
 processor/piyush/test_manifest.json
 processor/piyush/verification_report.json
 processor/testing/dataset/
+backup/

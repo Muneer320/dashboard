@@ -7,11 +7,13 @@ from pydantic import BaseModel
 
 class StatsResponse(BaseModel):
     totalRegistered: int
+    totalTeams: int
     attending: int
     restricted: int
     foodClaimed: int
     entryScanned: int
-    submitted: int
+    submitted: int         # unique teams (or solo users) that submitted
+    submittedTeams: int    # alias same as submitted; keeps naming consistent
     eventCount: int
 
 
@@ -24,8 +26,10 @@ class EventStatsItem(BaseModel):
     venue: list[str]
     maxParticipants: int
     registered: int
+    teams: int             # unique teams registered (0 for solo events)
     attended: int
-    submitted: int
+    submitted: int         # unique teams (or solo users) that submitted
+    submittedTeams: int    # same value, explicit label for UI
     restricted: int
     communityLink: Optional[str] = None
 
@@ -77,7 +81,9 @@ class MyEventItem(BaseModel):
     date: Optional[str]
     maxParticipants: int
     registered: int
+    teams: int
     submitted: int
+    submittedTeams: int
     attended: int
     participants: list[MyEventParticipant]
     communityLink: Optional[str] = None
@@ -116,8 +122,10 @@ class EventDetailResponse(BaseModel):
     venue: list[str]
     maxParticipants: int
     registered: int
+    teams: int             # unique teams registered for this event
     attended: int
-    submitted: int
+    submitted: int         # unique teams (or solo users) that submitted
+    submittedTeams: int    # same value, explicit label
     restricted: int
     communityLink: Optional[str] = None
     rules: Optional[str] = None

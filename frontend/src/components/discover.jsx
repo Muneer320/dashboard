@@ -38,7 +38,7 @@ const _BANNER_MAP = {
   "ai film conclave":
     "https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/AI_film_conclave_s789t6.png",
   "ship to scale":
-    "https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png",
+    "https://res.cloudinary.com/dt1hemzmb/image/upload/f_auto,q_auto/1000126955_jjytt0",
   "tech play zone":
     "https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Tech_play_zone_emyf1q.png",
 };
@@ -113,6 +113,8 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
       "https://unstop.com/hackathons/synapse-the-kaggle-competition-ascent-scaler-school-of-technology-bengaluru-karnataka-1669636",
     "override.exe":
       "https://unstop.com/hackathons/overrideexe-ascent-scaler-school-of-technology-bengaluru-karnataka-1669645",
+    "promptwars: ai build sprint":
+      "https://hack2skill.com/event/promptwars-x-ascent",
   };
 
   const handleCardClick = (e) => {
@@ -121,6 +123,7 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
       navigate(`/event-detail/${ev.id}`);
     } else {
       const nameKey = (ev.name || "").toLowerCase().trim();
+      console.log(nameKey);
       const url = unstopUrls[nameKey];
       if (url) {
         window.open(url, "_blank");
@@ -249,15 +252,6 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
             alignItems: "center",
           }}
         >
-          <span
-            style={{
-              fontFamily: "var(--f-mono)",
-              fontSize: 10,
-              color: "var(--ink-mute)",
-            }}
-          >
-            {teamsCount} REGISTERED
-          </span>
           {status?.phase != null && (
             <span
               style={{
@@ -338,9 +332,11 @@ export function Explore() {
     };
   }, [user]);
 
-  // Fetch all events lazily when tab switches (or on mount if we want to pre-load)
+  // Fetch all events lazily — only when the user navigates to the "All Events" tab.
+  // For logged-out visitors "all" is the default so this fires immediately.
   React.useEffect(() => {
-    if (allEvents.length > 0) return; // already fetched
+    if (tab !== "all") return;     // don't pre-fetch while on "My Events"
+    if (allEvents.length > 0) return; // already fetched — no repeat
     let cancelled = false;
     setLoadingAll(true);
     const fetchFn = user ? eventsApi.list : eventsApi.publicList;
@@ -358,7 +354,7 @@ export function Explore() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [tab, user]); // re-runs only when tab flips to "all" or user changes
 
   const activeEvents = tab === "my" ? myEvents : allEvents;
   const isLoading = tab === "my" ? loadingMy : loadingAll;

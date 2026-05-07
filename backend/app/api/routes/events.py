@@ -1,16 +1,16 @@
-from fastapi import APIRouter, Depends
-from supabase import AsyncClient
+from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi_cache.decorator import cache
+from supabase import AsyncClient
 
-from app.api.deps import get_current_user, get_scanner_or_above
+from app.api.deps import get_current_user
 from app.db.supabase_client import get_supabase
-from app.models.admin import Admin
 from app.models.user import User
-from app.schemas.event import EventParticipantsResponse, EventRegisterResponse, EventResponse
+from app.schemas.event import EventRegisterResponse, EventResponse
 from app.schemas.team import MyTeamResponse
 from app.services.event_service import (
+    auto_lock_expired_phases,
     get_event,
-    get_event_participants_payload,
+    get_event_registration_counts,
     list_events,
     register_for_event,
 )
@@ -19,56 +19,7 @@ from app.services.team_service import get_my_team
 router = APIRouter()
 
 
-@router.get("", response_model=list[EventResponse])
-@cache(expire=60)
-async def get_events(
-    supabase: AsyncClient = Depends(get_supabase),
-    _: User = Depends(get_current_user),
-) -> list[EventResponse]:
-    events = await list_events(supabase)
-    return [
-        EventResponse(
-            id=str(event.id),
-            name=event.name,
-            title=event.title or "",
-            description=event.description,
-            venue=event.venue or [],
-            rounds=event.rounds or {},
-            participants_count=len(event.participants or {}),
-            community_link=event.community_link,
-        )
-        for event in events
-    ]
-
-
-@router.get("/public", response_model=list[EventResponse])
-@cache(expire=60)
-async def get_public_events(
-    supabase: AsyncClient = Depends(get_supabase),
-) -> list[EventResponse]:
-    events = await list_events(supabase)
-    return [
-        EventResponse(
-            id=str(event.id),
-            name=event.name,
-            title=event.title or "",
-            description=event.description,
-            venue=event.venue or [],
-            rounds=event.rounds or {},
-            participants_count=len(event.participants or {}),
-            community_link=event.community_link,
-        )
-        for event in events
-    ]
-
-
-@router.get("/{event_id}", response_model=EventResponse)
-async def get_single_event(
-    event_id: str,
-    supabase: AsyncClient = Depends(get_supabase),
-    _: User = Depends(get_current_user),
-) -> EventResponse:
-    event = await get_event(supabase, event_id)
+def _build_event_response(event, participants_count: int) -> EventResponse:
     return EventResponse(
         id=str(event.id),
         name=event.name,
@@ -76,9 +27,43 @@ async def get_single_event(
         description=event.description,
         venue=event.venue or [],
         rounds=event.rounds or {},
-        participants_count=len(event.participants or {}),
+        participants_count=participants_count,
         community_link=event.community_link,
     )
+
+
+@router.get("", response_model=list[EventResponse])
+@cache(expire=120)
+async def get_events(
+    supabase: AsyncClient = Depends(get_supabase),
+    _: User = Depends(get_current_user),
+) -> list[EventResponse]:
+    events = await list_events(supabase)
+    counts = await get_event_registration_counts(supabase, [str(event.id) for event in events])
+    return [_build_event_response(event, counts.get(str(event.id), 0)) for event in events]
+
+
+@router.get("/public", response_model=list[EventResponse])
+@cache(expire=120)
+async def get_public_events(
+    supabase: AsyncClient = Depends(get_supabase),
+) -> list[EventResponse]:
+    events = await list_events(supabase)
+    counts = await get_event_registration_counts(supabase, [str(event.id) for event in events])
+    return [_build_event_response(event, counts.get(str(event.id), 0)) for event in events]
+
+
+@router.get("/{event_id}", response_model=EventResponse)
+async def get_single_event(
+    event_id: str,
+    background_tasks: BackgroundTasks,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: User = Depends(get_current_user),
+) -> EventResponse:
+    event = await get_event(supabase, event_id)
+    background_tasks.add_task(auto_lock_expired_phases, supabase, event)
+    counts = await get_event_registration_counts(supabase, [str(event.id)])
+    return _build_event_response(event, counts.get(str(event.id), 0))
 
 
 @router.post("/{event_id}/register", response_model=EventRegisterResponse)
@@ -96,15 +81,8 @@ async def register_event(
     )
 
 
-@router.get("/{event_id}/participants", response_model=EventParticipantsResponse)
-async def get_event_participants(
-    event_id: str,
-    supabase: AsyncClient = Depends(get_supabase),
-    _: Admin = Depends(get_scanner_or_above),  # scanner, eventManager, or admin only
-) -> EventParticipantsResponse:
-    event = await get_event(supabase, event_id)
-    payload = get_event_participants_payload(event)
-    return EventParticipantsResponse(**payload)
+# /events/{event_id}/participants endpoint removed — events.participants column dropped.
+# Use the admin-panel /participants endpoint which queries users.events instead.
 
 
 @router.get("/{event_id}/my-team", response_model=MyTeamResponse | None)

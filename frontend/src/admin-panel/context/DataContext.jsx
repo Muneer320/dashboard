@@ -12,11 +12,13 @@ export function DataProvider({ children }) {
   const [participants, setParticipants]   = useState([])   // ParticipantItem[]
   const [stats, setStats]                 = useState({
     totalRegistered: 0,
+    totalTeams:      0,
     attending:       0,
     restricted:      0,
     foodClaimed:     0,
     entryScanned:    0,
     submitted:       0,
+    submittedTeams:  0,
     eventCount:      0,
   })
   const [eventsMealsCount, setEventsMealsCount] = useState([])  // [{ id, name, meals_count }]
@@ -33,11 +35,13 @@ export function DataProvider({ children }) {
       // Backend returns camelCase directly (StatsResponse schema uses camelCase)
       setStats({
         totalRegistered: data.totalRegistered  ?? 0,
+        totalTeams:      data.totalTeams       ?? 0,
         attending:       data.attending        ?? 0,
         restricted:      data.restricted       ?? 0,
         foodClaimed:     data.foodClaimed      ?? 0,
         entryScanned:    data.entryScanned     ?? 0,
         submitted:       data.submitted        ?? 0,
+        submittedTeams:  data.submittedTeams   ?? 0,
         eventCount:      data.eventCount       ?? 0,
       })
     } catch (e) {

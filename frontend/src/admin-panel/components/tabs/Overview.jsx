@@ -15,8 +15,38 @@ function StatCard({ icon, label, value, sub, colorClass }) {
   )
 }
 
+function OverviewSkeleton() {
+  return (
+    <div className="overview-page fade-in">
+      <div className="section-header">
+        <div className="sk-line sk-h-6 sk-w-1-4" />
+        <div className="sk-line sk-h-5 sk-w-1-4" />
+      </div>
+      <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="sk-card" style={{ minHeight: 100 }}>
+            <div className="sk-row">
+              <div className="sk-block sk-h-10" style={{ width: 40, borderRadius: 8, flexShrink: 0 }} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="sk-line sk-h-8 sk-w-3-4" />
+                <div className="sk-line sk-h-4 sk-w-1-2" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 24 }}>
+        <div className="sk-line sk-h-6 sk-w-1-4" style={{ marginBottom: 16 }} />
+        <div className="sk-block sk-h-24 sk-w-full" />
+      </div>
+    </div>
+  )
+}
+
 export default function Overview() {
-  const { stats, events } = useData()   // events are EventStatsItem[] — counts already computed
+  const { stats, events, loading } = useData()
+
+  if (loading) return <OverviewSkeleton />
 
   return (
     <div className="overview-page fade-in">
@@ -44,8 +74,8 @@ export default function Overview() {
         <StatCard
           colorClass="stat-blue"
           label="Submissions"
-          value={stats.submitted}
-          sub="projects submitted"
+          value={`${stats.submitted} / ${stats.totalTeams}`}
+          sub={`teams submitted out of ${stats.totalTeams} registered`}
           icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>}
         />
         <StatCard
@@ -83,6 +113,7 @@ export default function Overview() {
               <th>Category</th>
               <th>Date</th>
               <th>Registered</th>
+              <th>Teams</th>
               <th>Attended</th>
               <th>Submitted</th>
               <th>Restricted</th>
@@ -95,15 +126,24 @@ export default function Overview() {
                 <td><span className="badge badge-accent">{ev.category}</span></td>
                 <td>{ev.date ? new Date(ev.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '—'}</td>
                 <td>{ev.registered}</td>
+                <td style={{ color: ev.teams > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                  {ev.teams > 0 ? ev.teams : '—'}
+                </td>
                 <td>
                   <span style={{ color: ev.attended > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
                     {ev.attended}
                   </span>
                 </td>
                 <td>
-                  <span style={{ color: ev.submitted > 0 ? 'var(--info)' : 'var(--text-muted)' }}>
-                    {ev.submitted}
-                  </span>
+                  {ev.teams > 0 ? (
+                    <span style={{ color: ev.submitted > 0 ? 'var(--info)' : 'var(--text-muted)' }}>
+                      {ev.submitted}/{ev.teams}
+                    </span>
+                  ) : (
+                    <span style={{ color: ev.submitted > 0 ? 'var(--info)' : 'var(--text-muted)' }}>
+                      {ev.submitted}
+                    </span>
+                  )}
                 </td>
                 <td>
                   <span style={{ color: ev.restricted > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>

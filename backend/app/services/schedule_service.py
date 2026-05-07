@@ -130,8 +130,8 @@ async def list_global_schedule(supabase: AsyncClient) -> list[dict]:
 
 async def get_global_schedule_by_date(
     supabase: AsyncClient, day: date
-) -> dict | None:
-    """Return the global schedule for a specific date."""
+) -> dict:
+    """Return the global schedule for a specific date, defaulting to an empty day."""
     resp = await (
         supabase.table("global_schedule")
         .select("*")
@@ -140,7 +140,13 @@ async def get_global_schedule_by_date(
         .execute()
     )
     row = first_row(resp)
-    return _row_to_dict(row) if row else None
+    if row:
+        return _row_to_dict(row)
+    return {
+        "id": f"global-{day.isoformat()}",
+        "date": day.isoformat(),
+        "items": [],
+    }
 
 
 async def upsert_global_schedule(

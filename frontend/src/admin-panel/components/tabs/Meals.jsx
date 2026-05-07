@@ -2,11 +2,46 @@ import React, { useMemo, useState } from 'react'
 import { useData } from '../../context/DataContext'
 import './Meals.css'
 
+function MealsSkeleton() {
+  return (
+    <div className="meals-page fade-in">
+      <div className="section-header" style={{ marginBottom: 20 }}>
+        <div className="sk-line sk-h-6 sk-w-1-4" />
+        <div className="sk-line sk-h-8" style={{ width: 90, borderRadius: 8 }} />
+      </div>
+      <div className="sk-card" style={{ marginBottom: 24 }}>
+        <div className="sk-line sk-h-5 sk-w-3-4" style={{ marginBottom: 8 }} />
+        <div className="sk-line sk-h-4 sk-w-full" />
+        <div className="sk-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', marginTop: 12 }}>
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="sk-card" style={{ padding: 14 }}>
+              <div className="sk-line sk-h-5 sk-w-3-4" />
+              <div className="sk-line sk-h-8 sk-w-1-2" style={{ marginTop: 8 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="sk-card" style={{ gap: 0, padding: 0, overflow: 'hidden' }}>
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="sk-row" style={{
+            padding: '12px 20px', borderBottom: '1px solid var(--border)', gap: 16
+          }}>
+            <div className="sk-line sk-h-5" style={{ flex: 2 }} />
+            <div className="sk-line sk-h-5 sk-w-1-4" />
+            <div className="sk-line sk-h-5 sk-w-1-4" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Meals() {
   const {
     eventsMealsCount,
     maxMealsCount,
     userMeals,
+    loading,
     updateEventMealsCount,
     addMealEntry,
     removeMealEntry,
@@ -16,6 +51,8 @@ export default function Meals() {
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+
+  if (loading) return <MealsSkeleton />
 
   const totalEventsAllowance = useMemo(
     () => eventsMealsCount.reduce((sum, e) => sum + (e.meals_count || 0), 0),

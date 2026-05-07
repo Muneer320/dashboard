@@ -97,8 +97,10 @@ jobs:
           BACKEND_ENV_FILE: ${{ secrets.BACKEND_ENV_FILE }}
         run: |
           mkdir -p .deploy
-          printf '%s' "${BACKEND_ENV_FILE}" > .deploy/backend.env
-          cp .deploy/backend.env .deploy/root.env
+          printf '%s' "${BACKEND_ENV_FILE}" > .deploy/root.env
+          if [ -s .deploy/root.env ] && [ "$(tail -c 1 .deploy/root.env || true)" != "" ]; then
+            printf '\n' >> .deploy/root.env
+          fi
           printf '%s\n' "BACKEND_UPSTREAM=backend:8000" >> .deploy/root.env
 
           scp -P "${EC2_PORT}" .deploy/root.env "${EC2_USER}@${EC2_HOST}:${DEPLOY_PATH}/.env"
