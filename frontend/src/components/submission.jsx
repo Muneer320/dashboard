@@ -533,9 +533,14 @@ export function getSubmissionState({
   if (isRestricted) return "restricted";
   if (isNoPhase || !phaseData) return "no-phase";
 
-  const { is_active, is_locked } = phaseData;
+  const { is_active, is_locked, end_time } = phaseData;
 
   if (is_locked) return "locked";
+
+  // If end_time is set and has passed, treat the phase as closed regardless
+  // of whether the admin has manually locked it.
+  if (end_time && new Date() > new Date(end_time)) return "closed";
+
   if (!is_active) return "upcoming";
   return "open";
 }
