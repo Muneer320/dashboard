@@ -20,7 +20,7 @@ from app.models.user import User
 
 _PAGE_SIZE = 1000
 _EVENT_LIST_COLS = (
-    "id,name,title,description,start_date,end_date,venue,judges,category,"
+    "id,name,description,start_date,end_date,venue,judges,category,"
     "rounds,schedule,rules,community_link,max_participants,meals_count,"
     "registration_deadline,questions,created_at,updated_at"
 )
