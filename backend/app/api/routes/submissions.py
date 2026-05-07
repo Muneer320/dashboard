@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from supabase import AsyncClient
 from app.core.limiter import limiter
 
@@ -7,7 +7,7 @@ from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.models.user import User
 from app.schemas.submission import SubmissionFetchResponse, SubmissionRequest, SubmissionResponse
-from app.services.event_service import get_event
+from app.services.event_service import auto_lock_expired_phases, get_event
 from app.services.submission_service import get_submission_for_phase, submit_for_event
 
 router = APIRouter()
@@ -19,6 +19,7 @@ async def submit_event(
     request: Request,
     event_id: str,
     payload: SubmissionRequest,
+    background_tasks: BackgroundTasks,
     supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> SubmissionResponse:
@@ -40,6 +41,7 @@ async def submit_event(
         phase=payload.phase,
         answers=payload.answers,
     )
+    background_tasks.add_task(auto_lock_expired_phases, supabase, event)
     phase_key = f"phase{payload.phase}"
     return SubmissionResponse(
         message="Submission accepted",

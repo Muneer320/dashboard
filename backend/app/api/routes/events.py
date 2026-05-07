@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi_cache.decorator import cache
 from supabase import AsyncClient
 
@@ -8,6 +8,7 @@ from app.models.user import User
 from app.schemas.event import EventRegisterResponse, EventResponse
 from app.schemas.team import MyTeamResponse
 from app.services.event_service import (
+    auto_lock_expired_phases,
     get_event,
     get_event_registration_counts,
     list_events,
@@ -55,10 +56,12 @@ async def get_public_events(
 @router.get("/{event_id}", response_model=EventResponse)
 async def get_single_event(
     event_id: str,
+    background_tasks: BackgroundTasks,
     supabase: AsyncClient = Depends(get_supabase),
     _: User = Depends(get_current_user),
 ) -> EventResponse:
     event = await get_event(supabase, event_id)
+    background_tasks.add_task(auto_lock_expired_phases, supabase, event)
     counts = await get_event_registration_counts(supabase, [str(event.id)])
     return _build_event_response(event, counts.get(str(event.id), 0))
 

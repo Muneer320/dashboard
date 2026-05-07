@@ -26,6 +26,48 @@ _EVENT_LIST_COLS = (
 )
 
 
+async def auto_lock_expired_phases(supabase: AsyncClient, event: Event) -> None:
+    """
+    Lazily lock any active phases whose end_time has passed.
+
+    Sets is_locked=True + is_active=False on each expired phase and writes
+    the updated rounds dict back to the DB.  Designed to be called as a
+    FastAPI BackgroundTask so it never blocks the response.
+    """
+    rounds = dict(event.rounds or {})
+    now = datetime.now(timezone.utc)
+    updated = False
+
+    for key, phase in rounds.items():
+        if not isinstance(phase, dict):
+            continue
+        # Skip phases that are already locked or not active
+        if phase.get("is_locked") or not phase.get("is_active"):
+            continue
+        end_time_str = phase.get("end_time")
+        if not end_time_str:
+            continue
+        try:
+            end_time = datetime.fromisoformat(end_time_str)
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=timezone.utc)
+            if now > end_time:
+                phase["is_locked"] = True
+                phase["is_active"] = False
+                rounds[key] = phase
+                updated = True
+        except ValueError:
+            continue
+
+    if updated:
+        await (
+            supabase.table("events")
+            .update({"rounds": rounds})
+            .eq("id", str(event.id))
+            .execute()
+        )
+
+
 async def _fetch_all_user_event_rows(supabase: AsyncClient) -> list[dict]:
     """Fetch just enough user data to derive event registrations."""
     all_rows: list[dict] = []
