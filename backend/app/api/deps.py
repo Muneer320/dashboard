@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from supabase import AsyncClient
 
@@ -25,9 +25,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 _SCANNER_ROLES = {"Scanner", "eventManager", "admin"}
 
 
-async def get_current_user(
-    supabase: AsyncClient = Depends(get_supabase),
-    token: str = Depends(oauth2_scheme),
+async def _resolve_user_from_token(
+    token: str,
+    supabase: AsyncClient,
 ) -> User:
     try:
         payload = decode_access_token(token)
@@ -59,6 +59,34 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     return User.from_row(row)
+
+
+async def get_current_user(
+    supabase: AsyncClient = Depends(get_supabase),
+    token: str = Depends(oauth2_scheme),
+) -> User:
+    return await _resolve_user_from_token(token, supabase)
+
+
+async def get_current_user_from_header_or_query(
+    request: Request,
+    token_query: str | None = Query(None, alias="token"),
+    supabase: AsyncClient = Depends(get_supabase),
+) -> User:
+    auth_header = request.headers.get("Authorization", "")
+    token = ""
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    elif token_query:
+        token = token_query.strip()
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    return await _resolve_user_from_token(token, supabase)
 
 
 async def get_current_admin(

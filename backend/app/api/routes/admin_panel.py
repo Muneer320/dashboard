@@ -3,7 +3,7 @@ import csv
 import io
 import re
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from supabase import AsyncClient
 from fastapi_cache.decorator import cache
@@ -36,6 +36,16 @@ from app.schemas.admin_panel import (
     RestrictResponse,
     StatsResponse,
     UserMealsResponse,
+)
+from app.schemas.mirage import (
+    MirageFaceMatchReviewRequest,
+    MirageFaceMatchReviewResponse,
+    MirageJobCreateRequest,
+    MirageJobDetailResponse,
+    MirageJobImageReviewRequest,
+    MirageJobImageReviewResponse,
+    MirageJobListItem,
+    MirageJobStatusResponse,
 )
 from app.services.admin_panel_service import (
     create_admin_user,
@@ -73,6 +83,16 @@ class _RegenerateIdsBody(BaseModel):
 from app.services.credentials_service import (
     list_requested_members,
     update_requested_member_status,
+)
+from app.services.mirage_pipeline_service import (
+    approve_mirage_job,
+    create_mirage_job,
+    delete_mirage_job,
+    get_mirage_job_detail,
+    list_mirage_jobs,
+    publish_mirage_job,
+    update_mirage_face_match_review,
+    update_mirage_job_image_review,
 )
 from app.services.announcement_service import list_announcements
 
@@ -711,3 +731,94 @@ async def requested_members_update_status(
     """
     data = await update_requested_member_status(supabase, request_id, body.status)
     return RequestedMemberItem(**data)
+
+
+@router.get("/mirage/jobs", response_model=list[MirageJobListItem])
+async def admin_list_mirage_jobs(
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> list[MirageJobListItem]:
+    items = await list_mirage_jobs(supabase)
+    return [MirageJobListItem(**item) for item in items]
+
+
+@router.post("/mirage/jobs", response_model=MirageJobListItem, status_code=201)
+async def admin_create_mirage_job(
+    body: MirageJobCreateRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MirageJobListItem:
+    item = await create_mirage_job(supabase, body.model_dump())
+    return MirageJobListItem(**item)
+
+
+@router.get("/mirage/jobs/{job_id}", response_model=MirageJobDetailResponse)
+async def admin_get_mirage_job(
+    job_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MirageJobDetailResponse:
+    item = await get_mirage_job_detail(supabase, job_id)
+    return MirageJobDetailResponse(**item)
+
+
+@router.delete("/mirage/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_mirage_job(
+    job_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> Response:
+    await delete_mirage_job(supabase, admin, job_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/mirage/job-images/{job_image_id}", response_model=MirageJobImageReviewResponse)
+async def admin_patch_mirage_job_image(
+    job_image_id: str,
+    body: MirageJobImageReviewRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageJobImageReviewResponse:
+    item = await update_mirage_job_image_review(
+        supabase,
+        admin,
+        job_image_id,
+        body.model_dump(exclude_unset=True),
+    )
+    return MirageJobImageReviewResponse(**item)
+
+
+@router.patch("/mirage/matches/{match_id}", response_model=MirageFaceMatchReviewResponse)
+async def admin_patch_mirage_match(
+    match_id: str,
+    body: MirageFaceMatchReviewRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageFaceMatchReviewResponse:
+    item = await update_mirage_face_match_review(
+        supabase,
+        admin,
+        match_id,
+        body.model_dump(exclude_unset=True),
+    )
+    return MirageFaceMatchReviewResponse(**item)
+
+
+@router.post("/mirage/jobs/{job_id}/approve", response_model=MirageJobStatusResponse)
+async def admin_approve_mirage_job(
+    job_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MirageJobStatusResponse:
+    item = await approve_mirage_job(supabase, job_id)
+    return MirageJobStatusResponse(**item)
+
+
+@router.post("/mirage/jobs/{job_id}/publish", response_model=MirageJobStatusResponse)
+async def admin_publish_mirage_job(
+    job_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MirageJobStatusResponse:
+    item = await publish_mirage_job(supabase, job_id)
+    return MirageJobStatusResponse(**item)
