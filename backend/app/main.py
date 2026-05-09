@@ -40,3 +40,17 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(AccessControlMiddleware)
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+
+def main():
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host=settings.API_HOST,
+        port=settings.API_PORT,
+        reload=settings.DEBUG,
+    )
+
+
+if __name__ == "__main__":
+    main()
