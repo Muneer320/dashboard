@@ -6,6 +6,7 @@ import Landing from './components/landing';
 import { Credentials, Login } from './components/auth';
 import { Dashboard, EventDetail } from './components/dashboard';
 import { Explore, Schedule, Leaderboard } from './components/discover';
+import MerchStore from './components/merch';
 import { Mirage, Announcements, LostFound } from './components/community';
 import { Rating, Feedback, Report } from './components/forms';
 import AdminApp from './admin-panel/App';
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/faq"           element={<FAQ />} />
         <Route path="/schedule"      element={<Schedule />}/>
         <Route path="/explore"       element={<Explore />}/>
+        <Route path="/merch"         element={<MerchStore />}/>
 
 
         {/* Protected user app */}
