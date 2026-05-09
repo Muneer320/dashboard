@@ -38,15 +38,7 @@ backend/__pycache__/
 stress_testing/
 loadtest*
 
-# Mirage processor local environments and caches
-processor/.venv/
-processor/.venv311/
-processor/**/__pycache__/
-processor/data/events/
-processor/piyush/cache/
-processor/piyush/test/
-processor/piyush/train/
-processor/piyush/test_manifest.json
-processor/piyush/verification_report.json
-processor/testing/dataset/
-backup/
+# Mirage local-only tooling is intentionally not part of the deployable dashboard.
+/processor/
+/mirage-mapping-dashboard/
+/backup/

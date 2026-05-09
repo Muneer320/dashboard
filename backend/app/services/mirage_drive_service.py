@@ -10,6 +10,7 @@ from html import unescape
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urljoin, urlparse
 
 from app.core.config import settings
 
@@ -37,12 +38,25 @@ class DriveFilePayload:
 
 
 _IMAGE_EXTENSIONS = {
-    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic",
+    ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".nef",
 }
 _PUBLIC_ENTRY_RE = re.compile(
     r'<a href="(?P<href>[^"]+)" target="_blank">.*?<div class="flip-entry-title">(?P<title>.*?)</div></a>',
     re.S,
 )
+_FILE_ID_RE = re.compile(
+    r"(?:/file/d/|[?&]id=)([a-zA-Z0-9_-]+)",
+    re.IGNORECASE,
+)
+_CONFIRM_FORM_RE = re.compile(
+    r'<form[^>]+id="download-form"[^>]+action="(?P<action>[^"]+)"(?P<body>.*?)</form>',
+    re.S,
+)
+_HIDDEN_INPUT_RE = re.compile(
+    r'<input[^>]+type="hidden"[^>]+name="(?P<name>[^"]+)"[^>]+value="(?P<value>[^"]*)"',
+    re.S,
+)
+_CONFIRM_LINK_RE = re.compile(r'href="(?P<href>[^"]*confirm[^"]*)"', re.I)
 _FOLDER_CACHE_TTL_SECONDS = 10 * 60
 _FILE_CACHE_TTL_SECONDS = 24 * 60 * 60
 _CACHE_DIR = Path(tempfile.gettempdir()) / "ascent-mirage-cache"
@@ -69,7 +83,24 @@ def drive_file_view_url(file_id: str) -> str:
 
 
 def public_drive_file_url(file_id: str) -> str:
-    return f"https://drive.google.com/uc?export=view&id={file_id}"
+    return (
+        "https://drive.usercontent.google.com/download"
+        f"?id={quote(file_id)}&export=download&authuser=0&confirm=t"
+    )
+
+
+def parse_drive_file_id(file_url_or_id: str) -> str:
+    raw = file_url_or_id.strip()
+    if not raw:
+        raise ValueError("Drive file URL or ID is empty.")
+    if re.fullmatch(r"[a-zA-Z0-9_-]+", raw):
+        return raw
+    match = _FILE_ID_RE.search(raw)
+    if match:
+        return match.group(1)
+    raise ValueError(
+        "Could not parse a Google Drive file ID. Use a file link, direct download URL, or raw file ID.",
+    )
 
 
 def has_google_credentials() -> bool:
@@ -135,6 +166,35 @@ def _parse_public_entries(html: str) -> list[tuple[str, str]]:
         title = unescape(re.sub(r"<.*?>", "", match.group("title"))).strip()
         entries.append((href, title))
     return entries
+
+
+def _looks_like_html(headers: dict[str, str], content: bytes) -> bool:
+    content_type = (headers.get("Content-Type") or headers.get("content-type") or "").lower()
+    if "text/html" in content_type:
+        return True
+    sample = content[:256].lstrip().lower()
+    return sample.startswith(b"<!doctype html") or sample.startswith(b"<html")
+
+
+def _extract_confirm_url(html: str, current_url: str) -> str | None:
+    form_match = _CONFIRM_FORM_RE.search(html)
+    if form_match:
+        action = unescape(form_match.group("action"))
+        body = form_match.group("body") or ""
+        params = {
+            unescape(match.group("name")): unescape(match.group("value"))
+            for match in _HIDDEN_INPUT_RE.finditer(body)
+        }
+        if params:
+            query = "&".join(f"{quote(key)}={quote(value)}" for key, value in params.items())
+            separator = "&" if "?" in action else "?"
+            return urljoin(current_url, f"{action}{separator}{query}")
+        return urljoin(current_url, action)
+
+    link_match = _CONFIRM_LINK_RE.search(html)
+    if link_match:
+        return urljoin(current_url, unescape(link_match.group("href")))
+    return None
 
 
 def _list_public_folder_images(
@@ -267,15 +327,16 @@ def list_folder_images(
     cached = _get_folder_cache(folder_id, recursive, limit)
     if cached is not None:
         return cached
-    if not has_google_credentials():
-        try:
-            files = _list_public_folder_images(folder_id, recursive=recursive, limit=limit)
+    try:
+        files = _list_public_folder_images(folder_id, recursive=recursive, limit=limit)
+        if files:
             return _set_folder_cache(folder_id, recursive, limit, files)
-        except Exception as exc:
+    except Exception:
+        if not has_google_credentials():
             raise RuntimeError(
                 "Public Drive folder read failed. Make sure the folder and nested image folders "
-                "are shared publicly or configure Google credentials for private access."
-            ) from exc
+                "are shared publicly and directly downloadable."
+            ) from None
 
     service = _drive_service()
     _, _, HttpError, _ = _load_google_modules()
@@ -342,17 +403,20 @@ def download_file(file_id: str) -> DriveFilePayload:
     if cached is not None:
         return cached
 
-    if not has_google_credentials():
-        import requests
+    import requests
 
-        try:
-            response = requests.get(public_drive_file_url(file_id), timeout=30, allow_redirects=True)
-            response.raise_for_status()
-        except Exception as exc:
-            raise RuntimeError(f"Public Drive file fetch failed for '{file_id}'.") from exc
-
+    try:
+        response = requests.get(public_drive_file_url(file_id), timeout=30, allow_redirects=True)
+        response.raise_for_status()
+        if _looks_like_html(dict(response.headers), response.content):
+            confirm_url = _extract_confirm_url(response.text, response.url)
+            if confirm_url:
+                response = requests.get(confirm_url, timeout=30, allow_redirects=True)
+                response.raise_for_status()
         name_match = re.search(r'filename="([^"]+)"', response.headers.get("Content-Disposition", ""))
         name = name_match.group(1) if name_match else file_id
+        if name == file_id:
+            name = Path(urlparse(response.url).path).name or file_id
         mime_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
         return _write_cached_file(DriveFilePayload(
             file_id=file_id,
@@ -360,6 +424,9 @@ def download_file(file_id: str) -> DriveFilePayload:
             mime_type=mime_type,
             content=response.content,
         ))
+    except Exception:
+        if not has_google_credentials():
+            raise RuntimeError(f"Public Drive file fetch failed for '{file_id}'.") from None
 
     service = _drive_service()
     _, _, HttpError, MediaIoBaseDownload = _load_google_modules()

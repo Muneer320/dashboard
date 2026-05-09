@@ -11,7 +11,7 @@ export function Mirage() {
 
   const isMobile = useMobile();
   const { user } = useUserAuth();
-  const locked = false;
+  const locked = !user?.is_attending;
   const [days, setDays] = React.useState([]);
   const [selectedDay, setSelectedDay] = React.useState('All');
   const [loading, setLoading] = React.useState(!locked);

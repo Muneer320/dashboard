@@ -2,12 +2,13 @@ import React from 'react';
 
 import { mirage as mirageApi } from '../lib/api';
 import { useUserAuth } from '../lib/UserAuthContext';
+import { MirageEnrollmentCard } from './MirageEnrollmentCard';
 import { NavBar, PageBackground, useMobile } from './shared';
 
 export function MirageGallery() {
   const isMobile = useMobile();
   const { user } = useUserAuth();
-  const locked = false;
+  const locked = !user?.is_attending;
   const [overview, setOverview] = React.useState({
     totalPhotos: 0,
     totalCollections: 0,
@@ -17,6 +18,8 @@ export function MirageGallery() {
     featuredCollections: [],
     collectionsByDay: [],
   });
+  const [myPhotos, setMyPhotos] = React.useState([]);
+  const [loadingMyPhotos, setLoadingMyPhotos] = React.useState(false);
   const [selectedDay, setSelectedDay] = React.useState('All');
   const [loading, setLoading] = React.useState(!locked);
   const [loadingCollection, setLoadingCollection] = React.useState(false);
@@ -82,6 +85,28 @@ export function MirageGallery() {
 
   React.useEffect(() => {
     let cancelled = false;
+    if (locked || !user?.id) {
+      setMyPhotos([]);
+      return () => { cancelled = true; };
+    }
+
+    setLoadingMyPhotos(true);
+    mirageApi.myPhotos()
+      .then((data) => {
+        if (!cancelled) setMyPhotos(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setMyPhotos([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingMyPhotos(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [locked, user?.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
     if (!selectedCollectionId || locked) {
       setCollectionDetail(null);
       return () => { cancelled = true; };
@@ -127,6 +152,7 @@ export function MirageGallery() {
     ? (overview.collectionsByDay || [])
     : (overview.collectionsByDay || []).filter((day) => day.dayLabel === selectedDay);
   const selectedCollection = collectionDetail?.collection || null;
+  const allCollections = (overview.collectionsByDay || []).flatMap((group) => group.collections || []);
 
   const syncUrlState = React.useCallback((next) => {
     const url = new URL(window.location.href);
@@ -296,6 +322,12 @@ export function MirageGallery() {
           )}
         </div>
 
+        {!locked && user?.id && (
+          <div style={{ marginTop: 24 }}>
+            <MirageEnrollmentCard />
+          </div>
+        )}
+
         <div style={{
           marginTop: 26,
           display: 'grid',
@@ -333,7 +365,7 @@ export function MirageGallery() {
                         alt={photo.name}
                         loading={index === 0 ? 'eager' : 'lazy'}
                         decoding="async"
-                        fetchPriority={index === 0 ? 'high' : 'auto'}
+                        fetchpriority={index === 0 ? 'high' : 'auto'}
                         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
                       />
                     </div>
@@ -443,6 +475,61 @@ export function MirageGallery() {
 
         {!loading && !error && (
           <>
+            <div style={{ marginTop: 28 }} className="glass">
+              <div style={{ padding: isMobile ? 16 : 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div className="eyebrow">Matched For You</div>
+                    <div style={{ marginTop: 8, fontFamily: 'var(--f-display)', fontSize: isMobile ? 24 : 30, color: 'var(--ink)' }}>
+                      Your Mirage picks
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.08em' }}>
+                    {loadingMyPhotos ? 'LOADING' : `${myPhotos.length} MATCHES`}
+                  </div>
+                </div>
+
+                {loadingMyPhotos ? (
+                  <div style={{ marginTop: 16, color: 'var(--ink-mute)', fontSize: 12 }}>
+                    Finding your approved Mirage photos...
+                  </div>
+                ) : myPhotos.length === 0 ? (
+                  <div style={{ marginTop: 16, color: 'var(--ink-mute)', fontSize: 13, lineHeight: 1.6 }}>
+                    Your personal Mirage gallery will appear here after the review team approves face matches.
+                  </div>
+                ) : (
+                  <div style={{
+                    marginTop: 18,
+                    display: 'grid',
+                    gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))',
+                    gap: 12,
+                  }}>
+                    {myPhotos.slice(0, 8).map((image) => {
+                      const collection = (overview.collectionsByDay || [])
+                        .flatMap((group) => group.collections || [])
+                        .find((item) => item.id === image.jobId)
+                        || {
+                          id: image.jobId || 'my-photo',
+                          dayLabel: image.dayLabel || 'Mirage',
+                          sectionTitle: image.eventName || 'My photo',
+                        };
+                      return (
+                        <MiragePhotoCard
+                          key={`mine-${image.photoId}`}
+                          image={image}
+                          collection={collection}
+                          isMobile={isMobile}
+                          onOpen={handleOpenPhoto}
+                          onToggleLike={handleToggleLike}
+                          onShare={handleShare}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div style={{ marginTop: 30 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
                 <div style={{ fontFamily: 'var(--f-display)', fontSize: isMobile ? 26 : 32, color: 'var(--ink)' }}>
@@ -732,7 +819,23 @@ function MiragePhotoCard({ image, collection, isMobile, onOpen, onToggleLike, on
         onClick={() => onOpen(image, collection)}
         style={{ padding: 0, width: '100%', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
       >
-        <div style={{ aspectRatio: '1 / 1', background: 'rgba(255,255,255,0.03)' }}>
+        <div style={{ position: 'relative', aspectRatio: '1 / 1', background: 'rgba(255,255,255,0.03)' }}>
+          {image.matchedForCurrentUser && (
+            <div style={{
+              position: 'absolute',
+              margin: 8,
+              zIndex: 1,
+              padding: '5px 8px',
+              borderRadius: 999,
+              background: 'rgba(29,158,117,0.82)',
+              color: '#f4fff8',
+              fontSize: 10,
+              fontFamily: 'var(--f-mono)',
+              letterSpacing: '0.08em',
+            }}>
+              YOU
+            </div>
+          )}
           <img
             src={image.url}
             alt={image.name}

@@ -1,14 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from supabase import AsyncClient
 
 from app.api.deps import get_admin_only, get_current_user
 from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
+from app.schemas.mirage import (
+    MirageAnchorImageItem,
+    MirageUserProfileResponse,
+    MirageUserProfileSubmitRequest,
+)
 from app.models.user import User
 from app.schemas.meals import MealSlot
 from app.schemas.user import MyEventResponse, UserEventsResponse, UserProfileUpdate, UserResponse
 from app.services.event_service import get_event_registration_counts, list_events
+from app.services.mirage_pipeline_service import (
+    delete_mirage_anchor_image,
+    get_mirage_profile,
+    submit_mirage_profile,
+    upload_mirage_anchor_image,
+)
 from app.services.qr_service import scan_food
 from app.services.user_service import (
     get_user_by_id,
@@ -17,6 +28,14 @@ from app.services.user_service import (
 )
 
 router = APIRouter()
+
+
+def _require_mirage_attendee(user: User) -> None:
+    if not user.is_attending:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Mirage is only available for attendees.",
+        )
 
 
 def _build_user_response(user: User) -> UserResponse:
@@ -62,6 +81,49 @@ async def get_my_events(
             user_status=user_status if isinstance(user_status, dict) else {},
         ))
     return results
+
+
+@router.get("/me/mirage/profile", response_model=MirageUserProfileResponse)
+async def get_my_mirage_profile(
+    supabase: AsyncClient = Depends(get_supabase),
+    current_user: User = Depends(get_current_user),
+) -> MirageUserProfileResponse:
+    _require_mirage_attendee(current_user)
+    payload = await get_mirage_profile(supabase, current_user)
+    return MirageUserProfileResponse(**payload)
+
+
+@router.post("/me/mirage/images", response_model=MirageAnchorImageItem, status_code=201)
+async def post_my_mirage_image(
+    file: UploadFile = File(...),
+    poseLabel: str | None = Form(None),
+    supabase: AsyncClient = Depends(get_supabase),
+    current_user: User = Depends(get_current_user),
+) -> MirageAnchorImageItem:
+    _require_mirage_attendee(current_user)
+    payload = await upload_mirage_anchor_image(supabase, current_user, file, poseLabel)
+    return MirageAnchorImageItem(**payload)
+
+
+@router.delete("/me/mirage/images/{image_id}", status_code=204)
+async def remove_my_mirage_image(
+    image_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    _require_mirage_attendee(current_user)
+    await delete_mirage_anchor_image(supabase, current_user, image_id)
+
+
+@router.post("/me/mirage/profile/submit", response_model=MirageUserProfileResponse)
+async def submit_my_mirage_profile(
+    body: MirageUserProfileSubmitRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    current_user: User = Depends(get_current_user),
+) -> MirageUserProfileResponse:
+    _require_mirage_attendee(current_user)
+    payload = await submit_mirage_profile(supabase, current_user, body.consentEnabled)
+    return MirageUserProfileResponse(**payload)
 
 
 @router.get("/{user_id}", response_model=UserResponse)

@@ -26,7 +26,7 @@ async function request(path, { method = 'GET', body, adminAuth = false } = {}) {
   const tok = adminAuth ? token.getAdmin() : token.getUser();
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
   const headers = isFormData ? {} : { 'Content-Type': 'application/json' };
-  if (tok) headers.Authorization = `Bearer ${tok}`;
+  if (tok) headers['Authorization'] = `Bearer ${tok}`;
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -105,7 +105,8 @@ export const users = {
     return post('/users/me/mirage/images', formData);
   },
   deleteMirageImage: (imageId) => del(`/users/me/mirage/images/${imageId}`),
-  submitMirageProfile: () => post('/users/me/mirage/profile/submit', {}),
+  submitMirageProfile: (consentEnabled) =>
+    post('/users/me/mirage/profile/submit', { consentEnabled }),
 };
 
 export const events = {
@@ -143,7 +144,6 @@ export const mirage = {
   collection: (collectionId) => get(`/mirage/collections/${collectionId}`),
   myPhotos: () => get('/mirage/me/photos'),
   toggleLike: (photoId) => post(`/mirage/photos/${photoId}/like`, {}),
-  fileUrl: (fileId) => `${BASE}/mirage/files/${fileId}`,
 };
 
 export const credentials = {
@@ -226,18 +226,6 @@ export const adminPanel = {
     const filename = match ? match[1].trim() : `submissions_${eventId.slice(0, 8)}.csv`;
     return { blobUrl: URL.createObjectURL(blob), filename };
   },
-
-  mirageJobs: () => get('/admin-panel/mirage/jobs', { adminAuth: true }),
-  createMirageJob: (body) => post('/admin-panel/mirage/jobs', body, { adminAuth: true }),
-  getMirageJob: (jobId) => get(`/admin-panel/mirage/jobs/${jobId}`, { adminAuth: true }),
-  reviewMirageJobImage: (jobImageId, body) =>
-    patch(`/admin-panel/mirage/job-images/${jobImageId}`, body, { adminAuth: true }),
-  reviewMirageMatch: (matchId, body) =>
-    patch(`/admin-panel/mirage/matches/${matchId}`, body, { adminAuth: true }),
-  approveMirageJob: (jobId) =>
-    post(`/admin-panel/mirage/jobs/${jobId}/approve`, {}, { adminAuth: true }),
-  publishMirageJob: (jobId) =>
-    post(`/admin-panel/mirage/jobs/${jobId}/publish`, {}, { adminAuth: true }),
 };
 
 export const qr = {

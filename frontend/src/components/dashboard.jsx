@@ -15,6 +15,7 @@ import {
   schedule as scheduleApi,
   announcements as annApi,
 } from "../lib/api";
+import { MirageEnrollmentCard } from "./MirageEnrollmentCard";
 import { SubmissionPanel } from "./submission";
 
 // ── Event banner URL helper ─────────────────────────────────────────
@@ -295,6 +296,8 @@ export function Dashboard() {
           >
             {/* LEFT column */}
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <MirageEnrollmentCard />
+
               {/* Registered events */}
               <div className="glass" style={{ padding: isMobile ? 18 : 26 }}>
                 <div
