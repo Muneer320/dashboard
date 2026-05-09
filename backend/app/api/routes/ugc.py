@@ -12,7 +12,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import uuid as _uuid
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from supabase import AsyncClient
 
@@ -23,6 +25,7 @@ from app.core.coins_config import (
     MVP_JOBS_SHARED_CAP,
     PER_STUDENT_CAPPED_SOURCES,
     UGC_URL_SOURCES,
+    UGC_SCREENSHOT_SOURCES,
 )
 from app.db.supabase_client import first_row, get_supabase, rows
 from app.models.user import User
@@ -128,17 +131,18 @@ async def get_eligibility(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> dict[str, Any]:
     student_id = str(user.id)
-    rsvp_count = await _verified_submission_count(supabase, student_id, "RSVP_POST")
-    round1_count = await _verified_submission_count(supabase, student_id, "ROUND1_PROJECT")
-    fv_count = await _verified_submission_count(supabase, student_id, "FUTURE_VISION")
-    cc_count = await _verified_submission_count(supabase, student_id, "CREATOR_COLLAB")
+    rsvp_count    = await _verified_submission_count(supabase, student_id, "RSVP_POST")
+    round1_count  = await _verified_submission_count(supabase, student_id, "ROUND1_PROJECT")
+    fv_count      = await _verified_submission_count(supabase, student_id, "FUTURE_VISION")
+    cc_count      = await _verified_submission_count(supabase, student_id, "CREATOR_COLLAB")
+    ar_count      = await _verified_submission_count(supabase, student_id, "AR_FILTER")
+    meme_count    = await _verified_submission_count(supabase, student_id, "MEME_CHALLENGE")
+    sig_count     = await _verified_submission_count(supabase, student_id, "SIGNATURE_PHOTO_BOOTH")
     mvp_jobs_total = await _verified_submission_coins(
         supabase, student_id, ["MVP_MUSEUM", "JOBS_WALL"]
     )
     has_round = await _has_round_registration(supabase, user)
 
-    # Fetch the most recent submission per source for this student so the
-    # frontend can render IN-REVIEW / VERIFIED / REJECTED state on each tile.
     subs_resp = await (
         supabase.table("ugc_submissions")
         .select("source_type, status, url, rejection_reason, submitted_at, verified_at")
@@ -159,21 +163,57 @@ async def get_eligibility(
             }
 
     return {
-        "rsvp":            rsvp_count == 0,
-        "round1_project":  round1_count == 0 and has_round,
-        "future_vision":   fv_count == 0,
-        "mvp_museum":      mvp_jobs_total < MVP_JOBS_SHARED_CAP,
-        "jobs_wall":       mvp_jobs_total < MVP_JOBS_SHARED_CAP,
-        "creator_collab":  cc_count == 0,
+        "rsvp":                   rsvp_count == 0,
+        "round1_project":         round1_count == 0 and has_round,
+        "future_vision":          fv_count == 0,
+        "mvp_museum":             mvp_jobs_total < MVP_JOBS_SHARED_CAP,
+        "jobs_wall":              mvp_jobs_total < MVP_JOBS_SHARED_CAP,
+        "creator_collab":         cc_count == 0,
+        "ar_filter":              ar_count == 0,
+        "meme_challenge":         meme_count == 0,
+        "signature_photo_booth":  sig_count == 0,
         "latest_submissions": latest,
     }
 
 
 # ----------------------------- submit -----------------------------
 
+_ALLOWED_SCREENSHOT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+_UGC_BUCKET = "ugc_proofs"
+
+
+@router.post("/upload-proof")
+async def upload_proof_image(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    supabase: AsyncClient = Depends(get_supabase),
+) -> dict[str, str]:
+    """Accept an image screenshot, store in Supabase Storage, return its public URL.
+    Bucket 'ugc-proofs' must exist in Supabase with public read access."""
+    if file.content_type not in _ALLOWED_SCREENSHOT_TYPES:
+        raise HTTPException(400, "Only JPEG, PNG, or WebP images accepted")
+    file_bytes = await file.read()
+    if len(file_bytes) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(400, "File too large (max 10 MB)")
+    ext = file.content_type.split("/")[1]
+    path = f"{user.id}/{_uuid.uuid4()}.{ext}"
+
+    try:
+        await supabase.storage.from_(_UGC_BUCKET).upload(
+            path, file_bytes, {"content-type": file.content_type, "upsert": False}
+        )
+        public_url = await supabase.storage.from_(_UGC_BUCKET).get_public_url(path)
+    except Exception as exc:
+        raise HTTPException(500, f"Storage upload failed: {exc}") from exc
+
+    return {"url": public_url}
+
+
 class UGCSubmitIn(BaseModel):
-    source_type: str = Field(..., description="One of UGC_URL_SOURCES")
+    source_type: str = Field(..., description="One of UGC_URL_SOURCES or UGC_SCREENSHOT_SOURCES")
     url: str = Field(..., min_length=8)
+    proof_type: str = Field("url", description="'url' for link submissions, 'screenshot' for uploads")
     participant_2_id: str | None = Field(
         None, description="Required only for CREATOR_COLLAB"
     )
@@ -186,11 +226,13 @@ async def submit_ugc(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> dict[str, Any]:
     src = payload.source_type
-    if src not in UGC_URL_SOURCES:
+    all_student_sources = UGC_URL_SOURCES + UGC_SCREENSHOT_SOURCES
+    if src not in all_student_sources:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"source_type must be one of {UGC_URL_SOURCES}",
+            detail=f"source_type must be one of {all_student_sources}",
         )
+    is_screenshot = src in UGC_SCREENSHOT_SOURCES
 
     student_id = str(user.id)
 
@@ -283,40 +325,50 @@ async def submit_ugc(
                 detail="This URL has already been submitted by another student.",
             )
 
-    # 6. Run auto-check
-    existing_resp = await (
-        supabase.table("ugc_submissions")
-        .select("id, url, source_type, student_id")
-        .eq("source_type", src)
-        .execute()
-    )
-    # If we're re-submitting on top of our own prior row, drop it from the
-    # existing-submissions list — otherwise the auto-check duplicate-URL rule
-    # would always reject re-submits of the same URL.
-    existing_submissions = [
-        r for r in rows(existing_resp) if r.get("id") != reusable_row_id
-    ]
-    auto_result = await run_auto_check(
-        url=payload.url,
-        source_type=src,
-        student_linkedin_handle=(user.details or {}).get("linkedinHandle"),
-        student_instagram_handle=(user.details or {}).get("instagramHandle"),
-        submitted_at=datetime.now(timezone.utc),
-        existing_submissions=existing_submissions,
-        current_student_id=student_id,
-    )
-
-    # 7. Decide submission status
-    if not auto_result["passed"]:
-        sub_status = "rejected"
-    elif auto_result["needs_manual_check"]:
-        sub_status = "pending_manual"
-    else:
+    # 6. Auto-check — skipped for screenshot sources (admin reviews the image)
+    if is_screenshot:
+        auto_result = {
+            "passed": None,
+            "reason": "screenshot_submission",
+            "needs_manual_check": True,
+            "flags": [],
+            "fingerprint": payload.url,
+            "power_hour_eligible": False,
+            "published_timestamp": None,
+        }
         sub_status = "admin_queued"
+    else:
+        existing_resp = await (
+            supabase.table("ugc_submissions")
+            .select("id, url, source_type, student_id")
+            .eq("source_type", src)
+            .execute()
+        )
+        existing_submissions = [
+            r for r in rows(existing_resp) if r.get("id") != reusable_row_id
+        ]
+        auto_result = await run_auto_check(
+            url=payload.url,
+            source_type=src,
+            student_linkedin_handle=(user.details or {}).get("linkedinHandle"),
+            student_instagram_handle=(user.details or {}).get("instagramHandle"),
+            submitted_at=datetime.now(timezone.utc),
+            existing_submissions=existing_submissions,
+            current_student_id=student_id,
+        )
+
+        # 7. Decide submission status
+        if not auto_result["passed"]:
+            sub_status = "rejected"
+        elif auto_result["needs_manual_check"]:
+            sub_status = "pending_manual"
+        else:
+            sub_status = "admin_queued"
 
     metadata: dict[str, Any] = {
         "auto_check_flags": auto_result["flags"],
         "content_fingerprint": auto_result["fingerprint"],
+        "proof_type": payload.proof_type,
     }
     if auto_result.get("published_timestamp"):
         metadata["published_timestamp"] = (
@@ -329,6 +381,7 @@ async def submit_ugc(
         "student_id": student_id,
         "source_type": src,
         "url": payload.url,
+        "proof_type": payload.proof_type,
         "status": sub_status,
         "auto_check_passed": auto_result["passed"],
         "auto_check_reason": auto_result["reason"],

@@ -269,10 +269,20 @@ function NewVerificationView() {
                   </td>
                   <td><StudentCell row={s} /></td>
                   <td>
-                    <a href={s.url} target="_blank" rel="noreferrer"
-                      style={{ color: 'var(--accent-light)', textDecoration: 'none', fontSize: 12 }}>
-                      {s.url?.length > 40 ? `${s.url.slice(0, 40)}…` : s.url}
-                    </a>
+                    {s.proof_type === 'screenshot' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span className="badge badge-info" style={{ fontSize: 9, width: 'fit-content' }}>📷 SCREENSHOT</span>
+                        <a href={s.url} target="_blank" rel="noreferrer"
+                          style={{ color: 'var(--accent-light)', textDecoration: 'none', fontSize: 12 }}>
+                          View Image ↗
+                        </a>
+                      </div>
+                    ) : (
+                      <a href={s.url} target="_blank" rel="noreferrer"
+                        style={{ color: 'var(--accent-light)', textDecoration: 'none', fontSize: 12 }}>
+                        {s.url?.length > 40 ? `${s.url.slice(0, 40)}…` : s.url}
+                      </a>
+                    )}
                   </td>
                   <td>
                     {s.auto_check_passed === true && <span className="badge badge-success">PASSED</span>}

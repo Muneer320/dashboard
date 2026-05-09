@@ -18,9 +18,14 @@ export default function Login() {
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
-    const ok = await login(form.username, form.password)
+    const result = await login(form.username, form.password)
     setLoading(false)
-    if (ok) navigate('/admin/dashboard')
+    if (result) {
+      const dest = result === 'redemption_volunteer' ? '/redemption'
+                 : result === 'booth_volunteer'      ? '/booth'
+                 : '/admin/dashboard'
+      navigate(dest)
+    }
   }
 
   return (

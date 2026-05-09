@@ -31,7 +31,6 @@ router = APIRouter()
 # from booth_id → source_type lives here so the spec stays single-sourced.
 # Extend as new booths are introduced.
 BOOTH_SOURCE_MAP: dict[str, str] = {
-    "AR_FILTER":      "AR_FILTER",
     "SCAVENGER":      "SCAVENGER_HUNT",
     "RAZORPAY":       "RAZORPAY_PITCH",
     "ECO_EXCHANGE":   "ECO_EXCHANGE",

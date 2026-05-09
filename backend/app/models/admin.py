@@ -19,6 +19,7 @@ class AdminRole(str, enum.Enum):
     PRM_VOLUNTEER = "prm_volunteer"
     PRM_LEAD = "prm_lead"
     OPS_LEAD = "ops_lead"
+    REDEMPTION_VOLUNTEER = "redemption_volunteer"
 
 
 @dataclass

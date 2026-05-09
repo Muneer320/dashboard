@@ -200,12 +200,12 @@ export default function Sidebar({ isOpen, onClose }) {
   const roleLabel = {
     admin: 'Administrator', eventManager: 'Event Manager', Scanner: 'Scanner',
     prm_volunteer: 'PRM Volunteer', prm_lead: 'PRM Lead', ops_lead: 'Ops Lead',
-    booth_volunteer: 'Booth Volunteer',
+    booth_volunteer: 'Booth Volunteer', redemption_volunteer: 'Redemption Volunteer',
   }
   const roleBadge = {
     admin: 'badge-accent', eventManager: 'badge-info', Scanner: 'badge-warning',
     prm_volunteer: 'badge-info', prm_lead: 'badge-accent', ops_lead: 'badge-accent',
-    booth_volunteer: 'badge-warning',
+    booth_volunteer: 'badge-warning', redemption_volunteer: 'badge-success',
   }
 
   function handleLogout() {

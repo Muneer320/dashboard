@@ -207,6 +207,7 @@ export const adminPanel = {
   addAdminUser: (body) => post('/admin-panel/admin-users', body, { adminAuth: true }),
   updateAdminUser: (uid, body) => patch(`/admin-panel/admin-users/${uid}`, body, { adminAuth: true }),
   deleteAdminUser: (uid) => del(`/admin-panel/admin-users/${uid}`, { adminAuth: true }),
+  restoreAdminUser: (uid) => post(`/admin-panel/admin-users/${uid}/restore`, {}, { adminAuth: true }),
 
   // ── Single event detail + update ────────────────────────────────────────
   getEvent: (eventId) =>
@@ -325,13 +326,36 @@ export const coins = {
 
 // ─── Sidequest — UGC submission (student-facing) ─────────────────────────────
 
+async function uploadFile(path, file) {
+  const tok = token.getUser();
+  const formData = new FormData();
+  formData.append('file', file);
+  const headers = {};
+  if (tok) headers['Authorization'] = `Bearer ${tok}`;
+  const res = await fetch(`${BASE}${path}`, { method: 'POST', headers, body: formData });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({ detail: res.statusText }));
+  if (!res.ok) throw new ApiError(data?.detail ?? `HTTP ${res.status}`, res.status, data);
+  return data;
+}
+
 export const ugc = {
   eligibility: () => get('/ugc/eligibility'),
-  submit: ({ source_type, url, participant_2_id }) =>
-    post('/ugc/submit', { source_type, url, participant_2_id }),
+  uploadProof: (file) => uploadFile('/ugc/upload-proof', file),
+  submit: ({ source_type, url, proof_type = 'url', participant_2_id }) =>
+    post('/ugc/submit', { source_type, url, proof_type, participant_2_id }),
   confirmCollab:        (collab_id) =>
     post('/ugc/creator-collab/confirm', { collab_id }),
   pendingConfirmations: () => get('/ugc/pending-confirmations'),
+};
+
+// ─── Redemption Booth ─────────────────────────────────────────────────────────
+
+export const redemptionApi = {
+  getStudent:  (student_id) => get(`/redemption/student/${student_id}`, { adminAuth: true }),
+  award:       (student_id, tier, client_uuid) =>
+    post('/redemption/award', { student_id, tier, client_uuid }, { adminAuth: true }),
+  history:     () => get('/redemption/history', { adminAuth: true }),
 };
 
 // ─── QR Scan ──────────────────────────────────────────────────────────────────

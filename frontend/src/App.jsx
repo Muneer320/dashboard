@@ -19,6 +19,7 @@ import {
   MyQRPage,
 } from './components/sidequest';
 import BoothTool from './components/booth';
+import RedemptionBooth from './components/redemption';
 
 /** Blocks access to protected user pages — redirects to /login if not authed. */
 function RequireAuth({ children }) {
@@ -68,6 +69,9 @@ export default function App() {
 
         {/* Booth Tool — has its own auth (booth_volunteer JWT) */}
         <Route path="/booth"             element={<BoothTool />} />
+
+        {/* Redemption Booth — has its own auth (redemption_volunteer JWT) */}
+        <Route path="/redemption"        element={<RedemptionBooth />} />
 
         {/* Sidequest — Ascent Coins */}
         <Route path="/coins"             element={<RequireAuth><CoinsHomePage /></RequireAuth>} />

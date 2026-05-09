@@ -21,44 +21,55 @@ import ascentCoinImg from "../assets/ascent-coin.png";
 // Source labels & coin/tier reference
 // ─────────────────────────────────────────────────────────────
 const SOURCE_LABEL = {
-  RSVP_POST:        "RSVP LinkedIn",
-  ROUND1_PROJECT:   "Round 1 Project",
-  AR_FILTER:        "AR Filter Snap",
-  SCAVENGER_HUNT:   "Scavenger Hunt",
-  RAZORPAY_PITCH:   "Razorpay Pitch",
-  FUTURE_VISION:    "Future Vision",
-  CREATOR_COLLAB:   "Creator Collab",
-  MVP_MUSEUM:       "MVP Museum",
-  JOBS_WALL:        "Jobs Wall",
-  ESPORTS_1ST:      "Esports — 1st",
-  ESPORTS_2ND:      "Esports — 2nd",
-  ESPORTS_3RD:      "Esports — 3rd",
-  ECO_EXCHANGE:     "Eco Exchange",
-  ECO_DESIGN_WIN:   "Eco Design Win",
-  EVENT_WIN:        "Event Win",
-  ENGAGEMENT:       "Engagement",
-  POWER_HOUR_BONUS: "Power Hour Bonus",
-  SURPRISE_DROP:    "Surprise Drop",
-  REVERSAL:         "Reversal",
-  RESTORE:          "Restore",
-  MANUAL_ADJUSTMENT:"Manual Adjustment",
-  REDEMPTION:       "Redemption",
+  RSVP_POST:              "RSVP LinkedIn",
+  ROUND1_PROJECT:         "Round 1 Project",
+  AR_FILTER:              "AR Filter Story",
+  SCAVENGER_HUNT:         "Scavenger Hunt",
+  RAZORPAY_PITCH:         "Razorpay Pitch",
+  FUTURE_VISION:          "Future Vision",
+  CREATOR_COLLAB:         "Creator Collab",
+  MVP_MUSEUM:             "MVP Museum",
+  JOBS_WALL:              "Jobs Wall",
+  ESPORTS_1ST:            "Esports — 1st",
+  ESPORTS_2ND:            "Esports — 2nd",
+  ESPORTS_3RD:            "Esports — 3rd",
+  ECO_EXCHANGE:           "Eco Exchange",
+  ECO_DESIGN_WIN:         "Eco Design Win",
+  EVENT_WIN:              "Event Win",
+  ENGAGEMENT:             "Engagement",
+  POWER_HOUR_BONUS:       "Power Hour Bonus",
+  SURPRISE_DROP:          "Surprise Drop",
+  REVERSAL:               "Reversal",
+  RESTORE:                "Restore",
+  MANUAL_ADJUSTMENT:      "Manual Adjustment",
+  REDEMPTION:             "Redemption",
+  MEME_CHALLENGE:         "Meme Challenge",
+  SIGNATURE_PHOTO_BOOTH:  "Signature & Photo Booth",
 };
 
 const COIN_VALUES = {
-  RSVP_POST: 100, ROUND1_PROJECT: 500, FUTURE_VISION: 100,
+  RSVP_POST: 300, ROUND1_PROJECT: 500, FUTURE_VISION: 100,
   MVP_MUSEUM: 100, JOBS_WALL: 100, CREATOR_COLLAB: 150,
+  AR_FILTER: 200,
+  MEME_CHALLENGE: 0,           // TBD
+  SIGNATURE_PHOTO_BOOTH: 0,    // TBD
 };
 
-const TIER_THRESHOLDS  = { STICKER: 500,  MUG: 1500, TSHIRT: 2500, PREMIUM_KIT: 4000 };
-const TIER_RANK_CUTOFFS = {                 MUG: 30,   TSHIRT: 50,   PREMIUM_KIT: 10 };
-const TIER_LABEL = { STICKER: "Sticker", MUG: "Mug", TSHIRT: "T-shirt", PREMIUM_KIT: "Premium Kit" };
+// 5-level tier system
+const TIER_THRESHOLDS  = { STICKER: 500, BADGE: 700, NOTEPAD: 1000, MUG: 1200, TOTE_BAG_MUG: 1500 };
+const TIER_RANK_CUTOFFS = { BADGE: 100, NOTEPAD: 75, MUG: 30, TOTE_BAG_MUG: 10 };
+const TIER_LABEL = {
+  STICKER: "Sticker", BADGE: "Badge", NOTEPAD: "Notepad",
+  MUG: "Mug", TOTE_BAG_MUG: "Tote Bag + Mug",
+};
 
-// Sources allowed in the UGC submit grid (URL submissions only — booth
-// sources like AR_FILTER are awarded by volunteers, not via this page).
+// Screenshot-based sources (file upload, not URL)
+const SCREENSHOT_SOURCES = new Set(["AR_FILTER"]);
+
+// Sources shown in the student UGC submit grid
 const SUBMIT_SOURCES = [
-  "RSVP_POST", "ROUND1_PROJECT", "FUTURE_VISION",
-  "MVP_MUSEUM", "JOBS_WALL", "CREATOR_COLLAB",
+  "RSVP_POST", "AR_FILTER", "MEME_CHALLENGE", "SIGNATURE_PHOTO_BOOTH",
+  "ROUND1_PROJECT", "FUTURE_VISION", "MVP_MUSEUM", "JOBS_WALL", "CREATOR_COLLAB",
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -838,6 +849,7 @@ export function UGCSubmitPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState("RSVP_POST");
   const [url, setUrl] = useState("");
+  const [screenshotFile, setScreenshotFile] = useState(null);
   const [partner, setPartner] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
@@ -856,10 +868,14 @@ export function UGCSubmitPage() {
   useEffect(() => { reload(); }, [reload]);
 
   const isCollab = selected === "CREATOR_COLLAB";
+  const isScreenshot = SCREENSHOT_SOURCES.has(selected);
   const eligibilityKey = {
     RSVP_POST: "rsvp", ROUND1_PROJECT: "round1_project",
     FUTURE_VISION: "future_vision", MVP_MUSEUM: "mvp_museum",
     JOBS_WALL: "jobs_wall", CREATOR_COLLAB: "creator_collab",
+    AR_FILTER: "ar_filter",
+    MEME_CHALLENGE: "meme_challenge",
+    SIGNATURE_PHOTO_BOOTH: "signature_photo_booth",
   }[selected];
   const isEligible = eligibility?.[eligibilityKey];
   const latestForSelected = eligibility?.latest_submissions?.[selected];
@@ -871,19 +887,33 @@ export function UGCSubmitPage() {
   const canSubmit = isEligible && !isLocked;
 
   const submit = async () => {
-    if (!url.trim()) {
-      setResult({ ok: false, message: "Paste a public post URL." }); return;
-    }
-    if (!/^https?:\/\/.+\..+/i.test(url.trim())) {
-      setResult({ ok: false, message: "That doesn't look like a URL — paste a valid link starting with https://" }); return;
+    if (isScreenshot) {
+      if (!screenshotFile) {
+        setResult({ ok: false, message: "Please select a screenshot image to upload." }); return;
+      }
+    } else {
+      if (!url.trim()) {
+        setResult({ ok: false, message: "Paste a public post URL." }); return;
+      }
+      if (!/^https?:\/\/.+\..+/i.test(url.trim())) {
+        setResult({ ok: false, message: "That doesn't look like a URL — paste a valid link starting with https://" }); return;
+      }
     }
     if (isCollab && !partner.trim()) {
       setResult({ ok: false, message: "Partner user ID required for Creator Collab." }); return;
     }
     setSubmitting(true);
     try {
+      let submitUrl = url.trim();
+      let proofType = "url";
+      if (isScreenshot) {
+        setResult({ ok: null, message: "Uploading screenshot…" });
+        const uploaded = await ugcApi.uploadProof(screenshotFile);
+        submitUrl = uploaded.url;
+        proofType = "screenshot";
+      }
       const res = await ugcApi.submit({
-        source_type: selected, url: url.trim(),
+        source_type: selected, url: submitUrl, proof_type: proofType,
         participant_2_id: isCollab ? partner.trim() : undefined,
       });
       const reason = res.auto_check_result?.reason;
@@ -895,12 +925,15 @@ export function UGCSubmitPage() {
       } else {
         setResult({
           ok: true,
-          message: res.status === "pending_manual"
+          isScreenshotResult: isScreenshot,
+          message: isScreenshot
+            ? "Awaiting Admin Verification."
+            : res.status === "pending_manual"
             ? "Submitted — admin will review manually."
             : "Auto-check passed! Moving to Admin Queue",
           flags: res.auto_check_result?.flags || [],
         });
-        setUrl(""); setPartner("");
+        setUrl(""); setPartner(""); setScreenshotFile(null);
       }
       reload();
     } catch (e) {
@@ -951,6 +984,9 @@ export function UGCSubmitPage() {
                   RSVP_POST: "rsvp", ROUND1_PROJECT: "round1_project",
                   FUTURE_VISION: "future_vision", MVP_MUSEUM: "mvp_museum",
                   JOBS_WALL: "jobs_wall", CREATOR_COLLAB: "creator_collab",
+                  AR_FILTER: "ar_filter",
+                  MEME_CHALLENGE: "meme_challenge",
+                  SIGNATURE_PHOTO_BOOTH: "signature_photo_booth",
                 }[src];
                 const eligibleHere = eligibility[key];
                 const active = selected === src;
@@ -1001,15 +1037,33 @@ export function UGCSubmitPage() {
               eligible={isEligible}
             />
 
-            {/* URL field */}
-            <div style={{ marginTop: 22 }}>
-              <label className="label">SOURCE URL</label>
-              <input
-                className="input" placeholder="https://linkedin.com/posts/…"
-                value={url} onChange={(e) => setUrl(e.target.value)}
-                disabled={!canSubmit}
-              />
-            </div>
+            {/* URL or screenshot upload depending on selected source */}
+            {isScreenshot ? (
+              <div style={{ marginTop: 22 }}>
+                <label className="label">STORY SCREENSHOT</label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="input"
+                  disabled={!canSubmit}
+                  onChange={(e) => setScreenshotFile(e.target.files?.[0] || null)}
+                  style={{ padding: "10px 12px", cursor: canSubmit ? "pointer" : "not-allowed" }}
+                />
+                <p style={{ fontSize: 11.5, color: "var(--ink-mute)", marginTop: 8 }}>
+                  Upload your Instagram AR Filter story screenshot (JPEG/PNG/WebP, max 10 MB).
+                  Account must be public and must include #ASCENT26.
+                </p>
+              </div>
+            ) : (
+              <div style={{ marginTop: 22 }}>
+                <label className="label">SOURCE URL</label>
+                <input
+                  className="input" placeholder="https://linkedin.com/posts/…"
+                  value={url} onChange={(e) => setUrl(e.target.value)}
+                  disabled={!canSubmit}
+                />
+              </div>
+            )}
 
             {isCollab && (
               <div style={{ marginTop: 14 }}>
@@ -1031,10 +1085,10 @@ export function UGCSubmitPage() {
               onClick={submit}
               style={{ marginTop: 14, opacity: submitting || !canSubmit ? 0.6 : 1 }}>
               {submitting
-                ? "Checking…"
+                ? (isScreenshot ? "Uploading…" : "Checking…")
                 : (latestForSelected?.status === "rejected" || latestForSelected?.status === "needs_review")
-                ? "RE-SUBMIT & AUTO-CHECK"
-                : "SUBMIT & AUTO-CHECK"}
+                ? (isScreenshot ? "RE-UPLOAD & SUBMIT" : "RE-SUBMIT & AUTO-CHECK")
+                : (isScreenshot ? "UPLOAD & SUBMIT" : "SUBMIT & AUTO-CHECK")}
             </button>
 
             {result && (
@@ -1052,7 +1106,7 @@ export function UGCSubmitPage() {
                 }}>{result.ok ? "✓" : "!"}</div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, color: "var(--ink)" }}>{result.message}</div>
-                  {result.ok && result.flags && result.flags.length === 0 && (
+                  {result.ok && !result.isScreenshotResult && result.flags && result.flags.length === 0 && (
                     <div className="mono" style={{ fontSize: 10.5, color: "var(--ink-mute)", marginTop: 4 }}>
                       # FOUND #ASCENT26 · ✓ PUBLIC VISIBILITY CONFIRMED
                     </div>
@@ -1065,19 +1119,42 @@ export function UGCSubmitPage() {
           {/* RIGHT — validation rules + batch stats */}
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div className="glass" style={{ padding: 22 }}>
-              <div className="eyebrow">§ VALIDATION RULES</div>
-              <ValidationRule
-                title="Hashtag #ASCENT26 required"
-                body="Must be included in the primary caption, not just comments."
-              />
-              <ValidationRule
-                title="Post must be public"
-                body="Private accounts or restricted posts will fail auto-validation."
-              />
-              <ValidationRule
-                title="Timestamps matter"
-                body="Posts must be published within the active event window."
-              />
+              <div className="eyebrow">§ SUBMISSION GUIDELINES</div>
+              {isScreenshot ? (
+                <>
+                  <ValidationRule
+                    title="Instagram story screenshot"
+                    body="Upload a screenshot of your AR Filter story post. Stories cannot be reverified after approval."
+                  />
+                  <ValidationRule
+                    title="Account must be public"
+                    body="Private or restricted accounts will be rejected."
+                  />
+                  <ValidationRule
+                    title="Include #ASCENT26"
+                    body="The hashtag must be visible in the story screenshot."
+                  />
+                </>
+              ) : (
+                <>
+                  <ValidationRule
+                    title="Hashtag #ASCENT26 required"
+                    body="Must be included in the primary caption, not just comments."
+                  />
+                  <ValidationRule
+                    title="Post must be public"
+                    body="Private accounts or restricted posts will fail auto-validation."
+                  />
+                  <ValidationRule
+                    title="Timestamps matter"
+                    body="Posts must be published within the active event window."
+                  />
+                  <ValidationRule
+                    title="No duplicates or reused content"
+                    body="Duplicate URLs, deleted posts, or reused content will be rejected."
+                  />
+                </>
+              )}
             </div>
 
             <div className="glass" style={{ padding: 22 }}>
@@ -1467,6 +1544,20 @@ const TIER_ICONS = {
       <path d="M21 11l-10 10v-6a4 4 0 0 1 4-4h6z" />
     </svg>
   ),
+  BADGE: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="6"/><path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.12"/>
+    </svg>
+  ),
+  NOTEPAD: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+    </svg>
+  ),
   MUG: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
       strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -1475,13 +1566,7 @@ const TIER_ICONS = {
       <path d="M7 4v2M11 4v2" />
     </svg>
   ),
-  TSHIRT: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
-      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 3l5 3-2 5-3-1v11H8V10L5 11 3 6l5-3 4 2 4-2z" />
-    </svg>
-  ),
-  PREMIUM_KIT: (
+  TOTE_BAG_MUG: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
       strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="8" width="18" height="13" rx="1" />
@@ -1494,10 +1579,11 @@ const TIER_ICONS = {
 function RewardJourney({ balance }) {
   const isMobile = useMobile();
   const tiers = [
-    { key: "STICKER",     label: "Sticker",     threshold: TIER_THRESHOLDS.STICKER },
-    { key: "MUG",         label: "Mug",         threshold: TIER_THRESHOLDS.MUG },
-    { key: "TSHIRT",      label: "T-shirt",     threshold: TIER_THRESHOLDS.TSHIRT },
-    { key: "PREMIUM_KIT", label: "Premium Kit", threshold: TIER_THRESHOLDS.PREMIUM_KIT },
+    { key: "STICKER",      label: "Sticker",       threshold: TIER_THRESHOLDS.STICKER },
+    { key: "BADGE",        label: "Badge",         threshold: TIER_THRESHOLDS.BADGE },
+    { key: "NOTEPAD",      label: "Notepad",       threshold: TIER_THRESHOLDS.NOTEPAD },
+    { key: "MUG",          label: "Mug",           threshold: TIER_THRESHOLDS.MUG },
+    { key: "TOTE_BAG_MUG", label: "Tote Bag + Mug",threshold: TIER_THRESHOLDS.TOTE_BAG_MUG },
   ];
   const max = tiers[tiers.length - 1].threshold;
   const pct = Math.max(0, Math.min(100, (balance / max) * 100));
@@ -1797,12 +1883,26 @@ export function RewardsPage() {
 
       <RewardJourney balance={balance.balance} />
 
+      {/* Stock notice */}
       <div style={{
-        marginTop: 24,
+        marginTop: 18, padding: "12px 16px", borderRadius: "var(--r-md)",
+        background: "rgba(232,185,116,0.07)", border: "1px solid rgba(232,185,116,0.3)",
+        fontSize: 12.5, color: "var(--ink-dim)", display: "flex", alignItems: "center", gap: 10,
+      }}>
+        <span style={{ color: "var(--amber)", fontSize: 16 }}>⚠</span>
+        <span>
+          <strong style={{ color: "var(--ink)" }}>Stock note:</strong>{" "}
+          Adding a reward to cart does not reserve stock. Redemption QR codes expire
+          after a limited time if unused — visit the redemption booth promptly.
+        </span>
+      </div>
+
+      <div style={{
+        marginTop: 18,
         display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
         gap: 18,
       }}>
-        {/* STICKER (FCFS) */}
+        {/* LEVEL 1 — STICKER (FCFS) */}
         <div className="glass" style={{ padding: 22 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
             <div>
@@ -1825,22 +1925,23 @@ export function RewardsPage() {
                 color: "var(--ink)", textAlign: "center", letterSpacing: "0.2em",
               }}>{stickerCode.code}</div>
               <p style={{ fontSize: 12, color: "var(--ink-dim)", marginTop: 10 }}>
-                Present this code at any merch booth. Expires {fmtTime(stickerCode.expires_at)}.
+                Present this code at the redemption booth. Expires {fmtTime(stickerCode.expires_at)}.
               </p>
             </div>
           ) : balance.balance >= TIER_THRESHOLDS.STICKER ? (
             <button className="btn primary sm" onClick={redeem} disabled={redeeming}
               style={{ marginTop: 18 }}>
-              {redeeming ? "…" : "AVAILABLE — CLAIM NOW"}
+              {redeeming ? "…" : "GENERATE REDEMPTION CODE"}
             </button>
           ) : (
             <ProgressTo current={balance.balance} target={TIER_THRESHOLDS.STICKER} />
           )}
         </div>
 
-        <RankRewardCard tier="MUG"          level="LEVEL 2 · MUG"         balance={balance.balance} rank={balance.rank} />
-        <RankRewardCard tier="TSHIRT"       level="LEVEL 3 · T-SHIRT"     balance={balance.balance} rank={balance.rank} />
-        <RankRewardCard tier="PREMIUM_KIT"  level="LEVEL 4 · PREMIUM KIT" balance={balance.balance} rank={balance.rank} />
+        <RankRewardCard tier="BADGE"        level="LEVEL 2 · BADGE"         balance={balance.balance} rank={balance.rank} />
+        <RankRewardCard tier="NOTEPAD"      level="LEVEL 3 · NOTEPAD"       balance={balance.balance} rank={balance.rank} />
+        <RankRewardCard tier="MUG"          level="LEVEL 4 · MUG"           balance={balance.balance} rank={balance.rank} />
+        <RankRewardCard tier="TOTE_BAG_MUG" level="LEVEL 5 · TOTE BAG + MUG" balance={balance.balance} rank={balance.rank} />
       </div>
 
     </SidequestLayout>

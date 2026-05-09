@@ -26,6 +26,12 @@ async def admin_login(supabase: AsyncClient, username: str, password: str) -> st
             detail="Invalid admin credentials",
         )
 
+    if row.get("deleted_at") is not None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account has been deactivated.",
+        )
+
     role = row.get("role") or "admin"
 
     # Booth volunteers must carry their assigned booth_id in the token —

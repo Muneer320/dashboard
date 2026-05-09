@@ -88,11 +88,13 @@ export function NavBar({ active, variant = "app" }) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [bellOpen]);
 
-  // Poll notifications every 30s — only when there is a logged-in user.
+  // Poll notifications every 15s — only when there is a logged-in user.
   const loadNotifs = useCallback(() => {
     if (!user) return;
-    notificationsApi.list(20).then(setNotifs).catch(() => {});
-  }, [user]);
+    notificationsApi.list(20).then(setNotifs).catch((e) => {
+      if (e?.status === 401) logout?.();
+    });
+  }, [user, logout]);
   useEffect(() => { loadNotifs(); }, [loadNotifs]);
   useEffect(() => {
     if (!user) return;
@@ -118,8 +120,10 @@ export function NavBar({ active, variant = "app" }) {
         setCoinBalance(val);
         if (val !== null) localStorage.setItem("ascentCoinBalance", String(val));
       })
-      .catch(() => {});
-  }, [user]);
+      .catch((e) => {
+        if (e?.status === 401) logout?.();
+      });
+  }, [user, logout]);
   useEffect(() => { loadCoins(); }, [loadCoins]);
   useEffect(() => {
     if (!user) return;

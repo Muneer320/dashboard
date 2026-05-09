@@ -25,10 +25,10 @@ export function AuthProvider({ children }) {
       token.setAdmin(res.access_token)
       const me = await adminAuthApi.me()
       setUser(me)
-      return true
+      return me.role  // caller uses role to decide where to redirect
     } catch (e) {
       setError(e.message || 'Invalid credentials')
-      return false
+      return null
     }
   }, [])
 

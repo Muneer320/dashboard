@@ -138,6 +138,7 @@ class AdminUserItem(BaseModel):
     mail: Optional[str]
     events: list                 # list as stored in JSONB (names or IDs)
     booth_id: Optional[str] = None   # only set for booth_volunteer rows
+    deleted_at: Optional[str] = None  # None = active; ISO timestamp = deactivated
 
 
 # ── Admin User CRUD ───────────────────────────────────────────────────────────

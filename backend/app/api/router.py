@@ -2,7 +2,8 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     admin, admin_auth, admin_coins, admin_panel, announcements, auth, booth, coins, credentials,
-    events, feedback, health, notifications, qr, questions, ratings, schedule, submissions, ugc, users,
+    events, feedback, health, notifications, qr, questions, ratings, redemption, schedule,
+    submissions, ugc, users,
 )
 
 api_router = APIRouter()
@@ -35,5 +36,6 @@ api_router.include_router(ugc.router, prefix="/ugc", tags=["ugc"])
 api_router.include_router(
     admin_coins.router, prefix="/admin", tags=["admin-coins"])
 api_router.include_router(booth.router, prefix="/booth", tags=["booth"])
+api_router.include_router(redemption.router, prefix="/redemption", tags=["redemption"])
 api_router.include_router(
     notifications.router, prefix="/notifications", tags=["notifications"])

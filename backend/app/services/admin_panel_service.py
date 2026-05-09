@@ -579,15 +579,16 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
 
 
 async def get_admin_users(supabase: AsyncClient) -> list[dict]:
-    """All admin rows -- admin-only Admins tab."""
+    """All admin rows (active + inactive) for the Admins tab."""
     resp = await (
         supabase.table("admins")
         .select("*")
         .execute()
     )
-    managers = [Admin.from_row(r) for r in rows(resp)]
-    return [
-        {
+    result = []
+    for r in rows(resp):
+        m = Admin.from_row(r)
+        result.append({
             "uid": m.uid,
             "username": m.username,
             "name": m.name,
@@ -596,9 +597,9 @@ async def get_admin_users(supabase: AsyncClient) -> list[dict]:
             "mail": m.mail,
             "events": m.events or [],
             "booth_id": m.booth_id,
-        }
-        for m in managers
-    ]
+            "deleted_at": r.get("deleted_at"),
+        })
+    return result
 
 
 async def create_admin_user(
@@ -765,7 +766,8 @@ async def update_admin_user(
 
 async def delete_admin_user(supabase: AsyncClient, uid: int, current_admin_uid: int) -> dict:
     """
-    Remove an admin account.
+    Soft-delete an admin account — sets deleted_at instead of removing the row.
+    Preserves audit trails (redemption history, booth awards, etc.).
     """
     if uid == current_admin_uid:
         raise HTTPException(status_code=409, detail="Cannot delete your own account")
@@ -774,21 +776,34 @@ async def delete_admin_user(supabase: AsyncClient, uid: int, current_admin_uid: 
         supabase.table("admins")
         .select("*")
         .eq("uid", uid)
+        .is_("deleted_at", "null")
         .limit(1)
         .execute()
     )
     row = first_row(resp)
     if row is None:
         raise HTTPException(status_code=404, detail="Admin not found")
-        
-    # Prevent deleting the last admin
-    if row["role"] == AdminRole.ADMIN.value:
-        admins_resp = await supabase.table("admins").select("uid").eq("role", AdminRole.ADMIN.value).execute()
-        if len(rows(admins_resp)) <= 1:
-            raise HTTPException(status_code=409, detail="Cannot delete the last super admin")
 
-    await supabase.table("admins").delete().eq("uid", uid).execute()
-    
+    # Prevent deactivating the last active super admin
+    if row["role"] == AdminRole.ADMIN.value:
+        admins_resp = await (
+            supabase.table("admins")
+            .select("uid")
+            .eq("role", AdminRole.ADMIN.value)
+            .is_("deleted_at", "null")
+            .execute()
+        )
+        if len(rows(admins_resp)) <= 1:
+            raise HTTPException(status_code=409, detail="Cannot deactivate the last super admin")
+
+    from datetime import datetime, timezone
+    await (
+        supabase.table("admins")
+        .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
+        .eq("uid", uid)
+        .execute()
+    )
+
     return {
         "uid": row["uid"],
         "username": row["username"],
@@ -797,7 +812,7 @@ async def delete_admin_user(supabase: AsyncClient, uid: int, current_admin_uid: 
         "phone": row.get("phone"),
         "mail": row["mail"],
         "events": row.get("events") or [],
-        "message": "Admin deleted successfully",
+        "message": "Admin deactivated successfully",
     }
 
 
