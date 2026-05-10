@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { useMobile, NavBar, PageBackground } from "./shared";
 import { useUserAuth } from "../lib/UserAuthContext";
+import PaymentModal from "./PaymentModal";
 
 const ITEMS = [
   {
@@ -63,7 +64,7 @@ const ITEMS = [
   },
 ];
 
-function MerchCard({ item, isMobile }) {
+function MerchCard({ item, isMobile, onBuy }) {
   const [hovered, setHovered] = useState(false);
 
   return (
@@ -251,6 +252,32 @@ function MerchCard({ item, isMobile }) {
             </span>
           )}
         </div>
+
+        {/* Buy Now button */}
+        {!item.comingSoon && (
+          <button
+            onClick={() => onBuy(item)}
+            style={{
+              marginTop: 12,
+              width: "100%",
+              padding: "9px 0",
+              borderRadius: 9,
+              background: hovered
+                ? "var(--violet)"
+                : "rgba(139,92,246,0.15)",
+              border: "1px solid rgba(139,92,246,0.35)",
+              color: "#fff",
+              fontSize: 12,
+              fontWeight: 700,
+              fontFamily: "var(--f-mono)",
+              letterSpacing: "0.06em",
+              cursor: "pointer",
+              transition: "background 0.2s",
+            }}
+          >
+            BUY NOW
+          </button>
+        )}
       </div>
     </div>
   );
@@ -259,9 +286,13 @@ function MerchCard({ item, isMobile }) {
 export default function MerchStore() {
   const isMobile = useMobile();
   const { user } = useUserAuth();
+  const [selectedItem, setSelectedItem] = useState(null);
 
   return (
     <PageBackground glows={true}>
+      {selectedItem && (
+        <PaymentModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+      )}
       <NavBar variant={user ? "app" : "public"} active="merch" />
 
       <div
@@ -381,7 +412,7 @@ export default function MerchStore() {
           }}
         >
           {ITEMS.map((item) => (
-            <MerchCard key={item.id} item={item} isMobile={isMobile} />
+            <MerchCard key={item.id} item={item} isMobile={isMobile} onBuy={setSelectedItem} />
           ))}
         </div>
       </div>
