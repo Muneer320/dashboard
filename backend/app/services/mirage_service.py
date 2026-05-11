@@ -13,6 +13,7 @@ from fastapi import HTTPException, status
 from supabase import AsyncClient
 
 from app.core.config import settings
+from app.db.mirage_postgres import mirage_connection
 from app.db.supabase_client import first_row, get_client, rows
 from app.models.user import User
 from app.services.mirage_drive_service import (
@@ -20,6 +21,7 @@ from app.services.mirage_drive_service import (
     drive_file_view_url,
     list_folder_images,
     parse_drive_folder_id,
+    public_drive_file_url,
 )
 
 _SYNC_INTERVAL_SECONDS = 15 * 60
@@ -57,10 +59,14 @@ def _metadata_to_description(metadata: dict) -> str:
     return json.dumps(metadata, separators=(",", ":"))
 
 
+def _drive_thumbnail_url(file_id: str, *, width: int = 1000) -> str:
+    return f"https://drive.google.com/thumbnail?id={quote(file_id)}&sz=w{int(width)}"
+
+
 def _photo_proxy_url(file_id: str, name: str, mime_type: str) -> str:
     return (
         f"{settings.API_V1_PREFIX}/mirage/files/{file_id}"
-        f"?name={quote(name)}&mime={quote(mime_type)}"
+        f"?name={quote(name, safe='')}&mime={quote(mime_type, safe='')}&w=1000&q=82"
     )
 
 
@@ -109,12 +115,32 @@ def _photo_name(photo_row: dict, fallback_file: DriveImageFile | None = None) ->
 
 
 def _photo_url_from_row(photo_row: dict, fallback_file: DriveImageFile | None = None) -> str:
+    preview_url = photo_row.get("preview_url")
+    if preview_url:
+        return str(preview_url)
     drive_file_id = photo_row.get("drive_file_id")
     if drive_file_id:
         name = _photo_name(photo_row, fallback_file)
         mime_type = (fallback_file.mime_type if fallback_file else None) or "image/jpeg"
         return _photo_proxy_url(drive_file_id, name, mime_type)
     return photo_row.get("public_url") or ""
+
+
+def _photo_thumbnail_url_from_row(photo_row: dict) -> str | None:
+    thumbnail_url = photo_row.get("thumbnail_url")
+    if thumbnail_url:
+        return str(thumbnail_url)
+    return None
+
+
+def _photo_download_url_from_row(photo_row: dict, fallback_file: DriveImageFile | None = None) -> str | None:
+    download_url = photo_row.get("download_url")
+    if download_url:
+        return str(download_url)
+    drive_file_id = photo_row.get("drive_file_id") or (fallback_file.file_id if fallback_file else None)
+    if drive_file_id:
+        return public_drive_file_url(str(drive_file_id))
+    return None
 
 
 def _make_photo_item(
@@ -135,6 +161,7 @@ def _make_photo_item(
         "name": name,
         "mimeType": mime_type,
         "url": _photo_url_from_row(photo_row, file),
+        "downloadUrl": _photo_download_url_from_row(photo_row, file),
         "caption": photo_row.get("caption"),
         "width": photo_row.get("width"),
         "height": photo_row.get("height"),
@@ -145,6 +172,7 @@ def _make_photo_item(
         "dayLabel": base.get("dayLabel"),
         "isFeatured": is_featured,
         "trendScore": trend_score,
+        "thumbnailUrl": _photo_thumbnail_url_from_row(photo_row),
     }
 
 
@@ -235,6 +263,61 @@ async def _load_photo_rows_by_drive_ids(
     return result
 
 
+async def _load_live_asset_rows_by_drive_ids(file_ids: list[str]) -> dict[str, dict]:
+    if not file_ids:
+        return {}
+    result: dict[str, dict] = {}
+    try:
+        async with mirage_connection() as connection:
+            rows_pg = await connection.fetch(
+                """
+                with ranked as (
+                    select
+                        i.drive_file_id,
+                        i.preview_public_url,
+                        i.thumb_public_url,
+                        i.download_url,
+                        i.updated_at,
+                        j.live_at,
+                        row_number() over (
+                            partition by i.drive_file_id
+                            order by
+                                case when j.gallery_visibility = 'live' then 0 else 1 end,
+                                j.live_at desc nulls last,
+                                i.updated_at desc nulls last,
+                                i.created_at desc nulls last
+                        ) as rank_index
+                    from mirage_job_images i
+                    join mirage_jobs j on j.id = i.job_id
+                    where i.drive_file_id = any($1::text[])
+                      and coalesce(i.preview_public_url, '') <> ''
+                      and j.gallery_visibility = 'live'
+                )
+                select
+                    drive_file_id,
+                    preview_public_url,
+                    thumb_public_url,
+                    download_url
+                from ranked
+                where rank_index = 1
+                """,
+                file_ids,
+            )
+    except Exception:
+        return {}
+
+    for row in rows_pg:
+        drive_file_id = row.get("drive_file_id")
+        if not drive_file_id:
+            continue
+        result[str(drive_file_id)] = {
+            "preview_url": row.get("preview_public_url"),
+            "thumbnail_url": row.get("thumb_public_url"),
+            "download_url": row.get("download_url"),
+        }
+    return result
+
+
 async def _load_photo_rows_by_ids(
     supabase: AsyncClient,
     photo_ids: list[str],
@@ -307,6 +390,7 @@ async def _sync_section_assets(
 ) -> dict[str, dict]:
     file_ids = [file.file_id for file in files]
     photo_rows_by_drive_id = await _load_photo_rows_by_drive_ids(supabase, file_ids)
+    live_asset_rows_by_drive_id = await _load_live_asset_rows_by_drive_ids(file_ids)
     metadata = _metadata_from_row(row)
     requires_refresh = _is_sync_stale(metadata) or len(photo_rows_by_drive_id) != len(file_ids)
 
@@ -330,6 +414,27 @@ async def _sync_section_assets(
     if missing_rows:
         photo_rows_by_drive_id = await _load_photo_rows_by_drive_ids(supabase, file_ids)
         requires_refresh = True
+
+    photo_updates: list[dict] = []
+    for file_id, photo_row in list(photo_rows_by_drive_id.items()):
+        asset_row = live_asset_rows_by_drive_id.get(file_id)
+        if asset_row is None:
+            continue
+        merged = {**photo_row, **asset_row}
+        photo_rows_by_drive_id[file_id] = merged
+        next_public_url = asset_row.get("preview_url")
+        if next_public_url and photo_row.get("public_url") != next_public_url:
+            photo_updates.append(
+                {
+                    "id": photo_row["id"],
+                    "public_url": next_public_url,
+                    "updated_at": _utcnow_iso(),
+                }
+            )
+    for chunk in _chunked([json.dumps(item) for item in photo_updates], 100):
+        records = [json.loads(item) for item in chunk]
+        if records:
+            await supabase.table("photos").upsert(records, on_conflict="id").execute()
 
     if requires_refresh:
         event_id = str(row["id"])

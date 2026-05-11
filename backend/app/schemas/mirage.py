@@ -9,6 +9,7 @@ class MiragePhotoItem(BaseModel):
     name: str
     mimeType: str
     url: str
+    downloadUrl: Optional[str] = None
     caption: Optional[str] = None
     width: Optional[int] = None
     height: Optional[int] = None
@@ -21,6 +22,7 @@ class MiragePhotoItem(BaseModel):
     isFeatured: bool = False
     trendScore: Optional[int] = None
     matchedForCurrentUser: bool = False
+    thumbnailUrl: Optional[str] = None
 
 
 class MirageCollectionItem(BaseModel):
@@ -93,6 +95,23 @@ class MirageUserProfileResponse(BaseModel):
     images: list[MirageAnchorImageItem] = Field(default_factory=list)
 
 
+class MirageAnchorUserItem(BaseModel):
+    userId: str
+    username: Optional[str] = None
+    name: Optional[str] = None
+    consentEnabled: bool = False
+    enrollmentStatus: str = "draft"
+    approvedAnchorCount: int = 0
+    requiredAnchorCount: int = 6
+    pendingAnchorCount: int = 0
+    processingAnchorCount: int = 0
+    rejectedAnchorCount: int = 0
+    totalActiveImageCount: int = 0
+    readyForMapping: bool = False
+    lastProcessedAt: Optional[str] = None
+    images: list[MirageAnchorImageItem] = Field(default_factory=list)
+
+
 class MirageUserProfileSubmitRequest(BaseModel):
     consentEnabled: bool = False
 
@@ -123,6 +142,8 @@ class MirageJobListItem(BaseModel):
     matchingMode: str
     recursive: bool = False
     status: str
+    galleryVisibility: str = "draft"
+    batchState: str = "idle"
     imageCount: int = 0
     processedImageCount: int = 0
     approvedImageCount: int = 0
@@ -133,6 +154,14 @@ class MirageJobListItem(BaseModel):
     positivePairCount: int = 0
     negativePairCount: int = 0
     failedPairCount: int = 0
+    processedVerifiedUserCount: int = 0
+    totalVerifiedUserCount: int = 0
+    stagedMappingCount: int = 0
+    publishedMappingCount: int = 0
+    assetState: str = "idle"
+    assetStats: dict = Field(default_factory=dict)
+    optimizedImageCount: int = 0
+    failedOptimizedImageCount: int = 0
     liveAt: Optional[str] = None
     createdAt: Optional[str] = None
     updatedAt: Optional[str] = None
@@ -168,6 +197,14 @@ class MirageJobImageItem(BaseModel):
     displayOrder: int = 0
     status: str
     rerunReason: Optional[str] = None
+    detectedFaceCount: int = 0
+    mappedUserCount: int = 0
+    assetStatus: str = "pending"
+    assetError: Optional[str] = None
+    thumbUrl: Optional[str] = None
+    previewUrl: Optional[str] = None
+    inferenceUrl: Optional[str] = None
+    hasLocalInferenceCache: bool = False
     detectedFaces: list[MirageDetectedFaceItem] = Field(default_factory=list)
 
 
@@ -181,6 +218,8 @@ class MirageJobDetailResponse(BaseModel):
     matchingMode: str
     recursive: bool = False
     status: str
+    galleryVisibility: str = "draft"
+    batchState: str = "idle"
     imageCount: int = 0
     processedImageCount: int = 0
     approvedImageCount: int = 0
@@ -191,6 +230,14 @@ class MirageJobDetailResponse(BaseModel):
     positivePairCount: int = 0
     negativePairCount: int = 0
     failedPairCount: int = 0
+    processedVerifiedUserCount: int = 0
+    totalVerifiedUserCount: int = 0
+    stagedMappingCount: int = 0
+    publishedMappingCount: int = 0
+    assetState: str = "idle"
+    assetStats: dict = Field(default_factory=dict)
+    optimizedImageCount: int = 0
+    failedOptimizedImageCount: int = 0
     stats: dict = Field(default_factory=dict)
     reviewSummary: dict = Field(default_factory=dict)
     createdAt: Optional[str] = None

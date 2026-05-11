@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     MIRAGE_DEFAULT_THRESHOLD: float = 0.35
     MIRAGE_S3_BUCKET_NAME: str = "ascent-users"
     MIRAGE_S3_REGION: str = "ap-south-1"
-    MIRAGE_S3_PUBLIC_BASE_URL: str = "https://ascent-users.ap-south-1.amazonaws.com/"
+    MIRAGE_S3_PUBLIC_BASE_URL: str = "https://ascent-users.s3.ap-south-1.amazonaws.com/"
     MIRAGE_S3_ENDPOINT_URL: str | None = None
     MIRAGE_S3_SIGNED_URL_EXPIRES_SECONDS: int = 3600
     AWS_ACCESS_KEY_ID: str | None = None

@@ -9,6 +9,8 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.admin import Admin, AdminRole
 from app.models.user import User
+from app.schemas.mirage import MirageJobDetailResponse
+from app.services import mirage_pipeline_service
 from app.services.mirage_pipeline_service import build_drive_file_signature
 
 
@@ -285,6 +287,46 @@ def test_admin_mirage_job_routes(monkeypatch, client):
     assert delete_response.status_code == 204
 
 
+def test_admin_mirage_user_verification_routes(monkeypatch, client):
+    from app.api.routes import admin_panel as admin_routes
+
+    app.dependency_overrides[get_admin_only] = lambda: _make_admin()
+
+    async def fake_list_mirage_anchor_users(*args, **kwargs):
+        return [{
+            "userId": "user-1",
+            "username": "pseudo-user",
+            "name": "Pseudo User",
+            "consentEnabled": True,
+            "enrollmentStatus": "processing",
+            "approvedAnchorCount": 2,
+            "requiredAnchorCount": 6,
+            "pendingAnchorCount": 2,
+            "processingAnchorCount": 0,
+            "rejectedAnchorCount": 0,
+            "totalActiveImageCount": 4,
+            "readyForMapping": False,
+            "images": [{
+                "imageId": "img-1",
+                "filename": "front.jpg",
+                "status": "pending",
+                "poseLabel": "front",
+                "previewUrl": "https://example.com/front.jpg",
+            }],
+        }]
+
+    monkeypatch.setattr(admin_routes, "list_mirage_anchor_users", fake_list_mirage_anchor_users, raising=False)
+
+    headers = {"Authorization": f"Bearer {_admin_token()}"}
+    response = client.get("/api/v1/admin-panel/mirage/users?pending_only=true", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]["userId"] == "user-1"
+    assert payload[0]["pendingAnchorCount"] == 2
+    assert payload[0]["images"][0]["status"] == "pending"
+
+
 def test_mirage_me_photos_route(monkeypatch, client):
     from app.api.routes import mirage as mirage_routes
 
@@ -349,3 +391,106 @@ def test_mirage_file_route_requires_valid_signature(monkeypatch, client):
     )
     assert allowed.status_code == 200
     assert allowed.headers["cache-control"].startswith("private")
+
+
+def test_mirage_job_detail_schema_exposes_gallery_and_batch_state():
+    payload = MirageJobDetailResponse(
+        jobId="job-1",
+        dayLabel="Day 1",
+        driveFolderUrl="https://drive.google.com/drive/folders/demo",
+        driveFolderId="demo",
+        matchingMode="high_precision",
+        status="live",
+        galleryVisibility="live",
+        batchState="matching_users",
+        stagedMappingCount=3,
+        publishedMappingCount=10,
+        images=[{
+            "jobImageId": "image-1",
+            "filename": "frame.jpg",
+            "url": "/api/v1/mirage/files/file-1",
+            "status": "processed",
+            "mappedUserCount": 2,
+        }],
+    )
+
+    assert payload.galleryVisibility == "live"
+    assert payload.batchState == "matching_users"
+    assert payload.stagedMappingCount == 3
+    assert payload.publishedMappingCount == 10
+    assert payload.images[0].mappedUserCount == 2
+
+
+@pytest.mark.asyncio
+async def test_public_gallery_queries_live_gallery_visibility(monkeypatch):
+    eq_calls: list[tuple[str, object]] = []
+
+    class _Query:
+        def select(self, *_args, **_kwargs):
+            return self
+
+        def eq(self, column, value):
+            eq_calls.append((column, value))
+            return self
+
+        def order(self, *_args, **_kwargs):
+            return self
+
+        async def execute(self):
+            return type("_Response", (), {"data": [{"id": "job-1", "day_label": "Day 1"}]})()
+
+    class _Supabase:
+        def table(self, _name):
+            return _Query()
+
+    async def fake_build_collection_from_job(*_args, **_kwargs):
+        return {"dayLabel": "Day 1", "images": []}
+
+    monkeypatch.setattr(mirage_pipeline_service, "_build_collection_from_job", fake_build_collection_from_job)
+
+    payload = await mirage_pipeline_service.list_public_gallery(_Supabase())
+
+    assert payload == [{"dayLabel": "Day 1", "sections": [{"dayLabel": "Day 1", "images": []}]}]
+    assert ("gallery_visibility", "live") in eq_calls
+    assert ("status", "live") not in eq_calls
+
+
+@pytest.mark.asyncio
+async def test_job_list_item_uses_gallery_visibility_separate_from_batch_state(monkeypatch):
+    async def fake_compute_job_counts(*_args, **_kwargs):
+        return {
+            "imageCount": 0,
+            "processedImageCount": 0,
+            "approvedImageCount": 0,
+            "reviewRequiredCount": 0,
+            "pendingImageCount": 0,
+            "failedImageCount": 0,
+            "pendingPairCount": 0,
+            "positivePairCount": 0,
+            "negativePairCount": 0,
+            "failedPairCount": 0,
+            "processedVerifiedUserCount": 0,
+            "totalVerifiedUserCount": 0,
+            "stagedMappingCount": 0,
+            "publishedMappingCount": 0,
+        }
+
+    monkeypatch.setattr(mirage_pipeline_service, "_compute_job_counts", fake_compute_job_counts)
+
+    item = await mirage_pipeline_service._serialize_job_list_item(
+        None,
+        {
+            "id": "job-1",
+            "day_label": "Day 1",
+            "drive_folder_url": "https://drive.google.com/drive/folders/demo",
+            "drive_folder_id": "demo",
+            "matching_mode": "high_precision",
+            "status": "processing",
+            "gallery_visibility": "live",
+            "batch_state": "matching_users",
+        },
+    )
+
+    assert item["status"] == "live"
+    assert item["galleryVisibility"] == "live"
+    assert item["batchState"] == "matching_users"

@@ -279,6 +279,14 @@ export function MirageGallery() {
     }
   }, []);
 
+  const imageSrc = React.useCallback((photo, mode = 'preview') => {
+    if (!photo) return '';
+    if (mode === 'thumb') {
+      return photo.thumbnailUrl || photo.url;
+    }
+    return photo.url || photo.thumbnailUrl || '';
+  }, []);
+
   return (
     <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
       <NavBar variant="app" active="mirage" />
@@ -361,7 +369,7 @@ export function MirageGallery() {
                   >
                     <div style={{ aspectRatio: index === 0 && !isMobile ? '16 / 10' : '1 / 1.02', background: 'rgba(255,255,255,0.04)' }}>
                       <img
-                        src={photo.url}
+                        src={index === 0 && !isMobile ? imageSrc(photo, 'preview') : imageSrc(photo, 'thumb')}
                         alt={photo.name}
                         loading={index === 0 ? 'eager' : 'lazy'}
                         decoding="async"
@@ -411,7 +419,7 @@ export function MirageGallery() {
                   >
                     <div style={{ width: 72, height: 72, background: 'rgba(255,255,255,0.04)' }}>
                       <img
-                        src={photo.url}
+                        src={imageSrc(photo, 'thumb')}
                         alt={photo.name}
                         loading={index < 2 ? 'eager' : 'lazy'}
                         decoding="async"
@@ -577,7 +585,7 @@ export function MirageGallery() {
                             <div style={{ minHeight: 220, background: 'rgba(255,255,255,0.03)' }}>
                               {collection.coverImage ? (
                                 <img
-                                  src={collection.coverImage.url}
+                                  src={imageSrc(collection.coverImage, 'preview')}
                                   alt={collection.sectionTitle}
                                   loading="lazy"
                                   decoding="async"
@@ -604,7 +612,7 @@ export function MirageGallery() {
                                 {(collection.previewImages || []).slice(0, 3).map((image) => (
                                   <div key={image.photoId} style={{ aspectRatio: '1 / 1', borderRadius: 10, overflow: 'hidden', background: 'rgba(255,255,255,0.03)' }}>
                                     <img
-                                      src={image.url}
+                                      src={imageSrc(image, 'thumb')}
                                       alt={image.name}
                                       loading="lazy"
                                       decoding="async"
@@ -671,7 +679,7 @@ export function MirageGallery() {
                         >
                           <div style={{ aspectRatio: '1 / 1', borderRadius: 12, overflow: 'hidden', background: 'rgba(255,255,255,0.03)' }}>
                             <img
-                              src={image.url}
+                              src={imageSrc(image, 'thumb')}
                               alt={image.name}
                               loading="lazy"
                               decoding="async"
@@ -741,7 +749,7 @@ export function MirageGallery() {
           <div style={{ maxWidth: 1000, width: '100%', position: 'relative' }}>
             <div style={{ borderRadius: 16, overflow: 'hidden', background: 'rgba(255,255,255,0.03)' }}>
               <img
-                src={lightbox.url}
+                src={imageSrc(lightbox, 'preview')}
                 alt={lightbox.name}
                 decoding="async"
                 style={{ width: '100%', maxHeight: isMobile ? '70vh' : '78vh', objectFit: 'contain', display: 'block' }}
@@ -805,6 +813,7 @@ export function MirageGallery() {
 }
 
 function MiragePhotoCard({ image, collection, isMobile, onOpen, onToggleLike, onShare }) {
+  const cardSrc = image.thumbnailUrl || image.url;
   return (
     <div
       style={{
@@ -837,7 +846,7 @@ function MiragePhotoCard({ image, collection, isMobile, onOpen, onToggleLike, on
             </div>
           )}
           <img
-            src={image.url}
+            src={cardSrc}
             alt={image.name}
             loading="lazy"
             decoding="async"
@@ -872,6 +881,17 @@ function MiragePhotoCard({ image, collection, isMobile, onOpen, onToggleLike, on
           >
             {isMobile ? 'Share' : 'Share Link'}
           </button>
+          {image.downloadUrl ? (
+            <a
+              href={image.downloadUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="chip"
+              style={{ padding: '6px 10px', fontSize: 10, textDecoration: 'none' }}
+            >
+              Download
+            </a>
+          ) : null}
         </div>
       </div>
     </div>

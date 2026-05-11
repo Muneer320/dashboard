@@ -47,6 +47,17 @@ USER_IMAGE_PENDING_STATUSES = {"pending", "processing", "approved"}
 USER_IMAGE_ACTIVE_STATUSES = {"pending", "processing", "approved", "rejected"}
 JOB_TERMINAL_STATUSES = {"approved", "rejected", "failed"}
 
+_LEGACY_BATCH_STATE_BY_STATUS = {
+    "pending": "idle",
+    "processing": "matching_users",
+    "review": "awaiting_approval",
+    "rerun_pending": "matching_users",
+    "approved": "published",
+    "live": "published",
+    "failed": "failed",
+    "cancelled": "idle",
+}
+
 
 def _is_missing_mirage_table_error(error: Exception) -> bool:
     if isinstance(error, APIError):
@@ -64,6 +75,12 @@ def _is_missing_mirage_table_error(error: Exception) -> bool:
 
 def _is_unconfigured_mirage_backend(error: Exception) -> bool:
     return isinstance(error, RuntimeError) and "MIRAGE_DATABASE_URL or DATABASE_URL" in str(error)
+
+
+def _is_missing_mirage_column_error(error: Exception) -> bool:
+    if isinstance(error, asyncpg.UndefinedColumnError):
+        return True
+    return getattr(error, "sqlstate", None) == "42703"
 
 
 def _empty_mirage_profile(user_id: str) -> dict:
@@ -212,6 +229,9 @@ def verify_drive_file_signature(
 
 
 def _image_proxy_url(image_row: dict) -> str:
+    preview_public_url = image_row.get("preview_public_url")
+    if preview_public_url:
+        return str(preview_public_url)
     drive_file_id = image_row.get("drive_file_id")
     if drive_file_id:
         return _photo_proxy_url(
@@ -230,8 +250,36 @@ def _image_proxy_url(image_row: dict) -> str:
     return ""
 
 
+def _image_thumbnail_url(image_row: dict) -> str:
+    thumb_public_url = image_row.get("thumb_public_url")
+    if thumb_public_url:
+        return str(thumb_public_url)
+    return _image_proxy_url(image_row)
+
+
+def _image_inference_url(image_row: dict) -> str | None:
+    inference_public_url = image_row.get("inference_public_url")
+    if inference_public_url:
+        return str(inference_public_url)
+    return None
+
+
 def _matching_mode_display(mode: str) -> str:
     return mode or "high_precision"
+
+
+def _job_gallery_visibility(job: dict) -> str:
+    gallery_visibility = str(job.get("gallery_visibility") or "").strip()
+    if gallery_visibility:
+        return gallery_visibility
+    return "live" if str(job.get("status") or "").strip() == "live" else "draft"
+
+
+def _job_batch_state(job: dict) -> str:
+    batch_state = str(job.get("batch_state") or "").strip()
+    if batch_state:
+        return batch_state
+    return _LEGACY_BATCH_STATE_BY_STATUS.get(str(job.get("status") or "").strip(), "idle")
 
 
 _BROWSER_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp"}
@@ -270,7 +318,7 @@ def _convert_to_browser_preview(
         return content, mime_type, name
 
     try:
-        from PIL import Image, ImageOps
+        from PIL import Image, ImageOps, ImageSequence
 
         try:
             from pillow_heif import register_heif_opener
@@ -279,14 +327,23 @@ def _convert_to_browser_preview(
         except Exception:
             pass
 
+        def largest_tiff_frame(image_obj):
+            largest = image_obj
+            largest_area = image_obj.width * image_obj.height
+            try:
+                for frame in ImageSequence.Iterator(image_obj):
+                    area = int(frame.width) * int(frame.height)
+                    if area > largest_area:
+                        largest = frame.copy()
+                        largest_area = area
+            except Exception:
+                return image_obj.copy()
+            return largest if largest is not image_obj else image_obj.copy()
+
         image = None
         if suffix in {".tif", ".tiff"}:
-            embedded_jpeg = _largest_embedded_jpeg(content)
-            if embedded_jpeg:
-                try:
-                    image = Image.open(io.BytesIO(embedded_jpeg))
-                except Exception:
-                    image = None
+            with Image.open(io.BytesIO(content)) as tiff_image:
+                image = largest_tiff_frame(tiff_image)
 
         if suffix == ".nef":
             try:
@@ -474,6 +531,32 @@ def _serialize_anchor_image(image: dict) -> dict:
     }
 
 
+def _serialize_anchor_user(user_row: dict, images: list[dict]) -> dict:
+    active_images = [image for image in images if image.get("status") != "deleted"]
+    pending_count = sum(1 for image in active_images if image.get("status") == "pending")
+    processing_count = sum(1 for image in active_images if image.get("status") == "processing")
+    rejected_count = sum(1 for image in active_images if image.get("status") == "rejected")
+    approved_count = sum(1 for image in active_images if image.get("status") == "approved")
+    consent_enabled = bool(user_row.get("consent_enabled", False))
+    last_processed_at = _to_iso_or_none(user_row.get("last_processed_at"))
+    return {
+        "userId": str(user_row["user_id"]),
+        "username": user_row.get("username"),
+        "name": user_row.get("name"),
+        "consentEnabled": consent_enabled,
+        "enrollmentStatus": user_row.get("enrollment_status") or "draft",
+        "approvedAnchorCount": approved_count,
+        "requiredAnchorCount": REQUIRED_ANCHOR_COUNT,
+        "pendingAnchorCount": pending_count,
+        "processingAnchorCount": processing_count,
+        "rejectedAnchorCount": rejected_count,
+        "totalActiveImageCount": len(active_images),
+        "readyForMapping": consent_enabled and approved_count >= REQUIRED_ANCHOR_COUNT,
+        "lastProcessedAt": last_processed_at,
+        "images": [_serialize_anchor_image(image) for image in active_images],
+    }
+
+
 async def get_mirage_profile(supabase: AsyncClient, user: User) -> dict:
     user_id = str(user.id)
     try:
@@ -626,6 +709,51 @@ async def submit_mirage_profile(
     return await get_mirage_profile(supabase, user)
 
 
+async def list_mirage_anchor_users(supabase: AsyncClient, *, pending_only: bool = True) -> list[dict]:
+    try:
+        async with mirage_connection() as connection:
+            user_rows = await connection.fetch(
+                """
+                select distinct p.user_id,
+                       p.consent_enabled,
+                       p.enrollment_status,
+                       p.approved_anchor_count,
+                       p.last_processed_at,
+                       u.username,
+                       u.name
+                from mirage_user_profiles p
+                join users u on u.id = p.user_id
+                where exists (
+                    select 1
+                    from mirage_user_images i
+                    where i.user_id = p.user_id
+                      and i.status <> 'deleted'
+                )
+                  and (
+                    not $1::boolean
+                    or exists (
+                        select 1
+                        from mirage_user_images i2
+                        where i2.user_id = p.user_id
+                          and i2.status in ('pending', 'processing')
+                    )
+                  )
+                order by p.last_processed_at asc nulls first, u.name asc nulls last, u.username asc
+                """,
+                pending_only,
+            )
+        items: list[dict] = []
+        for row in user_rows:
+            user_id = str(row["user_id"])
+            images = await _load_user_images(supabase, user_id)
+            items.append(_serialize_anchor_user(dict(row), images))
+        return items
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            return []
+        raise
+
+
 async def _load_like_maps(
     supabase: AsyncClient,
     photo_ids: list[str],
@@ -666,6 +794,7 @@ async def _load_user_matched_image_ids(
             supabase.table("image_user_mappings")
             .select("image_id, user_id")
             .eq("user_id", str(user.id))
+            .eq("publish_state", "published")
             .in_("image_id", chunk)
             .execute()
         )
@@ -704,6 +833,13 @@ async def _serialize_job_image_for_photo(
         "name": image.get("filename") or image_id,
         "mimeType": "image/jpeg",
         "url": _image_proxy_url(image),
+        "thumbnailUrl": _image_thumbnail_url(image),
+        "downloadUrl": image.get("download_url")
+        or (
+            public_drive_file_url(str(image.get("drive_file_id")))
+            if image.get("drive_file_id")
+            else None
+        ),
         "caption": image.get("filename"),
         "likeCount": like_counts.get(image_id, 0),
         "liked": image_id in liked_ids,
@@ -785,7 +921,7 @@ async def list_public_gallery(supabase: AsyncClient, user: User | None = None) -
         jobs_response = await (
             supabase.table("mirage_jobs")
             .select("*")
-            .eq("status", "live")
+            .eq("gallery_visibility", "live")
             .order("day_label")
             .order("created_at")
             .execute()
@@ -809,7 +945,7 @@ async def get_overview_payload(supabase: AsyncClient, user: User) -> dict:
         jobs_response = await (
             supabase.table("mirage_jobs")
             .select("*")
-            .eq("status", "live")
+            .eq("gallery_visibility", "live")
             .order("day_label")
             .order("created_at")
             .execute()
@@ -871,7 +1007,7 @@ async def get_collection_detail(supabase: AsyncClient, collection_id: str, user:
             supabase.table("mirage_jobs")
             .select("*")
             .eq("id", job_uuid)
-            .eq("status", "live")
+            .eq("gallery_visibility", "live")
             .limit(1)
             .execute()
         )
@@ -883,7 +1019,7 @@ async def get_collection_detail(supabase: AsyncClient, collection_id: str, user:
         sibling_response = await (
             supabase.table("mirage_jobs")
             .select("*")
-            .eq("status", "live")
+            .eq("gallery_visibility", "live")
             .neq("id", job_uuid)
             .order("created_at")
             .limit(4)
@@ -977,6 +1113,7 @@ async def list_my_mirage_photos(supabase: AsyncClient, user: User) -> list[dict]
             supabase.table("image_user_mappings")
             .select("image_id, user_id")
             .eq("user_id", user_id)
+            .eq("publish_state", "published")
             .execute()
         )
         mapping_rows = rows(mapping_response)
@@ -997,7 +1134,7 @@ async def list_my_mirage_photos(supabase: AsyncClient, user: User) -> list[dict]
                     supabase.table("mirage_jobs")
                     .select("*")
                     .in_("id", job_ids)
-                    .eq("status", "live")
+                    .eq("gallery_visibility", "live")
                     .execute()
                 )
                 jobs_by_id = {str(job["id"]): job for job in rows(jobs_response)}
@@ -1072,7 +1209,7 @@ async def list_my_mirage_photos(supabase: AsyncClient, user: User) -> list[dict]
                 supabase.table("mirage_jobs")
                 .select("*")
                 .in_("id", job_ids)
-                .eq("status", "live")
+                .eq("gallery_visibility", "live")
                 .execute()
             )
             jobs_by_id = {str(job["id"]): job for job in rows(jobs_response)}
@@ -1141,8 +1278,9 @@ async def search_mirage_people(supabase: AsyncClient, user: User, query: str, li
             join mirage_job_images i on i.id = m.image_id
             join mirage_jobs j on j.id = i.job_id
             where m.user_id = any($1::uuid[])
+              and m.publish_state = 'published'
               and i.status = 'approved'
-              and j.status = 'live'
+              and j.gallery_visibility = 'live'
             order by m.user_id, j.created_at desc nulls last, i.display_order, i.filename
             """,
             user_ids,
@@ -1186,39 +1324,121 @@ async def search_mirage_people(supabase: AsyncClient, user: User, query: str, li
     return {"query": search, "people": results}
 
 
-async def _compute_job_counts(supabase: AsyncClient, job_id: str) -> dict:
+async def _compute_job_counts(supabase: AsyncClient, job: dict) -> dict:
+    job_id = str(job["id"])
+    model_version = str(job.get("model_version") or settings.MIRAGE_MODEL_VERSION)
+    preprocessing_version = str(job.get("preprocessing_version") or settings.MIRAGE_PREPROCESSING_VERSION)
     async with mirage_connection() as connection:
-        result = await connection.fetch(
-            """
-            select id, status
-            from mirage_job_images
-            where job_id = $1::uuid
-            """,
-            job_id,
-        )
+        try:
+            result = await connection.fetch(
+                """
+                select id, status, asset_status
+                from mirage_job_images
+                where job_id = $1::uuid
+                """,
+                job_id,
+            )
+            asset_status_available = True
+        except Exception as exc:
+            if not _is_missing_mirage_column_error(exc):
+                raise
+            result = await connection.fetch(
+                """
+                select id, status
+                from mirage_job_images
+                where job_id = $1::uuid
+                """,
+                job_id,
+            )
+            asset_status_available = False
         pair_result = await connection.fetch(
             """
             select status, count(*)::int as count
             from inference_user_image_status
             where job_id = $1::uuid
+              and model_version = $2
+              and preprocessing_version = $3
             group by status
             """,
             job_id,
+            model_version,
+            preprocessing_version,
         )
+        eligible_user_ids = await _load_inference_user_ids(
+            connection,
+            model_version=model_version,
+            preprocessing_version=preprocessing_version,
+        )
+        progress_rows = await connection.fetch(
+            """
+            select
+                user_id::text as user_id,
+                count(*)::int as total_rows,
+                count(*) filter (where status = 'pending')::int as pending_rows
+            from inference_user_image_status
+            where job_id = $1::uuid
+              and model_version = $2
+              and preprocessing_version = $3
+              and user_id = any($4::uuid[])
+            group by user_id
+            """,
+            job_id,
+            model_version,
+            preprocessing_version,
+            eligible_user_ids,
+        )
+        mapping_counts_result = await connection.fetchrow(
+            """
+            select
+                count(*) filter (where publish_state = 'staged')::int as staged_mapping_count,
+                count(*) filter (where publish_state = 'published')::int as published_mapping_count
+            from image_user_mappings
+            where job_id = $1::uuid
+            """,
+            job_id,
+        )
+        mapping_counts_row = dict(mapping_counts_result) if mapping_counts_result is not None else {}
     image_rows = [dict(row) for row in result]
     counts = Counter((row.get("status") or "pending") for row in image_rows)
+    if asset_status_available:
+        asset_counts = Counter((row.get("asset_status") or "pending") for row in image_rows)
+    else:
+        asset_counts = Counter({"ready": len(image_rows)}) if image_rows else Counter()
     pair_counts = {str(row["status"]): int(row["count"]) for row in pair_result}
+    image_count = len(image_rows)
+    total_verified_user_count = len(eligible_user_ids)
+    progress_by_user = {str(row["user_id"]): dict(row) for row in progress_rows}
+    processed_verified_user_count = 0
+    existing_pair_count = 0
+    for user_id in eligible_user_ids:
+        row = progress_by_user.get(user_id)
+        if not row:
+            continue
+        total_rows = int(row.get("total_rows") or 0)
+        pending_rows = int(row.get("pending_rows") or 0)
+        existing_pair_count += total_rows
+        if image_count > 0 and total_rows >= image_count and pending_rows == 0:
+            processed_verified_user_count += 1
+
+    expected_pair_count = image_count * total_verified_user_count
+    missing_pair_count = max(expected_pair_count - existing_pair_count, 0)
     return {
-        "imageCount": len(image_rows),
+        "imageCount": image_count,
         "processedImageCount": counts.get("processed", 0) + counts.get("approved", 0) + counts.get("review_required", 0) + counts.get("rejected", 0) + counts.get("failed", 0),
         "approvedImageCount": counts.get("approved", 0),
         "reviewRequiredCount": counts.get("review_required", 0) + counts.get("rerun_requested", 0),
         "pendingImageCount": counts.get("pending", 0) + counts.get("processing", 0),
         "failedImageCount": counts.get("failed", 0),
-        "pendingPairCount": pair_counts.get("pending", 0),
+        "pendingPairCount": pair_counts.get("pending", 0) + missing_pair_count,
         "positivePairCount": pair_counts.get("positive", 0),
         "negativePairCount": pair_counts.get("negative", 0),
         "failedPairCount": pair_counts.get("failed", 0),
+        "processedVerifiedUserCount": processed_verified_user_count,
+        "totalVerifiedUserCount": total_verified_user_count,
+        "stagedMappingCount": int(mapping_counts_row.get("staged_mapping_count") or 0),
+        "publishedMappingCount": int(mapping_counts_row.get("published_mapping_count") or 0),
+        "optimizedImageCount": asset_counts.get("ready", 0),
+        "failedOptimizedImageCount": asset_counts.get("failed", 0),
     }
 
 
@@ -1339,7 +1559,8 @@ async def _initialize_inference_state_for_job(
 
 
 async def _serialize_job_list_item(supabase: AsyncClient, job: dict) -> dict:
-    counts = await _compute_job_counts(supabase, str(job["id"]))
+    counts = await _compute_job_counts(supabase, job)
+    asset_state = str(job.get("asset_state") or ("ready" if counts.get("imageCount", 0) else "idle"))
     return {
         "jobId": str(job["id"]),
         "eventId": job.get("event_id"),
@@ -1349,7 +1570,11 @@ async def _serialize_job_list_item(supabase: AsyncClient, job: dict) -> dict:
         "driveFolderId": job.get("drive_folder_id") or "",
         "matchingMode": _matching_mode_display(job.get("matching_mode") or "high_precision"),
         "recursive": bool(job.get("recursive", False)),
-        "status": job.get("status") or "pending",
+        "status": _job_gallery_visibility(job),
+        "galleryVisibility": _job_gallery_visibility(job),
+        "batchState": _job_batch_state(job),
+        "assetState": asset_state,
+        "assetStats": job.get("asset_stats_json") or {},
         "liveAt": _to_iso_or_none(job.get("live_at")),
         "createdAt": _to_iso_or_none(job.get("created_at")),
         "updatedAt": _to_iso_or_none(job.get("updated_at")),
@@ -1360,15 +1585,31 @@ async def _serialize_job_list_item(supabase: AsyncClient, job: dict) -> dict:
 async def list_mirage_jobs(supabase: AsyncClient) -> list[dict]:
     try:
         async with mirage_connection() as connection:
-            result = await connection.fetch(
-                """
-                select id, event_id, event_name_snapshot, day_label, drive_folder_url,
-                       drive_folder_id, matching_mode, recursive, status, live_at,
-                       created_at, updated_at
-                from mirage_jobs
-                order by created_at desc
-                """
-            )
+            try:
+                result = await connection.fetch(
+                    """
+                    select id, event_id, event_name_snapshot, day_label, drive_folder_url,
+                           drive_folder_id, matching_mode, recursive, status, gallery_visibility,
+                           batch_state, asset_state, asset_stats_json,
+                           model_version, preprocessing_version, live_at,
+                           created_at, updated_at
+                    from mirage_jobs
+                    order by created_at desc
+                    """
+                )
+            except Exception as exc:
+                if not _is_missing_mirage_column_error(exc):
+                    raise
+                result = await connection.fetch(
+                    """
+                    select id, event_id, event_name_snapshot, day_label, drive_folder_url,
+                           drive_folder_id, matching_mode, recursive, status, gallery_visibility,
+                           batch_state, model_version, preprocessing_version, live_at,
+                           created_at, updated_at
+                    from mirage_jobs
+                    order by created_at desc
+                    """
+                )
         jobs = [dict(row) for row in result]
         return await asyncio.gather(*(_serialize_job_list_item(supabase, job) for job in jobs))
     except Exception:
@@ -1499,50 +1740,79 @@ async def create_mirage_job(supabase: AsyncClient, payload: dict) -> dict:
     return await _serialize_job_list_item(supabase, dict(job))
 
 
-async def _load_faces_for_images(supabase: AsyncClient, image_ids: list[str]) -> dict[str, list[dict]]:
+async def _load_faces_for_images(image_ids: list[str]) -> dict[str, list[dict]]:
     if not image_ids:
         return {}
-    response = await (
-        supabase.table("mirage_detected_faces")
-        .select("*")
-        .in_("job_image_id", image_ids)
-        .order("created_at")
-        .execute()
-    )
     result: dict[str, list[dict]] = {}
-    for row in rows(response):
-        result.setdefault(str(row["job_image_id"]), []).append(row)
+    async with mirage_connection() as connection:
+        face_rows = await connection.fetch(
+            """
+            select *
+            from mirage_detected_faces
+            where job_image_id = any($1::uuid[])
+            order by created_at
+            """,
+            image_ids,
+        )
+    for row in face_rows:
+        item = dict(row)
+        result.setdefault(str(item["job_image_id"]), []).append(item)
     return result
 
 
-async def _load_match_rows_for_faces(supabase: AsyncClient, face_ids: list[str]) -> dict[str, list[dict]]:
+async def _load_match_rows_for_faces(face_ids: list[str]) -> dict[str, list[dict]]:
     if not face_ids:
         return {}
-    response = await (
-        supabase.table("mirage_face_matches")
-        .select("*")
-        .in_("face_id", face_ids)
-        .order("best_score", desc=True)
-        .execute()
-    )
-    match_rows = rows(response)
-    user_ids = sorted({str(row["user_id"]) for row in match_rows if row.get("user_id")})
-    users_by_id: dict[str, dict] = {}
-    if user_ids:
-        user_response = await (
-            supabase.table("users")
-            .select("id, name")
-            .in_("id", user_ids)
-            .execute()
-        )
-        users_by_id = {str(row["id"]): row for row in rows(user_response)}
-
+    async with mirage_connection() as connection:
+        match_rows = [dict(row) for row in await connection.fetch(
+            """
+            select *
+            from mirage_face_matches
+            where face_id = any($1::uuid[])
+            order by best_score desc nulls last
+            """,
+            face_ids,
+        )]
+        user_ids = sorted({str(row["user_id"]) for row in match_rows if row.get("user_id")})
+        users_by_id: dict[str, dict] = {}
+        if user_ids:
+            user_rows = await connection.fetch(
+                """
+                select id::text as id, name
+                from users
+                where id = any($1::uuid[])
+                """,
+                user_ids,
+            )
+            users_by_id = {str(row["id"]): dict(row) for row in user_rows}
     result: dict[str, list[dict]] = {}
     for row in match_rows:
         if row.get("user_id"):
             row["user_name"] = users_by_id.get(str(row["user_id"]), {}).get("name")
         result.setdefault(str(row["face_id"]), []).append(row)
     return result
+
+
+async def _load_mapped_user_counts_for_images(job_id: str, image_ids: list[str]) -> dict[str, int]:
+    if not image_ids:
+        return {}
+    async with mirage_connection() as connection:
+        rows = await connection.fetch(
+            """
+            select image_id::text as image_id, count(*)::int as mapped_user_count
+            from image_user_mappings
+            where job_id = $1::uuid
+              and image_id = any($2::uuid[])
+              and model_version = $3
+              and preprocessing_version = $4
+            group by image_id
+            """,
+            job_id,
+            image_ids,
+            settings.MIRAGE_MODEL_VERSION,
+            settings.MIRAGE_PREPROCESSING_VERSION,
+        )
+    return {str(row["image_id"]): int(row["mapped_user_count"] or 0) for row in rows}
 
 
 def _effective_positive_match(match: dict) -> bool:
@@ -1555,78 +1825,57 @@ def _effective_positive_match(match: dict) -> bool:
 
 async def get_mirage_job_detail(supabase: AsyncClient, job_id: str) -> dict:
     job_uuid = _ensure_uuid(job_id, detail="Invalid Mirage job ID.")
-    response = await (
-        supabase.table("mirage_jobs")
-        .select("*")
-        .eq("id", job_uuid)
-        .limit(1)
-        .execute()
-    )
-    job = first_row(response)
-    if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirage job not found.")
-
-    image_response = await (
-        supabase.table("mirage_job_images")
-        .select("*")
-        .eq("job_id", job_uuid)
-        .order("display_order")
-        .execute()
-    )
-    image_rows = rows(image_response)
+    async with mirage_connection() as connection:
+        job_row = await connection.fetchrow(
+            "select * from mirage_jobs where id = $1::uuid limit 1",
+            job_uuid,
+        )
+        if job_row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirage job not found.")
+        job = dict(job_row)
+        image_rows = [
+            dict(row)
+            for row in await connection.fetch(
+                """
+                select *
+                from mirage_job_images
+                where job_id = $1::uuid
+                order by display_order
+                """,
+                job_uuid,
+            )
+        ]
     image_ids = [str(image["id"]) for image in image_rows]
-    faces_by_image = await _load_faces_for_images(supabase, image_ids)
-    face_ids = [str(face["id"]) for faces in faces_by_image.values() for face in faces]
-    matches_by_face = await _load_match_rows_for_faces(supabase, face_ids)
+    mapped_users_by_image = await _load_mapped_user_counts_for_images(job_uuid, image_ids)
 
     images: list[dict] = []
     for image in image_rows:
-        face_items: list[dict] = []
-        for face in faces_by_image.get(str(image["id"]), []):
-            landmarks = face.get("landmarks") or []
-            positive_matches = [
-                match
-                for match in matches_by_face.get(str(face["id"]), [])
-                if _effective_positive_match(match)
-            ]
-            face_items.append(
-                {
-                    "faceId": str(face["id"]),
-                    "bbox": face.get("bbox") or {},
-                    "landmarks": landmarks if isinstance(landmarks, list) else [],
-                    "detectionScore": face.get("detection_score"),
-                    "qualityScore": face.get("quality_score"),
-                    "status": "matched" if positive_matches else "unknown",
-                    "matches": [
-                        {
-                            "matchId": str(match["id"]),
-                            "userId": match.get("user_id"),
-                            "userName": match.get("user_name"),
-                            "bestScore": match.get("best_score"),
-                            "secondBestScore": None,
-                            "margin": None,
-                            "autoDecision": "approved",
-                            "reviewDecision": "approved",
-                            "reviewedAt": match.get("reviewed_at"),
-                        }
-                        for match in positive_matches
-                    ],
-                }
-            )
         images.append(
             {
                 "jobImageId": str(image["id"]),
                 "fileId": image.get("drive_file_id"),
                 "filename": image.get("filename") or "",
                 "url": _image_proxy_url(image),
+                "thumbUrl": _image_thumbnail_url(image),
+                "previewUrl": _image_proxy_url(image),
+                "inferenceUrl": _image_inference_url(image),
                 "displayOrder": int(image.get("display_order") or 0),
                 "status": image.get("status") or "pending",
                 "rerunReason": image.get("rerun_reason"),
-                "detectedFaces": face_items,
+                "detectedFaceCount": int(image.get("detected_face_count") or 0),
+                "mappedUserCount": int(mapped_users_by_image.get(str(image["id"]), 0)),
+                "assetStatus": image.get("asset_status") or "pending",
+                "assetError": image.get("asset_error"),
+                "hasLocalInferenceCache": bool(
+                    image.get("inference_local_path")
+                    and Path(str(image.get("inference_local_path"))).exists()
+                ),
+                "detectedFaces": [],
             }
         )
 
-    counts = await _compute_job_counts(supabase, job_uuid)
+    counts = await _compute_job_counts(supabase, job)
+    asset_state = str(job.get("asset_state") or ("ready" if counts.get("imageCount", 0) else "idle"))
     return {
         "jobId": job_uuid,
         "eventId": job.get("event_id"),
@@ -1636,7 +1885,11 @@ async def get_mirage_job_detail(supabase: AsyncClient, job_id: str) -> dict:
         "driveFolderId": job.get("drive_folder_id") or "",
         "matchingMode": _matching_mode_display(job.get("matching_mode") or "high_precision"),
         "recursive": bool(job.get("recursive", False)),
-        "status": job.get("status") or "pending",
+        "status": _job_gallery_visibility(job),
+        "galleryVisibility": _job_gallery_visibility(job),
+        "batchState": _job_batch_state(job),
+        "assetState": asset_state,
+        "assetStats": job.get("asset_stats_json") or {},
         "stats": job.get("stats_json") or {},
         "reviewSummary": job.get("review_summary") or {},
         "createdAt": _to_iso_or_none(job.get("created_at")),

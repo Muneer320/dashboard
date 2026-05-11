@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
@@ -12,6 +13,8 @@ from fastapi import HTTPException, UploadFile, status
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class MirageStoredObject:
@@ -21,15 +24,21 @@ class MirageStoredObject:
 
 
 def _s3_client():
-    return boto3.client(
-        "s3",
-        region_name=settings.MIRAGE_S3_REGION,
-        endpoint_url=settings.MIRAGE_S3_ENDPOINT_URL,
-        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-        aws_session_token=settings.AWS_SESSION_TOKEN,
-        config=BotoConfig(signature_version="s3v4"),
-    )
+    kwargs = {
+        "region_name": settings.MIRAGE_S3_REGION,
+        "config": BotoConfig(signature_version="s3v4"),
+    }
+    endpoint_url = (settings.MIRAGE_S3_ENDPOINT_URL or "").strip() or None
+    if endpoint_url is not None:
+        kwargs["endpoint_url"] = endpoint_url
+    # Let boto3 fall back to the default credential chain (for example an EC2
+    # instance role) when static env credentials are not configured.
+    if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+        kwargs["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
+        kwargs["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
+        if settings.AWS_SESSION_TOKEN:
+            kwargs["aws_session_token"] = settings.AWS_SESSION_TOKEN
+    return boto3.client("s3", **kwargs)
 
 
 def _public_url_for_key(object_key: str) -> str:
@@ -81,6 +90,11 @@ async def save_mirage_image(path_prefix: str, upload_file: UploadFile) -> Mirage
     try:
         await asyncio.to_thread(_upload)
     except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "Mirage S3 upload failed for bucket=%s key=%s",
+            settings.MIRAGE_S3_BUCKET_NAME,
+            object_key,
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not upload the Mirage image to S3.",
