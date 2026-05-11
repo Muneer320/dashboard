@@ -83,10 +83,7 @@ def drive_file_view_url(file_id: str) -> str:
 
 
 def public_drive_file_url(file_id: str) -> str:
-    return (
-        "https://drive.usercontent.google.com/download"
-        f"?id={quote(file_id)}&export=download&authuser=0&confirm=t"
-    )
+    return f"https://drive.google.com/uc?export=download&id={quote(file_id)}"
 
 
 def parse_drive_file_id(file_url_or_id: str) -> str:
