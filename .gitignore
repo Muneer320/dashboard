@@ -6,6 +6,12 @@ Thumbs.db
 
 # Logs
 *.log
+*.out.log
+*.err.log
+processor/logs/
+mirage-mapping-dashboard/*.log
+mirage-mapping-dashboard/*.out.log
+mirage-mapping-dashboard/*.err.log
 
 # Env files
 .env

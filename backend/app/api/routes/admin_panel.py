@@ -38,6 +38,7 @@ from app.schemas.admin_panel import (
     UserMealsResponse,
 )
 from app.schemas.mirage import (
+    MirageAnchorUserItem,
     MirageFaceMatchReviewRequest,
     MirageFaceMatchReviewResponse,
     MirageJobCreateRequest,
@@ -89,6 +90,7 @@ from app.services.mirage_pipeline_service import (
     create_mirage_job,
     delete_mirage_job,
     get_mirage_job_detail,
+    list_mirage_anchor_users,
     list_mirage_jobs,
     publish_mirage_job,
     update_mirage_face_match_review,
@@ -740,6 +742,16 @@ async def admin_list_mirage_jobs(
 ) -> list[MirageJobListItem]:
     items = await list_mirage_jobs(supabase)
     return [MirageJobListItem(**item) for item in items]
+
+
+@router.get("/mirage/users", response_model=list[MirageAnchorUserItem])
+async def admin_list_mirage_users(
+    pending_only: bool = True,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> list[MirageAnchorUserItem]:
+    items = await list_mirage_anchor_users(supabase, pending_only=pending_only)
+    return [MirageAnchorUserItem(**item) for item in items]
 
 
 @router.post("/mirage/jobs", response_model=MirageJobListItem, status_code=201)
