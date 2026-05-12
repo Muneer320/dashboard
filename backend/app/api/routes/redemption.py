@@ -76,7 +76,7 @@ async def get_student_for_redemption(
 ) -> dict[str, Any]:
     resp = await (
         supabase.table("users")
-        .select("id, name, username, email")
+        .select("id, name, username")
         .eq("id", student_id)
         .limit(1)
         .execute()
@@ -104,7 +104,6 @@ async def get_student_for_redemption(
             "id":       str(student["id"]),
             "name":     student.get("name") or student.get("username", ""),
             "username": student.get("username", ""),
-            "email":    student.get("email", ""),
         },
         "balance": balance,
         "tiers":   tiers,
@@ -180,7 +179,7 @@ async def award_redemption(
         action="redemption_awarded",
         entity_type="reward_redemptions",
         entity_id=student_id,
-        detail={"tier": tier, "coins_deducted": threshold},
+        after_state={"tier": tier, "coins_deducted": threshold},
     )
 
     return {

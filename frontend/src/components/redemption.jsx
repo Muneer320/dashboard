@@ -365,7 +365,6 @@ export default function RedemptionBooth() {
               <div>
                 <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{studentData.student.name}</div>
                 <div style={{ fontSize: 12, color: "#6b6b8a" }}>@{studentData.student.username}</div>
-                <div style={{ fontSize: 12, color: "#6b6b8a" }}>{studentData.student.email}</div>
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontSize: 28, fontWeight: 800, color: "#7f77dd" }}>
