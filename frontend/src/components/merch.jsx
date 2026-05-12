@@ -55,13 +55,11 @@ const ITEMS = [
   {
     id: "mug",
     name: "Mug",
-    description: "Ceramic mug with Ascent artwork. Dropping soon.",
-    price: null,
-    originalPrice: null,
-    image: "/merch/mainpic.jpeg",
-    tag: "Coming Soon",
-    tagColor: "var(--teal)",
-    comingSoon: true,
+    description: "Ceramic mug with exclusive Ascent gold artwork.",
+    price: 249,
+    originalPrice: 359,
+    image: "/merch/mug.jpeg",
+    tag: null,
   },
 ];
 
