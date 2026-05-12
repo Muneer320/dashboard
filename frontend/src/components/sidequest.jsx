@@ -206,6 +206,7 @@ const NAV_ITEMS = [
   { key: "qr",           label: "My QR",          to: "/coins/qr",         iconKey: "qr" },
   { key: "history",      label: "History",        to: "/coins/history",    iconKey: "clock" },
   { key: "guide",        label: "How to Earn",    to: "/coins/guide",      iconKey: "book" },
+  { key: "terms",        label: "Terms",          to: "/coins/terms",      iconKey: "scroll" },
 ];
 
 function NavIcon({ k }) {
@@ -225,8 +226,9 @@ function NavIcon({ k }) {
     case "bolt":  return <svg {...common}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="currentColor"/></svg>;
     case "coin":  return <svg {...common}><circle cx="12" cy="12" r="9"/><text x="12" y="16" textAnchor="middle" fontSize="11" fill="currentColor" stroke="none" fontFamily="var(--f-display)" fontWeight="700">$</text></svg>;
     case "qr":    return <svg {...common}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="18" y1="14" x2="18" y2="18"/><line x1="14" y1="18" x2="21" y2="18"/></svg>;
-    case "book":  return <svg {...common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
-    default:      return null;
+    case "book":   return <svg {...common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
+    case "scroll": return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+    default:       return null;
   }
 }
 
@@ -2824,6 +2826,282 @@ export function MyQRPage() {
           </div>
         </div>
       </div>
+    </SidequestLayout>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Terms & Conditions page  (/coins/terms)
+// ─────────────────────────────────────────────────────────────
+const TERMS_SECTIONS = [
+  {
+    id: "ugc",
+    emoji: "📤",
+    title: "User-Generated Content (UGC) Submissions",
+    color: "var(--violet)",
+    items: [
+      "You may submit proof of participation for eligible activities listed in the How to Earn guide.",
+      "Each activity type permits only one approved submission per registered participant. Duplicate submissions will be rejected.",
+      "Submitted proof (URL or screenshot) must be original, publicly visible, and directly related to the Ascent Techfest 2026 activity it is claimed for.",
+      "Fabricated, edited, or borrowed proof constitutes fraud and will result in immediate disqualification and revocation of all Ascent Cents earned.",
+      "The organisers reserve the right to request additional verification at any time.",
+      "By submitting, you grant the Ascent Techfest team a non-exclusive right to display your submission internally for verification purposes.",
+    ],
+  },
+  {
+    id: "coins",
+    emoji: "🪙",
+    title: "Coin Crediting & Verification Policy",
+    color: "var(--teal)",
+    items: [
+      "Ascent Cents are credited only after a volunteer or administrator manually reviews and approves your submission.",
+      "Review typically completes within a few hours; during peak periods it may take up to 24 hours.",
+      "Approval is final at the reviewer's discretion. An approved submission cannot be re-reviewed except through the formal dispute process.",
+      "Coin amounts are fixed per activity type and are displayed in the guide. No negotiation or partial credit is available.",
+      "Cents earned at on-site booths (QR scan) are credited instantly and are final.",
+      "Rejected submissions may be resubmitted once if the rejection reason can be remedied (e.g., a clearer screenshot). A second rejection is final.",
+    ],
+  },
+  {
+    id: "reversal",
+    emoji: "↩️",
+    title: "Reversal & Correction Policy",
+    color: "var(--amber)",
+    items: [
+      "The Ascent Cents ledger is append-only. Corrections are applied as reversal entries, not edits. Your full transaction history is always preserved.",
+      "Reversals may be issued if a submission is later found to be fraudulent, if a technical error caused a double credit, or if a booth credited the wrong amount.",
+      "You will be notified in-app when a reversal is posted to your account.",
+      "If a reversal reduces your balance below zero, your balance is floored at 0 — no negative balances are carried forward.",
+      "Reversals applied due to fraud are not appealable.",
+    ],
+  },
+  {
+    id: "rewards",
+    emoji: "🎁",
+    title: "Rewards & Redemption",
+    color: "var(--violet)",
+    items: [
+      "Rewards are physical merchandise (stickers, badges, notepads, mugs, tote bags) distributed at designated redemption booths inside the fest venue.",
+      "Redemption is available only to registered Ascent Techfest 2026 participants with a valid QR code.",
+      "Each participant may redeem a reward only once. Redemption is irreversible.",
+      "Spending Cents on a reward does not remove you from the leaderboard — your historical balance is retained for ranking.",
+      "Reward stock is limited. If a tier reward runs out, the next available tier may be offered at the organiser's discretion.",
+      "Rewards have no monetary value and cannot be exchanged or refunded.",
+      "The organisers reserve the right to modify reward tiers or available stock without prior notice.",
+    ],
+  },
+  {
+    id: "leaderboard",
+    emoji: "🏆",
+    title: "Leaderboard & Rankings",
+    color: "var(--teal)",
+    items: [
+      "The public leaderboard displays participant usernames and coin balances. Participation in the leaderboard is automatic and cannot be opted out of.",
+      "Rankings are updated periodically — they reflect the latest leaderboard snapshot, not real-time balances.",
+      "In the event of a tie, the participant who reached that balance earlier (by timestamp) ranks higher.",
+      "Leaderboard-based reward tiers (Badge, Notepad, Mug, Tote Bag + Mug) are determined at a cut-off snapshot taken by organisers. Rank at that moment is final.",
+    ],
+  },
+  {
+    id: "powerhour",
+    emoji: "⚡",
+    title: "Power Hour",
+    color: "var(--amber)",
+    items: [
+      "Power Hour is a time-limited bonus window during which all approved submissions earn an additional coin multiplier.",
+      "Power Hour windows are announced via the in-app notification system. No advance notice is guaranteed.",
+      "Submissions approved during an active Power Hour automatically receive the multiplier. Submissions approved outside Power Hour do not, even if they were submitted during one.",
+      "Power Hour parameters (multiplier value, duration, frequency) are at the sole discretion of the organisers and may change without notice.",
+    ],
+  },
+  {
+    id: "conduct",
+    emoji: "🚫",
+    title: "Prohibited Conduct",
+    color: "#e05252",
+    items: [
+      "Submitting proof on behalf of another participant, or allowing another participant to submit on your behalf.",
+      "Coordinating with others to manipulate rankings (e.g., bulk-submitting identical content across accounts).",
+      "Exploiting any bug or unintended behaviour in the platform to gain Cents. Such Cents will be reversed and the participant may be disqualified.",
+      "Attempting to scan another participant's QR code at a booth.",
+      "Any behaviour that violates the broader Ascent Techfest Code of Conduct applies here as well.",
+    ],
+  },
+  {
+    id: "disputes",
+    emoji: "⚖️",
+    title: "Dispute Resolution",
+    color: "var(--teal)",
+    items: [
+      "If you believe a submission was incorrectly rejected or a coin amount is wrong, raise a dispute within 12 hours of the decision via the Feedback form.",
+      "Include your submission ID and a clear explanation of the discrepancy.",
+      "Disputes are reviewed by an ops lead or admin. Their decision is final.",
+      "Disputes raised after 12 hours, or disputes without supporting evidence, may be declined without review.",
+    ],
+  },
+  {
+    id: "modifications",
+    emoji: "📋",
+    title: "Modifications & Availability",
+    color: "var(--ink-mute)",
+    items: [
+      "These terms govern the Ascent Cents system for Ascent Techfest 2026 only. Cents have no value outside this event.",
+      "The organisers may update these terms at any time. The in-app notification system will be used to communicate significant changes.",
+      "The Ascent Cents system may be paused, modified, or discontinued at any point during the event without liability.",
+      "Participation in the Ascent Cents system constitutes acceptance of these terms.",
+    ],
+  },
+];
+
+export function TermsPage() {
+  const isMobile = useMobile();
+  const navigate = useNavigate();
+
+  return (
+    <SidequestLayout active="terms">
+
+      {/* ── Hero ── */}
+      <div className="glass-strong" style={{
+        padding: isMobile ? "28px 22px" : "36px 40px",
+        marginBottom: 32,
+        borderRadius: 16,
+        background: "linear-gradient(135deg, rgba(127,119,221,0.10) 0%, rgba(64,212,196,0.05) 100%)",
+        border: "1px solid rgba(127,119,221,0.22)",
+      }}>
+        <div className="eyebrow" style={{ marginBottom: 10 }}>§ LEGAL</div>
+        <h1 style={{
+          margin: 0,
+          fontFamily: "var(--f-display)",
+          fontSize: isMobile ? 28 : 38,
+          lineHeight: 1.15,
+          color: "var(--ink)",
+        }}>
+          Terms &{" "}
+          <span style={{ color: "var(--violet)" }}>Conditions</span>
+        </h1>
+        <p style={{
+          margin: "14px 0 0",
+          fontSize: 14,
+          color: "var(--ink-mute)",
+          lineHeight: 1.65,
+          maxWidth: 600,
+        }}>
+          These terms govern the <strong style={{ color: "var(--ink)" }}>Ascent Cents</strong> gamification
+          system for Ascent Techfest 2026. By participating — submitting proof,
+          scanning QR codes, or redeeming rewards — you agree to the rules below.
+          Last updated: May 2026.
+        </p>
+        <div style={{ display: "flex", gap: 10, marginTop: 20, flexWrap: "wrap" }}>
+          <button className="btn sm" onClick={() => navigate("/coins/guide")}>
+            How to Earn
+          </button>
+          <button className="btn sm" onClick={() => navigate("/coins")}>
+            Command Center
+          </button>
+        </div>
+      </div>
+
+      {/* ── Quick index ── */}
+      <div className="glass" style={{
+        padding: "18px 22px",
+        borderRadius: 14,
+        marginBottom: 32,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "8px 16px",
+      }}>
+        {TERMS_SECTIONS.map(({ id, emoji, title }) => (
+          <a
+            key={id}
+            href={`#terms-${id}`}
+            style={{
+              fontSize: 13,
+              color: "var(--violet)",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+            onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
+            onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}
+          >
+            {emoji} {title.split("(")[0].trim()}
+          </a>
+        ))}
+      </div>
+
+      {/* ── Sections ── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 20, marginBottom: 40 }}>
+        {TERMS_SECTIONS.map(({ id, emoji, title, color, items }) => (
+          <div
+            key={id}
+            id={`terms-${id}`}
+            className="glass"
+            style={{
+              borderRadius: 14,
+              borderLeft: `4px solid ${color}`,
+              padding: isMobile ? "22px 18px" : "26px 28px",
+              scrollMarginTop: 80,
+            }}
+          >
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 16,
+            }}>
+              <span style={{ fontSize: 22 }}>{emoji}</span>
+              <h2 style={{
+                margin: 0,
+                fontFamily: "var(--f-display)",
+                fontSize: isMobile ? 16 : 18,
+                color: "var(--ink)",
+                lineHeight: 1.25,
+              }}>{title}</h2>
+            </div>
+            <ol style={{
+              margin: 0,
+              paddingLeft: 22,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}>
+              {items.map((item, i) => (
+                <li key={i} style={{
+                  fontSize: 13,
+                  color: "var(--ink-mute)",
+                  lineHeight: 1.7,
+                }}>
+                  {item}
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Footer note ── */}
+      <div style={{
+        padding: "16px 20px",
+        borderRadius: 12,
+        background: "rgba(127,119,221,0.06)",
+        border: "1px solid rgba(127,119,221,0.15)",
+        fontSize: 12,
+        color: "var(--ink-mute)",
+        lineHeight: 1.7,
+        marginBottom: 8,
+      }}>
+        <strong style={{ color: "var(--ink)" }}>Questions?</strong>{" "}
+        Reach out to the Ascent Coins desk at any information booth inside the venue,
+        or use the{" "}
+        <span
+          style={{ color: "var(--violet)", cursor: "pointer", textDecoration: "underline" }}
+          onClick={() => navigate("/feedback")}
+        >
+          Feedback form
+        </span>
+        {" "}in the app. Ascent Cents have no monetary value and are valid only
+        during Ascent Techfest 2026.
+      </div>
+
     </SidequestLayout>
   );
 }

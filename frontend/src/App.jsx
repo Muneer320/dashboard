@@ -18,6 +18,7 @@ import {
   CoinHistoryPage,
   MyQRPage,
   GuidePage,
+  TermsPage,
 } from './components/sidequest';
 import BoothTool from './components/booth';
 import RedemptionBooth from './components/redemption';
@@ -82,6 +83,7 @@ export default function App() {
         <Route path="/coins/qr"          element={<RequireAuth><MyQRPage /></RequireAuth>} />
         <Route path="/coins/history"     element={<RequireAuth><CoinHistoryPage /></RequireAuth>} />
         <Route path="/coins/guide"       element={<RequireAuth><GuidePage /></RequireAuth>} />
+        <Route path="/coins/terms"       element={<RequireAuth><TermsPage /></RequireAuth>} />
 
         <Route path="*"              element={<Navigate to="/" replace />} />
       </Routes>
