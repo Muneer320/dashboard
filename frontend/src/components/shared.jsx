@@ -61,8 +61,9 @@ export function NavBar({ active, variant = "app" }) {
     "Leaderboard",
     "Mirage",
     "Announcements",
+    "Merch",
   ];
-  const publicItems = ["Overview","Schedule", "Events", "FAQ"];
+  const publicItems = ["Overview", "Schedule", "Events", "FAQ", "Merch"];
   const items = variant === "app" ? appItems : publicItems;
 
   const navClick = (key) => {
@@ -77,6 +78,7 @@ export function NavBar({ active, variant = "app" }) {
       overview: "/",
       events: "/explore",
       faq: "/faq",
+      merch: "/merch",
       login: "/login",
       credentials: "/credentials",
       "event-detail": "/event-detail",
