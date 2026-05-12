@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     admin, admin_auth, admin_panel, announcements, auth, credentials,
-    events, feedback, health, qr, questions, ratings, schedule, submissions, users,
+    events, feedback, health, mirage, qr, questions, ratings, schedule, submissions, users,
 )
 
 api_router = APIRouter()
@@ -30,3 +30,5 @@ api_router.include_router(announcements.router,
                           prefix="/announcements", tags=["announcements"])
 api_router.include_router(
     feedback.router, prefix="/feedback", tags=["feedback"])
+api_router.include_router(
+    mirage.router, prefix="/mirage", tags=["mirage"])

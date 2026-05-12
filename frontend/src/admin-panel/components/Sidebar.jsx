@@ -131,7 +131,7 @@ const NAV_ITEMS = [
         <line x1="22" y1="6" x2="16" y2="6"/>
       </svg>
     )
-  }
+  },
 ]
 
 export default function Sidebar({ isOpen, onClose }) {

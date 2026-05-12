@@ -6,6 +6,12 @@ Thumbs.db
 
 # Logs
 *.log
+*.out.log
+*.err.log
+processor/logs/
+mirage-mapping-dashboard/*.log
+mirage-mapping-dashboard/*.out.log
+mirage-mapping-dashboard/*.err.log
 
 # key files
 *.pem
@@ -40,6 +46,11 @@ backend/__pycache__/
 # Stress testing logs
 stress_testing/
 loadtest*
+
+# Mirage local-only tooling is intentionally not part of the deployable dashboard.
+/processor/
+/mirage-mapping-dashboard/
+/backup/
 
 # Miscellaneous
 backup/

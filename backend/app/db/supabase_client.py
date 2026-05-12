@@ -19,6 +19,7 @@ from supabase import AsyncClient, create_async_client
 from app.core.config import settings
 
 _client: AsyncClient | None = None
+_mirage_client: AsyncClient | None = None
 
 
 async def _ensure_client() -> AsyncClient:
@@ -36,6 +37,16 @@ async def _ensure_client() -> AsyncClient:
     return _client
 
 
+async def _ensure_mirage_client() -> AsyncClient:
+    global _mirage_client
+    if _mirage_client is None:
+        _mirage_client = await create_async_client(
+            settings.MIRAGE_SUPABASE_URL or settings.SUPABASE_URL,
+            settings.MIRAGE_SUPABASE_SERVICE_ROLE_KEY or settings.SUPABASE_SERVICE_ROLE_KEY,
+        )
+    return _mirage_client
+
+
 async def get_supabase() -> AsyncGenerator[AsyncClient, None]:
     """FastAPI dependency yielding the shared Supabase async client."""
     client = await _ensure_client()
@@ -45,6 +56,15 @@ async def get_supabase() -> AsyncGenerator[AsyncClient, None]:
 async def get_client() -> AsyncClient:
     """Direct accessor for background tasks / places that can't use DI."""
     return await _ensure_client()
+
+
+async def get_mirage_supabase() -> AsyncGenerator[AsyncClient, None]:
+    client = await _ensure_mirage_client()
+    yield client
+
+
+async def get_mirage_client() -> AsyncClient:
+    return await _ensure_mirage_client()
 
 
 def rows(response: Any) -> list[dict]:
