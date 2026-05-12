@@ -12,6 +12,7 @@ import { MirageProfilePage } from './components/MirageEnrollmentCard';
 import { Rating, Feedback, Report } from './components/forms';
 import AdminApp from './admin-panel/App';
 import FAQ from './components/faq';
+import Sponsors from './components/sponsors';
 
 /** Blocks access to protected user pages — redirects to /login if not authed. */
 function RequireAuth({ children }) {
@@ -47,6 +48,7 @@ export default function App() {
         <Route path="/schedule"      element={<Schedule />}/>
         <Route path="/explore"       element={<Explore />}/>
         <Route path="/merch"         element={<MerchStore />}/>
+        <Route path="/sponsors"      element={<Sponsors />}/>
 
 
         {/* Protected user app */}

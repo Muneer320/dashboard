@@ -63,7 +63,7 @@ export function NavBar({ active, variant = "app" }) {
     "Announcements",
     "Merch",
   ];
-  const publicItems = ["Overview", "Schedule", "Events", "FAQ", "Merch"];
+  const publicItems = ["Overview", "Schedule", "Events", "Sponsors", "FAQ", "Merch"];
   const items = variant === "app" ? appItems : publicItems;
 
   const navClick = (key) => {
@@ -77,6 +77,7 @@ export function NavBar({ active, variant = "app" }) {
       landing: "/",
       overview: "/",
       events: "/explore",
+      sponsors: "/sponsors",
       faq: "/faq",
       merch: "/merch",
       login: "/login",
@@ -919,9 +920,10 @@ export function Footer() {
         ) : (
           [
             { h: 'Fest', items: [
-                { label: 'Overview', to: '/login' },
-                { label: 'Events', to: '/events' },
+                { label: 'Overview', to: '/' },
+                { label: 'Events', to: '/explore' },
                 { label: 'Schedule', to: '/schedule' },
+                { label: 'Sponsors', to: '/sponsors' },
               ] 
             },
             { h: 'Participate', items: [
