@@ -205,6 +205,7 @@ const NAV_ITEMS = [
   { key: "rewards",      label: "Rewards",        to: "/coins/rewards",    iconKey: "box" },
   { key: "qr",           label: "My QR",          to: "/coins/qr",         iconKey: "qr" },
   { key: "history",      label: "History",        to: "/coins/history",    iconKey: "clock" },
+  { key: "guide",        label: "How to Earn",    to: "/coins/guide",      iconKey: "book" },
 ];
 
 function NavIcon({ k }) {
@@ -224,6 +225,7 @@ function NavIcon({ k }) {
     case "bolt":  return <svg {...common}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="currentColor"/></svg>;
     case "coin":  return <svg {...common}><circle cx="12" cy="12" r="9"/><text x="12" y="16" textAnchor="middle" fontSize="11" fill="currentColor" stroke="none" fontFamily="var(--f-display)" fontWeight="700">$</text></svg>;
     case "qr":    return <svg {...common}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="18" y1="14" x2="18" y2="18"/><line x1="14" y1="18" x2="21" y2="18"/></svg>;
+    case "book":  return <svg {...common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
     default:      return null;
   }
 }
@@ -405,6 +407,213 @@ function PowerHourBanner({ status }) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Inline guide shown at the top of Command Center.
+// Expanded on first visit (localStorage), collapses after "Got it".
+// ─────────────────────────────────────────────────────────────
+const GUIDE_SEEN_KEY = "ascent_guide_seen_v1";
+
+function CommandGuide({ isMobile }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(() => {
+    try { return !localStorage.getItem(GUIDE_SEEN_KEY); } catch { return true; }
+  });
+
+  const dismiss = () => {
+    setOpen(false);
+    try { localStorage.setItem(GUIDE_SEEN_KEY, "1"); } catch {}
+  };
+
+  return (
+    <div style={{ marginBottom: 22 }}>
+      {/* ── collapsed toggle bar ── */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          style={{
+            width: "100%", display: "flex", alignItems: "center",
+            justifyContent: "space-between", gap: 12,
+            padding: "11px 18px", borderRadius: 12,
+            border: "1px solid rgba(127,119,221,0.25)",
+            background: "rgba(127,119,221,0.06)",
+            color: "var(--ink-mute)", cursor: "pointer",
+            fontSize: 12.5, fontFamily: "var(--f-mono)",
+            letterSpacing: "0.06em",
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 14 }}>📖</span>
+            HOW TO EARN CENTS — TAP TO EXPAND
+          </span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" strokeWidth="2">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+      )}
+
+      {/* ── expanded guide ── */}
+      {open && (
+        <div style={{
+          borderRadius: 16,
+          border: "1px solid rgba(127,119,221,0.28)",
+          background: "linear-gradient(135deg,rgba(127,119,221,0.08) 0%,rgba(64,212,196,0.04) 100%)",
+          overflow: "hidden",
+        }}>
+          {/* header */}
+          <div style={{
+            display: "flex", alignItems: "flex-start",
+            justifyContent: "space-between", gap: 12,
+            padding: isMobile ? "20px 20px 0" : "24px 28px 0",
+            flexWrap: "wrap",
+          }}>
+            <div>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>§ BEFORE YOU START</div>
+              <h2 style={{
+                margin: 0, fontFamily: "var(--f-display)",
+                fontSize: isMobile ? 20 : 24, color: "var(--ink)",
+              }}>
+                How to earn{" "}
+                <span style={{ color: "var(--violet)" }}>Ascent Cents</span>
+              </h2>
+            </div>
+            <button
+              onClick={dismiss}
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid var(--glass-border)",
+                borderRadius: 8, padding: "6px 14px",
+                color: "var(--ink-mute)", cursor: "pointer",
+                fontSize: 12, fontFamily: "var(--f-mono)",
+                letterSpacing: "0.06em", flexShrink: 0,
+              }}
+            >GOT IT ✕</button>
+          </div>
+
+          <div style={{ padding: isMobile ? "18px 20px 24px" : "20px 28px 28px" }}>
+
+            {/* 4-step flow */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)",
+              gap: 10, marginBottom: 22,
+            }}>
+              {[
+                { n: "01", head: "Participate",  body: "Post on LinkedIn/Instagram, use AR filter, visit booths.", color: "#7f77dd" },
+                { n: "02", head: "Submit proof", body: "Paste a URL or upload a screenshot in Verification.",      color: "#40d4c4" },
+                { n: "03", head: "Get verified", body: "Admins review it. Approved or Rejected with a reason.",    color: "#f5b04c" },
+                { n: "04", head: "Cents added",  body: "Cents land automatically once approved.",                  color: "#1d9e75" },
+              ].map(({ n, head, body, color }) => (
+                <div key={n} style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: `1px solid ${color}33`,
+                  borderTop: `3px solid ${color}`,
+                  borderRadius: 12, padding: "14px 14px",
+                }}>
+                  <div style={{
+                    fontFamily: "var(--f-mono)", fontSize: 22,
+                    fontWeight: 700, color, opacity: 0.65, lineHeight: 1,
+                    marginBottom: 6,
+                  }}>{n}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>{head}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--ink-mute)", lineHeight: 1.55 }}>{body}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* activity + tier row */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+              gap: 14,
+            }}>
+              {/* activities */}
+              <div>
+                <div className="eyebrow" style={{ marginBottom: 10 }}>§ WHAT YOU CAN SUBMIT</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {EARN_ACTIVITIES.map(({ icon, activity, coins, confirmed }) => (
+                    <div key={activity} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "9px 12px", borderRadius: 10,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid var(--glass-border)",
+                      opacity: confirmed ? 1 : 0.65,
+                    }}>
+                      <span style={{ fontSize: 16, flexShrink: 0 }}>{icon}</span>
+                      <span style={{ flex: 1, fontSize: 13, color: "var(--ink)" }}>{activity}</span>
+                      {confirmed
+                        ? <span style={{ fontFamily: "var(--f-mono)", fontSize: 12, color: "var(--teal)", fontWeight: 700 }}>{coins}¢</span>
+                        : <span style={{ fontFamily: "var(--f-mono)", fontSize: 10, color: "var(--ink-mute)", letterSpacing: "0.06em" }}>TBD</span>
+                      }
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* tiers + redemption note */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div>
+                  <div className="eyebrow" style={{ marginBottom: 10 }}>§ REWARD TIERS</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {REWARD_TIERS.map(({ level, reward, emoji, color }) => (
+                      <div key={level} style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "9px 12px", borderRadius: 10,
+                        background: `${color}0e`,
+                        border: `1px solid ${color}33`,
+                      }}>
+                        <span style={{ fontSize: 16 }}>{emoji}</span>
+                        <span style={{
+                          fontFamily: "var(--f-mono)", fontSize: 10,
+                          color, letterSpacing: "0.1em", minWidth: 44,
+                        }}>LVL {level}</span>
+                        <span style={{ fontSize: 13, color: "var(--ink)", fontWeight: 600 }}>{reward}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{
+                  padding: "12px 14px", borderRadius: 10,
+                  background: "rgba(245,176,76,0.07)",
+                  border: "1px solid rgba(245,176,76,0.22)",
+                  fontSize: 12.5, color: "var(--ink-mute)", lineHeight: 1.6,
+                }}>
+                  <strong style={{ color: "#f5b04c" }}>To redeem —</strong>{" "}
+                  go to Rewards, generate a code, then visit the merch booth
+                  before it expires. Code is valid for 30 min.
+                </div>
+              </div>
+            </div>
+
+            {/* bottom CTA */}
+            <div style={{
+              marginTop: 20,
+              display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center",
+              borderTop: "1px solid var(--glass-border)", paddingTop: 18,
+            }}>
+              <button className="btn primary sm" onClick={() => navigate("/coins/submit")}>
+                Submit proof now →
+              </button>
+              <button className="btn sm" onClick={() => navigate("/coins/guide")}>
+                Full guide
+              </button>
+              <button
+                onClick={dismiss}
+                style={{
+                  marginLeft: "auto", background: "transparent", border: 0,
+                  color: "var(--ink-mute)", cursor: "pointer",
+                  fontSize: 12, fontFamily: "var(--f-mono)", letterSpacing: "0.06em",
+                }}
+              >dismiss</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // CoinsHomePage  →  /coins   (Command Center)
 // ─────────────────────────────────────────────────────────────
 export function CoinsHomePage() {
@@ -470,6 +679,7 @@ export function CoinsHomePage() {
 
   return (
     <SidequestLayout active="command">
+      <CommandGuide isMobile={isMobile} />
       <PowerHourBanner status={phStatus} />
 
       {loading ? <Spinner /> : (
@@ -2089,6 +2299,470 @@ function Stat({ label, value, color }) {
         {value}
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Guide — How to Earn Cents
+// ─────────────────────────────────────────────────────────────
+
+const EARN_ACTIVITIES = [
+  { icon: "💼", activity: "RSVP LinkedIn Post",     type: "LinkedIn URL",          coins: 300,  confirmed: true  },
+  { icon: "📸", activity: "AR Filter Story",         type: "Instagram Screenshot",  coins: 200,  confirmed: true  },
+  { icon: "🔍", activity: "Scavenger Hunt",           type: "Volunteer Verification",coins: null, confirmed: false },
+  { icon: "✍️", activity: "Signature & Photo Booth", type: "LinkedIn URL",          coins: null, confirmed: false },
+  { icon: "😂", activity: "Meme Challenge",           type: "LinkedIn URL",          coins: null, confirmed: false },
+  { icon: "🎮", activity: "Esports Arena",            type: "Tournament Results",    coins: null, confirmed: false },
+  { icon: "🏟️", activity: "Booth Activities",        type: "Volunteer Verification",coins: null, confirmed: false },
+];
+
+const REWARD_TIERS = [
+  { level: 1, reward: "Sticker",       emoji: "🏷️", color: "#7f77dd", hint: "Claim at any merch booth" },
+  { level: 2, reward: "Badge",          emoji: "🎖️", color: "#40d4c4", hint: "Snap-on enamel badge" },
+  { level: 3, reward: "Notepad",        emoji: "📓", color: "#f5b04c", hint: "ASCENT branded notepad" },
+  { level: 4, reward: "Mug",            emoji: "☕", color: "#1d9e75", hint: "Limited edition mug" },
+  { level: 5, reward: "Tote Bag + Mug", emoji: "🛍️", color: "#dc6464", hint: "Top participants only" },
+];
+
+const HOW_IT_WORKS = [
+  { n: "01", head: "Do an activity",   body: "Post on LinkedIn or Instagram, use the AR filter, visit booths, or join micro-events during the fest.",  color: "#7f77dd" },
+  { n: "02", head: "Submit proof",     body: "Paste your URL or upload a screenshot in the Verification section. Takes under 30 seconds.",             color: "#40d4c4" },
+  { n: "03", head: "Get verified",     body: "Admins review your submission. You'll see Approved or Rejected — with a reason if it's rejected.",        color: "#f5b04c" },
+  { n: "04", head: "Cents credited",   body: "Cents land in your account automatically once approved. Open your dashboard to see the new balance.",     color: "#1d9e75" },
+];
+
+const SUBMISSION_RULES = [
+  {
+    platform: "LinkedIn Posts",
+    emoji: "💼",
+    rules: ["Account must be set to public", "Include required hashtags and tags in the post"],
+  },
+  {
+    platform: "Instagram Posts / Reels",
+    emoji: "📷",
+    rules: ["Account must be set to public", "Required hashtags and tags are mandatory"],
+  },
+  {
+    platform: "Instagram Stories",
+    emoji: "⏱️",
+    rules: ["Submit a screenshot as proof", "Stories are not re-verified after initial approval"],
+  },
+];
+
+function GuideAccordion({ title, emoji, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{
+      borderRadius: 12,
+      border: "1px solid var(--glass-border)",
+      overflow: "hidden",
+      marginBottom: 8,
+    }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center",
+          justifyContent: "space-between", gap: 12,
+          padding: "14px 18px",
+          background: open ? "rgba(127,119,221,0.08)" : "rgba(255,255,255,0.025)",
+          border: 0, cursor: "pointer",
+          color: "var(--ink)", textAlign: "left",
+          transition: "background 0.15s",
+        }}
+      >
+        <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 18 }}>{emoji}</span>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{title}</span>
+        </span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2" style={{
+            flexShrink: 0, color: "var(--ink-mute)",
+            transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 0.2s",
+          }}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div style={{ padding: "14px 18px 16px", background: "rgba(255,255,255,0.015)" }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function GuidePage() {
+  const isMobile = useMobile();
+  const navigate = useNavigate();
+
+  return (
+    <SidequestLayout active="guide">
+
+      {/* ── Hero ── */}
+      <div className="glass-strong" style={{
+        padding: isMobile ? "28px 22px" : "36px 40px",
+        marginBottom: 28,
+        borderRadius: 16,
+        background: "linear-gradient(135deg, rgba(127,119,221,0.12) 0%, rgba(64,212,196,0.06) 100%)",
+        border: "1px solid rgba(127,119,221,0.25)",
+      }}>
+        <div className="eyebrow" style={{ marginBottom: 10 }}>§ GUIDE</div>
+        <h1 style={{
+          margin: 0,
+          fontFamily: "var(--f-display)",
+          fontSize: isMobile ? 30 : 40,
+          lineHeight: 1.15,
+          color: "var(--ink)",
+        }}>
+          How to earn{" "}
+          <span style={{ color: "var(--violet)" }}>Ascent Cents</span>
+        </h1>
+        <p style={{
+          margin: "14px 0 0",
+          fontSize: 15,
+          color: "var(--ink-mute)",
+          lineHeight: 1.65,
+          maxWidth: 580,
+        }}>
+          Participate in activities, post on social media, and visit booths
+          across the fest. Every approved submission adds Cents to your balance —
+          which you can spend on rewards or use to climb the leaderboard.
+        </p>
+        <div style={{ display: "flex", gap: 10, marginTop: 20, flexWrap: "wrap" }}>
+          <button className="btn primary sm" onClick={() => navigate("/coins/submit")}>
+            Submit Proof
+          </button>
+          <button className="btn sm" onClick={() => navigate("/coins/rewards")}>
+            View Rewards
+          </button>
+        </div>
+      </div>
+
+      {/* ── How it Works ── */}
+      <div style={{ marginBottom: 32 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>§ THE PROCESS</div>
+        <h2 style={{
+          margin: "0 0 20px",
+          fontFamily: "var(--f-display)",
+          fontSize: isMobile ? 22 : 26,
+          color: "var(--ink)",
+        }}>How it works</h2>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
+          gap: 14,
+        }}>
+          {HOW_IT_WORKS.map(({ n, head, body, color }) => (
+            <div key={n} className="glass" style={{
+              padding: "22px 20px",
+              borderRadius: 14,
+              borderTop: `3px solid ${color}`,
+              display: "flex", flexDirection: "column", gap: 10,
+            }}>
+              <div style={{
+                fontFamily: "var(--f-mono)",
+                fontSize: 28,
+                fontWeight: 700,
+                color,
+                lineHeight: 1,
+                opacity: 0.7,
+              }}>{n}</div>
+              <div style={{
+                fontSize: 15, fontWeight: 700,
+                color: "var(--ink)",
+              }}>{head}</div>
+              <div style={{
+                fontSize: 13, color: "var(--ink-mute)",
+                lineHeight: 1.6,
+              }}>{body}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Ways to Earn ── */}
+      <div style={{ marginBottom: 32 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>§ ACTIVITIES</div>
+        <h2 style={{
+          margin: "0 0 6px",
+          fontFamily: "var(--f-display)",
+          fontSize: isMobile ? 22 : 26,
+          color: "var(--ink)",
+        }}>Ways to earn</h2>
+        <p style={{ margin: "0 0 18px", fontSize: 13.5, color: "var(--ink-mute)" }}>
+          Confirmed Cent values shown below. TBD activities will be updated before the event.
+        </p>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)",
+          gap: 12,
+        }}>
+          {EARN_ACTIVITIES.map(({ icon, activity, type, coins, confirmed }) => (
+            <div key={activity} className="glass" style={{
+              padding: "18px 20px",
+              borderRadius: 14,
+              display: "flex", alignItems: "center", gap: 16,
+              opacity: confirmed ? 1 : 0.7,
+            }}>
+              <div style={{
+                fontSize: 28, flexShrink: 0,
+                width: 52, height: 52,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                borderRadius: 12,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid var(--glass-border)",
+              }}>{icon}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--ink)", marginBottom: 3 }}>
+                  {activity}
+                </div>
+                <div style={{
+                  fontSize: 11.5, color: "var(--ink-mute)",
+                  fontFamily: "var(--f-mono)", letterSpacing: "0.04em",
+                }}>{type}</div>
+              </div>
+              <div style={{ flexShrink: 0, textAlign: "right" }}>
+                {confirmed ? (
+                  <>
+                    <div style={{
+                      fontSize: 22, fontWeight: 800,
+                      color: "var(--teal)",
+                      fontFamily: "var(--f-display)",
+                      lineHeight: 1,
+                    }}>{coins}</div>
+                    <div style={{
+                      fontSize: 10, color: "var(--teal)", opacity: 0.7,
+                      fontFamily: "var(--f-mono)", letterSpacing: "0.12em",
+                      marginTop: 2,
+                    }}>CENTS</div>
+                  </>
+                ) : (
+                  <span style={{
+                    fontSize: 11, color: "var(--ink-mute)",
+                    fontFamily: "var(--f-mono)", letterSpacing: "0.08em",
+                    padding: "3px 8px", borderRadius: 6,
+                    border: "1px solid var(--glass-border)",
+                    background: "rgba(255,255,255,0.03)",
+                  }}>TBD</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Reward Tiers ── */}
+      <div style={{ marginBottom: 32 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>§ REWARDS</div>
+        <h2 style={{
+          margin: "0 0 6px",
+          fontFamily: "var(--f-display)",
+          fontSize: isMobile ? 22 : 26,
+          color: "var(--ink)",
+        }}>Reward tiers</h2>
+        <p style={{ margin: "0 0 18px", fontSize: 13.5, color: "var(--ink-mute)" }}>
+          Earn more Cents to unlock higher tier rewards. Some items have limited stock.
+        </p>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)",
+          gap: 12,
+        }}>
+          {REWARD_TIERS.map(({ level, reward, emoji, color, hint }) => (
+            <div key={level} style={{
+              padding: "20px 16px",
+              borderRadius: 14,
+              border: `1px solid ${color}44`,
+              background: `${color}0d`,
+              display: "flex", flexDirection: "column", alignItems: "center",
+              gap: 10, textAlign: "center",
+            }}>
+              <div style={{ fontSize: 32 }}>{emoji}</div>
+              <div style={{
+                fontFamily: "var(--f-mono)", fontSize: 10,
+                letterSpacing: "0.16em",
+                color,
+                background: `${color}22`,
+                border: `1px solid ${color}44`,
+                padding: "2px 8px", borderRadius: 999,
+              }}>
+                LVL {level}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>{reward}</div>
+              <div style={{ fontSize: 11.5, color: "var(--ink-mute)", lineHeight: 1.5 }}>{hint}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{
+          marginTop: 14, padding: "12px 18px", borderRadius: 10,
+          background: "rgba(245,176,76,0.07)",
+          border: "1px solid rgba(245,176,76,0.22)",
+          fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.6,
+        }}>
+          <strong style={{ color: "#f5b04c" }}>Limited stock —</strong>{" "}
+          some rewards may run out. Top leaderboard participants at each
+          snapshot may also receive additional prizes.
+        </div>
+      </div>
+
+      {/* ── Redemption ── */}
+      <div style={{ marginBottom: 32 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>§ REDEMPTION</div>
+        <h2 style={{
+          margin: "0 0 6px",
+          fontFamily: "var(--f-display)",
+          fontSize: isMobile ? 22 : 26,
+          color: "var(--ink)",
+        }}>How to redeem</h2>
+        <p style={{ margin: "0 0 18px", fontSize: 13.5, color: "var(--ink-mute)" }}>
+          Redemption happens at the merch booth on event day — not online.
+        </p>
+
+        <div className="glass" style={{ padding: isMobile ? 20 : 28, borderRadius: 14 }}>
+          {[
+            { n: 1, head: "Open Rewards",         body: "Go to the Rewards section in your dashboard.",                         icon: "🏆" },
+            { n: 2, head: "Select a reward",       body: "Pick a reward you're eligible for based on your Cents balance.",        icon: "👆" },
+            { n: 3, head: "Generate a code",       body: "Tap Claim to generate a redemption QR code — it's valid for 30 min.",  icon: "📲" },
+            { n: 4, head: "Visit the booth",       body: "Head to the merch booth before your code expires.",                     icon: "🏃" },
+            { n: 5, head: "Collect your reward",   body: "Volunteer scans or reads your code and hands over the reward.",         icon: "🎁" },
+          ].map(({ n, head, body, icon }, idx, arr) => (
+            <div key={n} style={{
+              display: "flex", gap: 18,
+              paddingBottom: idx < arr.length - 1 ? 20 : 0,
+              position: "relative",
+            }}>
+              {/* connector line */}
+              {idx < arr.length - 1 && (
+                <div style={{
+                  position: "absolute",
+                  left: 19, top: 42, bottom: 0,
+                  width: 2,
+                  background: "linear-gradient(to bottom, rgba(127,119,221,0.3), transparent)",
+                }} />
+              )}
+              <div style={{
+                width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+                background: "rgba(127,119,221,0.12)",
+                border: "1px solid rgba(127,119,221,0.3)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 18, zIndex: 1,
+              }}>{icon}</div>
+              <div style={{ paddingTop: 6 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: "var(--ink)", marginBottom: 4 }}>
+                  {n}. {head}
+                </div>
+                <div style={{ fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.6 }}>{body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{
+          marginTop: 12, padding: "12px 18px", borderRadius: 10,
+          background: "rgba(239,68,68,0.07)",
+          border: "1px solid rgba(239,68,68,0.22)",
+          fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.6,
+        }}>
+          <strong style={{ color: "#f87171" }}>Heads up —</strong>{" "}
+          selecting a reward does not reserve stock. Your QR code expires if
+          unused. Don't generate it until you're ready to walk to the booth.
+        </div>
+      </div>
+
+      {/* ── Submission Guidelines (collapsible) ── */}
+      <div style={{ marginBottom: 32 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>§ RULES</div>
+        <h2 style={{
+          margin: "0 0 6px",
+          fontFamily: "var(--f-display)",
+          fontSize: isMobile ? 22 : 26,
+          color: "var(--ink)",
+        }}>Submission guidelines</h2>
+        <p style={{ margin: "0 0 16px", fontSize: 13.5, color: "var(--ink-mute)" }}>
+          Tap a platform to see what's required. Missing any rule = rejection.
+        </p>
+
+        {SUBMISSION_RULES.map(({ platform, emoji, rules }) => (
+          <GuideAccordion key={platform} title={platform} emoji={emoji}>
+            <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
+              {rules.map((r) => (
+                <li key={r} style={{
+                  display: "flex", gap: 10, alignItems: "flex-start",
+                  fontSize: 13.5, color: "var(--ink-dim)", lineHeight: 1.55,
+                }}>
+                  <span style={{ color: "var(--teal)", marginTop: 1, flexShrink: 0 }}>✓</span>
+                  {r}
+                </li>
+              ))}
+            </ul>
+          </GuideAccordion>
+        ))}
+
+        <GuideAccordion title="What gets rejected?" emoji="❌">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {[
+              "Duplicate submissions (same URL submitted twice)",
+              "Invalid or broken URLs",
+              "Missing required hashtags or tags",
+              "Post was deleted or set to private after submission",
+              "Reused content from a previous event",
+            ].map((r) => (
+              <div key={r} style={{
+                display: "flex", gap: 10, alignItems: "flex-start",
+                fontSize: 13.5, color: "var(--ink-dim)", lineHeight: 1.55,
+              }}>
+                <span style={{ color: "#f87171", marginTop: 1, flexShrink: 0 }}>✕</span>
+                {r}
+              </div>
+            ))}
+            <div style={{
+              marginTop: 8, padding: "10px 14px", borderRadius: 8,
+              background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)",
+              fontSize: 12.5, color: "var(--ink-mute)", lineHeight: 1.6,
+            }}>
+              Verified posts may be re-checked during the event. If a post is deleted
+              or modified after approval, associated Cents may be reversed.
+            </div>
+          </div>
+        </GuideAccordion>
+      </div>
+
+      {/* ── Stay Updated ── */}
+      <div className="glass" style={{
+        padding: isMobile ? 20 : 26, borderRadius: 14,
+        display: "flex", flexDirection: isMobile ? "column" : "row",
+        alignItems: isMobile ? "flex-start" : "center",
+        gap: 18,
+      }}>
+        <div style={{ fontSize: 36 }}>📣</div>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)", marginBottom: 6 }}>
+            Stay updated
+          </div>
+          <div style={{ fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.6, marginBottom: 12 }}>
+            New activities, bonus opportunities, leaderboard changes, and reward
+            announcements will be posted on:
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {["Dashboard notifications", "WhatsApp community", "Discord", "Official ASCENT channels"].map((ch) => (
+              <span key={ch} style={{
+                padding: "4px 12px", borderRadius: 999,
+                fontSize: 12, fontFamily: "var(--f-mono)", letterSpacing: "0.06em",
+                background: "rgba(64,212,196,0.1)",
+                border: "1px solid rgba(64,212,196,0.3)",
+                color: "var(--teal)",
+              }}>{ch}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+    </SidequestLayout>
   );
 }
 

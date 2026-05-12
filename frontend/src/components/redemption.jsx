@@ -3,7 +3,19 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { adminAuth, redemptionApi, token } from "../lib/api";
-import { Html5Qrcode } from "html5-qrcode";
+
+// Dynamically imported so the package is only fetched when the
+// scanner is actually rendered (after login, in scan mode).
+// This avoids crashing the whole React tree if Vite hasn't
+// pre-bundled html5-qrcode yet after a fresh npm install.
+let Html5Qrcode = null;
+async function loadScanner() {
+  if (!Html5Qrcode) {
+    const mod = await import("html5-qrcode");
+    Html5Qrcode = mod.Html5Qrcode;
+  }
+  return Html5Qrcode;
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -77,14 +89,25 @@ const S = {
 function QRScanner({ onScan }) {
   const divId = "redemption-qr-reader";
   const scannerRef = useRef(null);
-  const [status, setStatus] = useState("STARTING");
+  const [status, setStatus] = useState("LOADING");
 
   useEffect(() => {
-    const scanner = new Html5Qrcode(divId);
-    scannerRef.current = scanner;
-    setStatus("STARTING");
+    let cancelled = false;
 
     const start = async () => {
+      let Cls;
+      try {
+        Cls = await loadScanner();
+      } catch {
+        if (!cancelled) setStatus("ERROR: Failed to load scanner library");
+        return;
+      }
+
+      if (cancelled) return;
+      const scanner = new Cls(divId);
+      scannerRef.current = scanner;
+      setStatus("STARTING");
+
       try {
         await scanner.start(
           { facingMode: { exact: "environment" } },
@@ -92,7 +115,7 @@ function QRScanner({ onScan }) {
           (value) => { setStatus("DECODED"); scanner.stop().catch(() => {}); onScan(value); },
           () => {},
         );
-        setStatus("RUNNING");
+        if (!cancelled) setStatus("RUNNING");
       } catch {
         try {
           await scanner.start(
@@ -101,14 +124,18 @@ function QRScanner({ onScan }) {
             (value) => { setStatus("DECODED"); scanner.stop().catch(() => {}); onScan(value); },
             () => {},
           );
-          setStatus("RUNNING");
+          if (!cancelled) setStatus("RUNNING");
         } catch (e) {
-          setStatus("ERROR: " + (e?.message || "Camera unavailable"));
+          if (!cancelled) setStatus("ERROR: " + (e?.message || "Camera unavailable"));
         }
       }
     };
+
     start();
-    return () => { scanner.stop().catch(() => {}); };
+    return () => {
+      cancelled = true;
+      if (scannerRef.current) scannerRef.current.stop().catch(() => {});
+    };
   }, [onScan]);
 
   return (
