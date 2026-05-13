@@ -996,7 +996,15 @@ export function Leaderboard() {
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e?.message || "Failed to load leaderboard.");
+        if (!cancelled) {
+          if (e?.status === 404) {
+            setError(
+              "Leaderboard endpoint not found. Please restart backend on latest master and verify Vite /api proxy points to backend.",
+            );
+          } else {
+            setError(e?.message || "Failed to load leaderboard.");
+          }
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1288,7 +1296,7 @@ export function Leaderboard() {
                   height: 140,
                   borderRadius: "50%",
                   background:
-                    s.r === 1
+                    slot.podiumRank === 1
                       ? "radial-gradient(closest-side, rgba(232,185,116,0.3), transparent 70%)"
                       : "radial-gradient(closest-side, rgba(127,119,221,0.18), transparent 70%)",
                 }}
