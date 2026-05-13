@@ -44,7 +44,9 @@ backend/__pycache__/
 stress_testing/
 loadtest*
 
-# Mirage local-only tooling is intentionally not part of the deployable dashboard.
-/processor/
-/mirage-mapping-dashboard/
+# Mirage local runtime artifacts
+/processor/data/
+/processor/logs/
+/mirage-mapping-dashboard/node_modules/
+/mirage-mapping-dashboard/dist/
 /backup/
