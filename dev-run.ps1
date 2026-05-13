@@ -221,13 +221,15 @@ try {
         }
     }
 
+    $envLocalPath = Join-Path $frontendDir ".env.local"
+    "BACKEND_URL=http://127.0.0.1:$backendPort" | Set-Content $envLocalPath
+
     Write-Host "Starting frontend..."
     Start-ManagedProcess `
         -Name "frontend" `
         -FilePath $npmCmd `
         -Arguments @("/c", "npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "$frontendPort", "--strictPort") `
-        -WorkingDirectory $frontendDir `
-        -Environment @{ BACKEND_URL = "http://127.0.0.1:$backendPort" }
+        -WorkingDirectory $frontendDir
 
     Write-Host "Frontend target: http://127.0.0.1:$frontendPort"
     Write-Host "Press Ctrl+C to stop everything."
