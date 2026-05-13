@@ -974,29 +974,125 @@ export function Schedule() {
 
 export function Leaderboard() {
   const isMobile = useMobile();
-  const navigate = useNavigate();
   const { user } = useUserAuth();
-  const locked = !user?.is_attending;
-  const [tab, setTab] = React.useState("college");
-  const colleges = [
-    { r: 1, n: "IIIT Bangalore", p: 1840, d: "up" },
-    { r: 2, n: "BITS Pilani", p: 1720, d: "up" },
-    { r: 3, n: "NIT Trichy", p: 1680, d: "same" },
-    { r: 4, n: "IIT Madras", p: 1540, d: "down" },
-    { r: 5, n: "VIT Vellore", p: 1490, d: "up", mine: true },
-    { r: 6, n: "Manipal Institute", p: 1370, d: "up" },
-    { r: 7, n: "PES University", p: 1290, d: "down" },
-    { r: 8, n: "IIT Bombay", p: 1220, d: "same" },
-    { r: 9, n: "DTU Delhi", p: 1180, d: "up" },
-    { r: 10, n: "VNIT Nagpur", p: 1090, d: "down" },
-  ];
-  const people = [
-    { r: 1, n: "Kabir Nair", c: "IIIT Bangalore", p: 420 },
-    { r: 2, n: "Simran Shah", c: "BITS Pilani", p: 395 },
-    { r: 3, n: "Aditi Sen", c: "NIT Trichy", p: 380 },
-    { r: 4, n: "Rohan Das", c: "IIT Madras", p: 360 },
-    { r: 47, n: "Aarav Rao", c: "VIT Vellore", p: 185, mine: true },
-  ];
+  const [tab, setTab] = React.useState("global");
+  const [topLimit] = React.useState(100);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [data, setData] = React.useState(null);
+  const [eventIndex, setEventIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    users
+      .myLeaderboard(topLimit)
+      .then((payload) => {
+        if (!cancelled) {
+          setData(payload);
+          setEventIndex(0);
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e?.message || "Failed to load leaderboard.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, topLimit]);
+
+  const globalBoard = data?.global_board ?? null;
+  const eventBoards = data?.event_boards ?? [];
+  const selectedEvent = eventBoards[eventIndex] ?? null;
+  const activeRows =
+    tab === "global"
+      ? globalBoard?.top ?? []
+      : selectedEvent?.top ?? [];
+  const activeMe =
+    tab === "global" ? globalBoard?.me ?? null : selectedEvent?.me ?? null;
+  const totalCount =
+    tab === "global"
+      ? globalBoard?.total_users ?? 0
+      : selectedEvent?.total_participants ?? 0;
+
+  const podiumRows = activeRows.slice(0, 3);
+  const meInTop = !!activeRows.find((row) => row.is_current_user);
+
+  const renderRow = (row, i) => (
+    <div
+      key={`${row.user_id}-${row.rank}-${i}`}
+      style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "56px 1fr auto" : "90px 1fr 120px",
+        alignItems: "center",
+        gap: isMobile ? 10 : 20,
+        padding: isMobile ? "14px 16px" : "16px 24px",
+        borderTop: i === 0 ? "none" : "1px solid var(--glass-border)",
+        background: row.is_current_user ? "rgba(127,119,221,0.1)" : "transparent",
+        borderLeft: row.is_current_user
+          ? "2px solid var(--violet)"
+          : "2px solid transparent",
+      }}
+    >
+      <div
+        className="display"
+        style={{
+          fontSize: isMobile ? 18 : 24,
+          color: row.rank <= 3 ? "var(--amber)" : "var(--ink-dim)",
+        }}
+      >
+        #{row.rank}
+      </div>
+      <div>
+        <div
+          style={{
+            fontFamily: "var(--f-display)",
+            fontSize: isMobile ? 14 : 16,
+            fontWeight: 600,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {row.name}
+          {row.is_current_user && (
+            <span
+              className="chip violet"
+              style={{ padding: "1px 6px", fontSize: 9, marginLeft: 6 }}
+            >
+              YOU
+            </span>
+          )}
+        </div>
+        <div
+          style={{
+            fontSize: 10,
+            color: "var(--ink-mute)",
+            fontFamily: "var(--f-mono)",
+            marginTop: 2,
+          }}
+        >
+          @{row.username}
+        </div>
+      </div>
+      <div
+        style={{
+          fontFamily: "var(--f-mono)",
+          fontSize: isMobile ? 12 : 14,
+          color: "var(--ink)",
+          textAlign: "right",
+        }}
+      >
+        {row.cents} cents
+      </div>
+    </div>
+  );
+
   return (
     <PageBackground
       bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg"
@@ -1004,55 +1100,6 @@ export function Leaderboard() {
       dimAmount={0.8}
     >
       <NavBar variant="app" active="leaderboard" />
-
-      {locked && (
-        <div
-          style={{
-            position: "fixed",
-            top: 56,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 10,
-            backdropFilter: "blur(14px)",
-            WebkitBackdropFilter: "blur(14px)",
-            background: "rgba(8, 8, 14, 0.82)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 16,
-            textAlign: "center",
-            padding: 24,
-          }}
-        >
-          <div style={{ fontSize: 48 }}>🏆</div>
-          <div
-            style={{
-              fontFamily: "var(--f-mono)",
-              fontSize: isMobile ? 18 : 22,
-              letterSpacing: "0.12em",
-              color: "var(--ink)",
-              textTransform: "uppercase",
-              fontWeight: 700,
-            }}
-          >
-            Unlocks at Round 2
-          </div>
-          <div
-            style={{
-              fontSize: 14,
-              color: "var(--ink-mute)",
-              maxWidth: 320,
-              lineHeight: 1.6,
-            }}
-          >
-            The leaderboard goes live once Round 1 wraps up. Check back after
-            results.
-          </div>
-        </div>
-      )}
-
       <div
         style={{
           maxWidth: 1100,
@@ -1071,6 +1118,18 @@ export function Leaderboard() {
         >
           The climb.
         </h1>
+        <div
+          style={{
+            marginTop: 10,
+            color: "var(--ink-dim)",
+            fontSize: 14,
+            maxWidth: 640,
+          }}
+        >
+          {tab === "global"
+            ? "Global ranking across all users, sorted by total cents."
+            : "Event ranking among participants in the selected event."}
+        </div>
 
         <div
           style={{
@@ -1084,9 +1143,9 @@ export function Leaderboard() {
             width: "fit-content",
           }}
         >
-          {[
-            ["college", "Colleges"],
-            ["global", "Individuals"],
+          {[ 
+            ["global", "Global"],
+            ["event", "Event Wise"],
           ].map(([k, l]) => (
             <div
               key={k}
@@ -1110,7 +1169,84 @@ export function Leaderboard() {
           ))}
         </div>
 
-        {/* Podium */}
+        {tab === "event" && (
+          <div
+            style={{
+              marginTop: 14,
+              display: "flex",
+              gap: 6,
+              flexWrap: "wrap",
+            }}
+          >
+            {eventBoards.length === 0 ? (
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid var(--glass-border)",
+                  color: "var(--ink-mute)",
+                  fontSize: 12,
+                }}
+              >
+                No event participation found.
+              </div>
+            ) : (
+              eventBoards.map((eventBoard, idx) => (
+                <div
+                  key={eventBoard.event_id}
+                  onClick={() => setEventIndex(idx)}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 999,
+                    cursor: "pointer",
+                    fontSize: 12,
+                    background:
+                      idx === eventIndex
+                        ? "rgba(127,119,221,0.2)"
+                        : "rgba(255,255,255,0.03)",
+                    color: idx === eventIndex ? "var(--ink)" : "var(--ink-dim)",
+                    border:
+                      idx === eventIndex
+                        ? "1px solid rgba(127,119,221,0.5)"
+                        : "1px solid var(--glass-border)",
+                  }}
+                >
+                  {eventBoard.event_name}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {error && (
+          <div
+            style={{
+              marginTop: 20,
+              padding: "12px 16px",
+              borderRadius: 8,
+              background: "rgba(239,68,68,0.1)",
+              border: "1px solid rgba(239,68,68,0.3)",
+              fontSize: 13,
+              color: "#f87171",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <div
+            style={{
+              marginTop: 28,
+              color: "var(--ink-mute)",
+              fontSize: 13,
+              fontFamily: "var(--f-mono)",
+            }}
+          >
+            LOADING LEADERBOARD…
+          </div>
+        ) : (
+          <>
         <div
           style={{
             marginTop: 32,
@@ -1121,35 +1257,26 @@ export function Leaderboard() {
           }}
         >
           {[
-            {
-              r: 2,
-              d: tab === "college" ? colleges[1] : people[1],
-              h: isMobile ? 110 : 180,
-            },
-            {
-              r: 1,
-              d: tab === "college" ? colleges[0] : people[0],
-              h: isMobile ? 140 : 230,
-            },
-            {
-              r: 3,
-              d: tab === "college" ? colleges[2] : people[2],
-              h: isMobile ? 90 : 150,
-            },
-          ].map((s, i) => (
+            { podiumRank: 2, h: isMobile ? 110 : 180 },
+            { podiumRank: 1, h: isMobile ? 140 : 230 },
+            { podiumRank: 3, h: isMobile ? 90 : 150 },
+          ].map((slot, i) => {
+            const row = podiumRows.find((entry) => entry.rank === slot.podiumRank);
+            return (
             <div
               key={i}
               className="glass-strong"
               style={{
-                height: s.h,
+                height: slot.h,
                 padding: isMobile ? 12 : 22,
                 position: "relative",
                 overflow: "hidden",
                 background:
-                  s.r === 1
+                  slot.podiumRank === 1
                     ? "linear-gradient(180deg, rgba(232,185,116,0.18), rgba(232,185,116,0.04))"
                     : undefined,
-                borderColor: s.r === 1 ? "rgba(232,185,116,0.4)" : undefined,
+                borderColor:
+                  slot.podiumRank === 1 ? "rgba(232,185,116,0.4)" : undefined,
               }}
             >
               <div
@@ -1171,18 +1298,18 @@ export function Leaderboard() {
                   className="display"
                   style={{
                     fontSize: isMobile
-                      ? s.r === 1
+                      ? slot.podiumRank === 1
                         ? 44
                         : 36
-                      : s.r === 1
+                      : slot.podiumRank === 1
                         ? 86
                         : 68,
                     letterSpacing: "-0.04em",
-                    color: s.r === 1 ? "var(--amber)" : "var(--ink)",
+                    color: slot.podiumRank === 1 ? "var(--amber)" : "var(--ink)",
                     lineHeight: 1,
                   }}
                 >
-                  #{s.r}
+                  #{slot.podiumRank}
                 </div>
                 <div
                   style={{
@@ -1190,9 +1317,12 @@ export function Leaderboard() {
                     fontFamily: "var(--f-display)",
                     fontSize: isMobile ? 12 : 18,
                     fontWeight: 600,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {s.d.n}
+                  {row?.name ?? "—"}
                 </div>
                 <div
                   style={{
@@ -1202,118 +1332,69 @@ export function Leaderboard() {
                     color: "var(--ink-mute)",
                   }}
                 >
-                  {s.d.p} PTS
+                  {row ? `${row.cents} cents` : "—"}
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Full list */}
         <div
           className="glass"
           style={{ marginTop: 20, padding: 0, overflow: "hidden" }}
         >
-          {(tab === "college" ? colleges : people).map((row, i) => {
-            const dirColor =
-              row.d === "up"
-                ? "var(--teal)"
-                : row.d === "down"
-                  ? "#D97777"
-                  : "var(--ink-mute)";
-            const dirSym = row.d === "up" ? "↑" : row.d === "down" ? "↓" : "—";
-            return (
-              <div
-                key={i}
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: isMobile
-                    ? "48px 1fr auto"
-                    : "80px 1fr 120px 80px",
-                  alignItems: "center",
-                  gap: isMobile ? 10 : 20,
-                  padding: isMobile ? "14px 16px" : "16px 24px",
-                  borderTop: i === 0 ? "none" : "1px solid var(--glass-border)",
-                  background: row.mine
-                    ? "rgba(127,119,221,0.1)"
-                    : "transparent",
-                  borderLeft: row.mine
-                    ? "2px solid var(--violet)"
-                    : "2px solid transparent",
-                }}
-              >
-                <div
-                  className="display"
-                  style={{
-                    fontSize: isMobile ? 18 : 24,
-                    color: row.r <= 3 ? "var(--amber)" : "var(--ink-dim)",
-                  }}
-                >
-                  #{row.r}
-                </div>
-                <div>
-                  <div
-                    style={{
-                      fontFamily: "var(--f-display)",
-                      fontSize: isMobile ? 14 : 16,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {row.n}{" "}
-                    {row.mine && (
-                      <span
-                        className="chip violet"
-                        style={{
-                          padding: "1px 6px",
-                          fontSize: 9,
-                          marginLeft: 6,
-                        }}
-                      >
-                        YOU
-                      </span>
-                    )}
-                  </div>
-                  {row.c && (
-                    <div
-                      style={{
-                        fontSize: 10,
-                        color: "var(--ink-mute)",
-                        fontFamily: "var(--f-mono)",
-                      }}
-                    >
-                      {row.c}
-                    </div>
-                  )}
-                </div>
-                <div
-                  style={{
-                    fontFamily: "var(--f-mono)",
-                    fontSize: isMobile ? 12 : 14,
-                    color: "var(--ink)",
-                  }}
-                >
-                  {row.p} pts
-                  {isMobile && row.d && (
-                    <span style={{ marginLeft: 6, color: dirColor }}>
-                      {dirSym}
-                    </span>
-                  )}
-                </div>
-                {!isMobile && row.d && (
-                  <div
-                    style={{
-                      fontFamily: "var(--f-mono)",
-                      fontSize: 13,
-                      color: dirColor,
-                    }}
-                  >
-                    {dirSym}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {activeRows.length === 0 ? (
+            <div
+              style={{
+                padding: "22px 18px",
+                color: "var(--ink-mute)",
+                fontSize: 13,
+                textAlign: "center",
+              }}
+            >
+              No leaderboard entries available.
+            </div>
+          ) : (
+            activeRows.map((row, i) => renderRow(row, i))
+          )}
         </div>
+
+        <div
+          style={{
+            marginTop: 12,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+            color: "var(--ink-mute)",
+            fontSize: 12,
+            fontFamily: "var(--f-mono)",
+          }}
+        >
+          <span>{`TOTAL: ${totalCount}`}</span>
+          <span>{`SHOWING: ${activeRows.length}`}</span>
+        </div>
+
+        {!meInTop && activeMe && (
+          <div className="glass" style={{ marginTop: 14, padding: 0, overflow: "hidden" }}>
+            <div
+              style={{
+                padding: "10px 16px",
+                borderBottom: "1px solid var(--glass-border)",
+                fontSize: 11,
+                fontFamily: "var(--f-mono)",
+                color: "var(--ink-mute)",
+                letterSpacing: "0.08em",
+              }}
+            >
+              YOUR POSITION
+            </div>
+            {renderRow(activeMe, 0)}
+          </div>
+        )}
+          </>
+        )}
       </div>
     </PageBackground>
   );

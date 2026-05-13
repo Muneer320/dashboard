@@ -98,6 +98,8 @@ export const users = {
   events: (id) => get(`/users/${id}/events`),
   meals: (id) => get(`/users/${id}/meals`),
   myEvents: () => get('/users/me/my-events'),
+  myLeaderboard: (topLimit = 100) =>
+    get(`/users/me/leaderboard?top_limit=${encodeURIComponent(topLimit)}`),
   mirageProfile: () => get('/users/me/mirage/profile'),
   uploadMirageImage: (file, poseLabel = null) => {
     const formData = new FormData();
