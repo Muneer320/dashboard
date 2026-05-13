@@ -20,6 +20,8 @@ PUBLIC_PATHS = {
     "/api/v1/auth/login",
     "/api/v1/auth/admin/login",
     "/api/v1/auth/register",
+    # Public self-registration for walk-in visitors — no token exists yet.
+    "/api/v1/auth/visitor-signup",
     "/api/v1/openapi.json",
     "/docs",
     "/redoc",

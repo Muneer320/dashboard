@@ -16,3 +16,7 @@ services:
       - postgrest
     volumes:
       - ./infra/local-rest/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    # Expose on host so local uvicorn (outside Docker) can reach PostgREST
+    # Set SUPABASE_URL=http://localhost:54321 in backend/.env for local dev
+    ports:
+      - "54321:80"
