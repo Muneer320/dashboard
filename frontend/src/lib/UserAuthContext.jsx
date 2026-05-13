@@ -42,7 +42,7 @@ export function UserAuthProvider({ children }) {
   }, []);
 
   return (
-    <UserAuthContext.Provider value={{ user, ready, error, setError, login, logout }}>
+    <UserAuthContext.Provider value={{ user, setUser, ready, error, setError, login, logout }}>
       {children}
     </UserAuthContext.Provider>
   );

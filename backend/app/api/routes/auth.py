@@ -48,6 +48,7 @@ async def me(current_user: User = Depends(get_current_user)) -> MeResponse:
         name=current_user.name,
         is_attending=current_user.is_attending,
         role=current_user.role,
+        details=current_user.details,
     )
 
 
