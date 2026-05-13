@@ -12,7 +12,13 @@ from app.schemas.mirage import (
 )
 from app.models.user import User
 from app.schemas.meals import MealSlot
-from app.schemas.user import MyEventResponse, UserEventsResponse, UserProfileUpdate, UserResponse
+from app.schemas.user import (
+    MyEventResponse,
+    MyLeaderboardResponse,
+    UserEventsResponse,
+    UserProfileUpdate,
+    UserResponse,
+)
 from app.services.event_service import get_event_registration_counts, list_events
 from app.services.mirage_pipeline_service import (
     delete_mirage_anchor_image,
@@ -22,6 +28,7 @@ from app.services.mirage_pipeline_service import (
 )
 from app.services.qr_service import scan_food
 from app.services.user_service import (
+    build_my_leaderboard_payload,
     get_user_by_id,
     get_user_events_payload,
     update_user_profile,
@@ -81,6 +88,28 @@ async def get_my_events(
             user_status=user_status if isinstance(user_status, dict) else {},
         ))
     return results
+
+
+@router.get("/me/leaderboard", response_model=MyLeaderboardResponse)
+async def get_my_leaderboard(
+    top_limit: int = 100,
+    supabase: AsyncClient = Depends(get_supabase),
+    current_user: User = Depends(get_current_user),
+) -> MyLeaderboardResponse:
+    """
+    Combined leaderboard payload:
+    - Global ranking of all users by cents.
+    - Event-wise rankings for events the current user is enrolled in.
+    """
+    top_limit = max(1, min(top_limit, 200))
+    all_events = await list_events(supabase)
+    payload = await build_my_leaderboard_payload(
+        supabase=supabase,
+        current_user=current_user,
+        all_events=all_events,
+        top_limit=top_limit,
+    )
+    return MyLeaderboardResponse(**payload)
 
 
 @router.get("/me/mirage/profile", response_model=MirageUserProfileResponse)
