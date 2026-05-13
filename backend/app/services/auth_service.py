@@ -82,3 +82,69 @@ async def register_user(
     if inserted is not None:
         return User.from_row(inserted)
     return user
+
+
+async def visitor_signup_user(
+    supabase: AsyncClient,
+    name: str,
+    email: str,
+    password: str,
+    phone: str | None = None,
+    college: str | None = None,
+    city: str | None = None,
+    branch: str | None = None,
+    year: str | None = None,
+    gender: str | None = None,
+    emergency_contact: str | None = None,
+) -> tuple[User, str]:
+    """Self-register a walk-in visitor and return (user, jwt_token)."""
+    # Email becomes the username (same convention as participant accounts)
+    username = email.strip().lower()
+
+    existing = await (
+        supabase.table("users")
+        .select("id")
+        .eq("username", username)
+        .limit(1)
+        .execute()
+    )
+    if first_row(existing) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists. Please log in.",
+        )
+
+    details = {
+        k: v for k, v in {
+            "phone": phone,
+            "college": college,
+            "city": city,
+            "branch": branch,
+            "year": year,
+            "gender": gender,
+            "emergency_contact": emergency_contact or "",
+        }.items() if v is not None
+    }
+
+    user = User(
+        id=uuid.uuid4(),
+        username=username,
+        password_hash=get_password_hash(password),
+        name=name.strip(),
+        role="visitor",
+        details=details,
+        events={},
+        food={},
+    )
+
+    insert_resp = await (
+        supabase.table("users")
+        .insert(user.to_insert())
+        .execute()
+    )
+    inserted = first_row(insert_resp)
+    if inserted is not None:
+        user = User.from_row(inserted)
+
+    token = create_access_token(subject=str(user.id))
+    return user, token

@@ -83,6 +83,7 @@ const del = (path, opts) => request(path, { ...opts, method: 'DELETE' });
 export const auth = {
   login: ({ email, password }) => post('/auth/login', { email, password }),
   me: () => get('/auth/me'),
+  visitorSignup: (body) => post('/auth/visitor-signup', body),
 };
 
 export const adminAuth = {

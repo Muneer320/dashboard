@@ -45,6 +45,7 @@ class User:
     food: dict = field(default_factory=_default_food)
     is_profile_complete: bool = False
     cents: int = 0
+    role: str = "participant"  # 'participant' | 'visitor'
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -62,6 +63,7 @@ class User:
             food=row.get("food") or _default_food(),
             is_profile_complete=bool(row.get("is_profile_complete", False)),
             cents=int(row.get("cents") or 0),
+            role=row.get("role") or "participant",
             created_at=coerce_datetime(row.get("created_at")),
             updated_at=coerce_datetime(row.get("updated_at")),
         )
@@ -80,4 +82,5 @@ class User:
             "food": self.food,
             "is_profile_complete": self.is_profile_complete,
             "cents": self.cents,
+            "role": self.role,
         }
