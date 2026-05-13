@@ -61,8 +61,6 @@ export function AuthProvider({ children }) {
 
       // Sidequest features
       ugcQueue:     ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
-      snapshot:     ['admin', 'prm_lead', 'ops_lead'],
-      surpriseDrop: ['admin', 'prm_lead', 'ops_lead'],
       boothMonitor: ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
       engagement:   ['admin', 'prm_lead', 'ops_lead'],
       disputes:     ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],

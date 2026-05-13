@@ -203,6 +203,8 @@ function Spinner() {
 // ─────────────────────────────────────────────────────────────
 // Layout shell — left sidebar + minimal topbar
 // ─────────────────────────────────────────────────────────────
+const DISPUTE_FORM_URL = "https://example.invalid/archived-form";
+
 const NAV_ITEMS = [
   { key: "command",      label: "Command Center", to: "/coins",            iconKey: "grid" },
   { key: "verification", label: "Verification",   to: "/coins/submit",     iconKey: "check" },
@@ -212,6 +214,7 @@ const NAV_ITEMS = [
   { key: "history",      label: "History",        to: "/coins/history",    iconKey: "clock" },
   { key: "guide",        label: "How to Earn",    to: "/coins/guide",      iconKey: "book" },
   { key: "terms",        label: "Terms",          to: "/coins/terms",      iconKey: "scroll" },
+  { key: "disputes",     label: "Disputes",       to: "/coins/disputes",   iconKey: "scale" },
 ];
 
 function NavIcon({ k }) {
@@ -233,6 +236,7 @@ function NavIcon({ k }) {
     case "qr":    return <svg {...common}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="18" y1="14" x2="18" y2="18"/><line x1="14" y1="18" x2="21" y2="18"/></svg>;
     case "book":   return <svg {...common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
     case "scroll": return <svg {...common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+    case "scale":  return <svg {...common}><line x1="12" y1="3" x2="12" y2="21"/><path d="M6 7l-3 6a4 4 0 0 0 6 0z"/><path d="M18 7l3 6a4 4 0 0 1-6 0z"/><path d="M6 7h12"/><path d="M9 21h6"/></svg>;
     default:       return null;
   }
 }
@@ -2982,16 +2986,6 @@ export function GuidePage() {
           ))}
         </div>
 
-        <div style={{
-          marginTop: 12, padding: "12px 18px", borderRadius: 10,
-          background: "rgba(239,68,68,0.07)",
-          border: "1px solid rgba(239,68,68,0.22)",
-          fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.6,
-        }}>
-          <strong style={{ color: "#f87171" }}>Heads up —</strong>{" "}
-          selecting a reward does not reserve stock. Your QR code expires if
-          unused. Don't generate it until you're ready to walk to the booth.
-        </div>
       </div>
 
       {/* ── Submission Guidelines (collapsible) ── */}
@@ -3173,7 +3167,7 @@ const TERMS_SECTIONS = [
     color: "var(--teal)",
     items: [
       "Ascent Cents are credited only after a volunteer or administrator manually reviews and approves your submission.",
-      "Review typically completes within a few hours; during peak periods it may take up to 24 hours.",
+      "Review typically completes within a short period of time; during peak periods it may take up to 2 hours.",
       "Approval is final at the reviewer's discretion. An approved submission cannot be re-reviewed except through the formal dispute process.",
       "Coin amounts are fixed per activity type and are displayed in the guide. No negotiation or partial credit is available.",
       "Cents earned at on-site booths (QR scan) are credited instantly and are final.",
@@ -3251,8 +3245,8 @@ const TERMS_SECTIONS = [
     title: "Dispute Resolution",
     color: "var(--teal)",
     items: [
-      "If you believe a submission was incorrectly rejected or a coin amount is wrong, raise a dispute within 12 hours of the decision via the Feedback form.",
-      "Include your submission ID and a clear explanation of the discrepancy.",
+      "If you believe a submission was incorrectly rejected or a coin amount is wrong, raise a dispute within 12 hours of the decision via the in-app Disputes page (sidebar → Disputes).",
+      "Include your submission ID, ledger entry ID, and a clear explanation of the discrepancy.",
       "Disputes are reviewed by an ops lead or admin. Their decision is final.",
       "Disputes raised after 12 hours, or disputes without supporting evidence, may be declined without review.",
     ],
@@ -3396,28 +3390,138 @@ export function TermsPage() {
         ))}
       </div>
 
-      {/* ── Footer note ── */}
-      <div style={{
-        padding: "16px 20px",
-        borderRadius: 12,
-        background: "rgba(127,119,221,0.06)",
-        border: "1px solid rgba(127,119,221,0.15)",
-        fontSize: 12,
-        color: "var(--ink-mute)",
-        lineHeight: 1.7,
-        marginBottom: 8,
+    </SidequestLayout>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Disputes landing page  (/coins/disputes)
+// Explains the dispute process and links out to the externally-
+// hosted Google Form. Kept inside the app shell so users see the
+// rules before they click through.
+// ─────────────────────────────────────────────────────────────
+export function DisputesPage() {
+  const isMobile = useMobile();
+
+  const openForm = () => {
+    window.open(DISPUTE_FORM_URL, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <SidequestLayout active="disputes">
+
+      {/* ── Hero ── */}
+      <div className="glass-strong" style={{
+        padding: isMobile ? "28px 22px" : "36px 40px",
+        marginBottom: 28,
+        borderRadius: 16,
+        background: "linear-gradient(135deg, rgba(64,212,196,0.10) 0%, rgba(127,119,221,0.05) 100%)",
+        border: "1px solid rgba(64,212,196,0.22)",
       }}>
-        <strong style={{ color: "var(--ink)" }}>Questions?</strong>{" "}
-        Reach out to the Ascent Coins desk at any information booth inside the venue,
-        or use the{" "}
-        <span
-          style={{ color: "var(--violet)", cursor: "pointer", textDecoration: "underline" }}
-          onClick={() => navigate("/feedback")}
+        <div className="eyebrow" style={{ marginBottom: 10 }}>§ DISPUTE RESOLUTION</div>
+        <h1 style={{
+          margin: 0,
+          fontFamily: "var(--f-display)",
+          fontSize: isMobile ? 28 : 38,
+          lineHeight: 1.15,
+          color: "var(--ink)",
+        }}>
+          Something{" "}
+          <span style={{ color: "var(--teal)" }}>off</span>
+          ?
+        </h1>
+        <p style={{
+          margin: "14px 0 0",
+          fontSize: 14,
+          color: "var(--ink-mute)",
+          lineHeight: 1.65,
+          maxWidth: 620,
+        }}>
+          If a submission was wrongly rejected, your coin balance looks wrong,
+          or a reward redemption didn't go through — raise a dispute and the
+          ops lead will review it.
+        </p>
+      </div>
+
+      {/* ── Before-you-submit checklist ── */}
+      <div className="glass" style={{
+        padding: isMobile ? "22px 18px" : "26px 28px",
+        borderRadius: 14,
+        marginBottom: 24,
+        borderLeft: "4px solid var(--violet)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 22 }}>📋</span>
+          <h2 style={{
+            margin: 0,
+            fontFamily: "var(--f-display)",
+            fontSize: isMobile ? 16 : 18,
+            color: "var(--ink)",
+          }}>Before you submit</h2>
+        </div>
+        <ol style={{ margin: 0, paddingLeft: 22, display: "flex", flexDirection: "column", gap: 10 }}>
+          <li style={{ fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.7 }}>
+            Disputes must be raised <strong style={{ color: "var(--ink)" }}>within 12 hours</strong> of the decision. Later submissions may be declined without review.
+          </li>
+          <li style={{ fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.7 }}>
+            Attach supporting evidence (screenshots, links). Disputes without evidence may be declined.
+          </li>
+          <li style={{ fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.7 }}>
+            Use the <strong style={{ color: "var(--ink)" }}>same email</strong> you registered with — verified Google identity is required to prevent duplicate filings.
+          </li>
+          <li style={{ fontSize: 13, color: "var(--ink-mute)", lineHeight: 1.7 }}>
+            An ops lead will review and respond within <strong style={{ color: "var(--ink)" }}>24 hours</strong>. Their decision is final.
+          </li>
+        </ol>
+      </div>
+
+      {/* ── CTA card ── */}
+      <div className="glass-strong" style={{
+        padding: isMobile ? "26px 22px" : "32px 36px",
+        borderRadius: 16,
+        marginBottom: 24,
+        background: "linear-gradient(135deg, rgba(127,119,221,0.10) 0%, rgba(64,212,196,0.06) 100%)",
+        border: "1px solid rgba(127,119,221,0.30)",
+        textAlign: "center",
+      }}>
+        <div style={{ fontSize: 36, marginBottom: 10 }}>⚖️</div>
+        <h2 style={{
+          margin: 0,
+          fontFamily: "var(--f-display)",
+          fontSize: isMobile ? 20 : 24,
+          color: "var(--ink)",
+        }}>Ready to file a dispute?</h2>
+        <p style={{
+          margin: "10px auto 22px",
+          fontSize: 13,
+          color: "var(--ink-mute)",
+          lineHeight: 1.65,
+          maxWidth: 480,
+        }}>
+          The dispute form opens in a new tab. Fill it in with your details and
+          evidence — the ops team will follow up by email.
+        </p>
+        <button
+          className="btn primary"
+          onClick={openForm}
+          style={{
+            padding: "12px 26px",
+            fontSize: 14,
+            fontFamily: "var(--f-display)",
+            letterSpacing: "0.02em",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+          }}
         >
-          Feedback form
-        </span>
-        {" "}in the app. Ascent Cents have no monetary value and are valid only
-        during Ascent Techfest 2026.
+          Open Dispute Form
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" strokeWidth="2.2"
+               strokeLinecap="round" strokeLinejoin="round">
+            <path d="M7 17L17 7"/>
+            <polyline points="7 7 17 7 17 17"/>
+          </svg>
+        </button>
       </div>
 
     </SidequestLayout>

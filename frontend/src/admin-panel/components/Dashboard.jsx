@@ -15,7 +15,7 @@ import Announcements from './tabs/Announcements'
 import RequestedMembers from './tabs/RequestedMembers'
 import AdminUsers from './tabs/AdminUsers'
 import {
-  UGCQueue, SnapshotTool, SurpriseDrop, BoothMonitor,
+  UGCQueue, BoothMonitor,
   Engagement, Disputes, Inventory, AuditLog, CoinsOverview,
 } from './tabs/sidequest/Sidequest'
 import './Dashboard.css'
@@ -56,8 +56,6 @@ export default function Dashboard() {
 
             {/* Sidequest tabs */}
             <Route path="ugc-queue"     element={canAccess('ugcQueue')     ? <UGCQueue />     : <Forbidden />} />
-            <Route path="snapshot"      element={canAccess('snapshot')     ? <SnapshotTool /> : <Forbidden />} />
-            <Route path="surprise-drop" element={canAccess('surpriseDrop') ? <SurpriseDrop /> : <Forbidden />} />
             <Route path="booth-monitor" element={canAccess('boothMonitor') ? <BoothMonitor /> : <Forbidden />} />
             <Route path="engagement"    element={canAccess('engagement')   ? <Engagement />   : <Forbidden />} />
             <Route path="disputes"      element={canAccess('disputes')     ? <Disputes />     : <Forbidden />} />

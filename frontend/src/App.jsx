@@ -19,6 +19,7 @@ import {
   MyQRPage,
   GuidePage,
   TermsPage,
+  DisputesPage,
 } from './components/sidequest';
 import RedemptionBooth from './components/redemption';
 
@@ -89,6 +90,7 @@ export default function App() {
         <Route path="/coins/history"     element={<RequireAttending><CoinHistoryPage /></RequireAttending>} />
         <Route path="/coins/guide"       element={<RequireAttending><GuidePage /></RequireAttending>} />
         <Route path="/coins/terms"       element={<RequireAttending><TermsPage /></RequireAttending>} />
+        <Route path="/coins/disputes"    element={<RequireAttending><DisputesPage /></RequireAttending>} />
 
         <Route path="*"              element={<Navigate to="/" replace />} />
       </Routes>

@@ -3,7 +3,7 @@
 // utility classes (.card, .btn, .badge, .data-table, .input-field,
 // .section-header, .section-title, .empty-state) from index.css.
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { adminCoins } from '../../../../lib/api'
 import ascentCoinImg from '../../../../assets/ascent-coin.png'
 
@@ -187,12 +187,18 @@ function NewVerificationView() {
     } catch (e) { setError(e.message) }
     finally { if (showSpinner) setLoading(false) }
   }, [filter])
+
+  // Reload immediately when filter changes (load identity changes with filter).
   useEffect(() => { load(true) }, [load])
-  // Live refresh — poll every 15s without showing the loading spinner.
+
+  // Background poll — ref keeps the interval stable so filter changes don't
+  // tear down and restart it (which was causing ~2-3s effective fire rate).
+  const loadRef = useRef(load)
+  useEffect(() => { loadRef.current = load }, [load])
   useEffect(() => {
-    const id = setInterval(() => load(false), 15000)
+    const id = setInterval(() => loadRef.current(false), 30000)
     return () => clearInterval(id)
-  }, [load])
+  }, []) // empty deps — interval is created once and never restarted
 
   const approve = async (id) => {
     setWorking(true); setError('')
@@ -338,207 +344,6 @@ function NewVerificationView() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 2. Snapshot Tool
-// ─────────────────────────────────────────────────────────────
-export function SnapshotTool() {
-  const [leaderboard, setLeaderboard] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [working, setWorking] = useState(false)
-  const [pending, setPending] = useState(null) // { type, force, reason }
-
-  useEffect(() => {
-    adminCoins.leaderboard()
-      .then(setLeaderboard).catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [])
-
-  const SECTIONS = [
-    { type: 'DAY1_MIDNIGHT', tier: 'MUG',         cutoff: 30, threshold: 1500 },
-    { type: 'DAY2_T3H',      tier: 'TSHIRT',      cutoff: 50, threshold: 2500 },
-    { type: 'FINAL_CLOSE',   tier: 'PREMIUM_KIT', cutoff: 10, threshold: 4000 },
-  ]
-
-  const take = async () => {
-    if (!pending) return
-    if (!window.confirm('This will permanently lock the leaderboard. Continue?')) return
-    setWorking(true); setError('')
-    try {
-      await adminCoins.snapshotTake(pending.type, pending.force, pending.reason || null)
-      setPending(null)
-      alert('Snapshot taken.')
-    } catch (e) { setError(e.message) }
-    finally { setWorking(false) }
-  }
-
-  if (loading) return <Spinner />
-
-  return (
-    <div className="fade-in">
-      <PageHeader title="Snapshot Tool" sub="Lock the leaderboard at a specific moment. Action cannot be undone." />
-      <ErrorBanner message={error} />
-
-      <div style={{ display: 'grid', gap: 16 }}>
-        {SECTIONS.map(s => {
-          const inBoth = leaderboard
-            .slice(0, s.cutoff)
-            .filter(r => r.coins >= s.threshold)
-          const tied = leaderboard.filter(r => r.coins === leaderboard[s.cutoff - 1]?.coins)
-          return (
-            <div key={s.type} className="card" style={{ padding: 18 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <h3>{s.type.replace('_', ' ')} → {s.tier}</h3>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
-                    Top {s.cutoff} with ≥{s.threshold.toLocaleString()} coins.
-                  </div>
-                </div>
-                <button className="btn btn-primary" onClick={() => setPending({ type: s.type })}>
-                  Take Snapshot
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 16, marginTop: 14 }}>
-                <Stat label="ELIGIBLE" value={inBoth.length} />
-                <Stat label="CUTOFF SCORE" value={leaderboard[s.cutoff - 1]?.coins ?? '—'} />
-                <Stat label="TIED AT CUTOFF" value={tied.length > 1 ? tied.length : 0} />
-              </div>
-              {tied.length > 1 && (
-                <div style={{ marginTop: 12, padding: 10, borderRadius: 'var(--radius-md)',
-                  background: 'var(--warning-dim)', color: 'var(--warning)', fontSize: 12 }}>
-                  ⚠ {tied.length} students tied at the cutoff — tiebreaker (distinct sources, then earliest entry) will decide.
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      {pending && (
-        <Modal onClose={() => setPending(null)}>
-          <h3>Confirm snapshot</h3>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 6 }}>
-            <strong>{pending.type.replace('_', ' ')}</strong> — this is irreversible.
-          </p>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 13 }}>
-            <input type="checkbox" checked={!!pending.force}
-              onChange={(e) => setPending({ ...pending, force: e.target.checked })} />
-            Force (override stale-queue SLA gate)
-          </label>
-          {pending.force && (
-            <input className="input-field" placeholder="Reason for force…"
-              value={pending.reason || ''}
-              onChange={(e) => setPending({ ...pending, reason: e.target.value })}
-              style={{ marginTop: 10 }} />
-          )}
-          <div style={{ display: 'flex', gap: 8, marginTop: 18, justifyContent: 'flex-end' }}>
-            <button className="btn btn-ghost" onClick={() => setPending(null)}>Cancel</button>
-            <button className="btn btn-primary" onClick={take} disabled={working}>
-              {working ? '…' : 'Lock Snapshot'}
-            </button>
-          </div>
-        </Modal>
-      )}
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────
-// 3. Surprise Drop
-// ─────────────────────────────────────────────────────────────
-export function SurpriseDrop() {
-  const [form, setForm] = useState({
-    criteria: '', reward_tier: 'STICKER', max_winners: 5,
-    window_minutes: 15, coin_reward: '',
-  })
-  const [working, setWorking] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState(null)
-
-  const trigger = async () => {
-    if (!form.criteria.trim()) return setError('Criteria required')
-    setWorking(true); setError(''); setResult(null)
-    try {
-      const body = { ...form }
-      body.coin_reward = body.coin_reward ? Number(body.coin_reward) : null
-      body.max_winners = Number(body.max_winners)
-      body.window_minutes = Number(body.window_minutes)
-      const r = await adminCoins.triggerDrop(body)
-      setResult(r)
-    } catch (e) { setError(e.message) }
-    finally { setWorking(false) }
-  }
-
-  const cancel = async () => {
-    if (!result?.id) return
-    setWorking(true); setError('')
-    try { await adminCoins.cancelDrop(result.id); setResult(null) }
-    catch (e) { setError(e.message) }
-    finally { setWorking(false) }
-  }
-
-  return (
-    <div className="fade-in">
-      <PageHeader title="Surprise Drop"
-        sub="Broadcast a flash reward to all attending students." />
-      <ErrorBanner message={error} />
-
-      <div className="card" style={{ padding: 22, maxWidth: 640 }}>
-        <FormField label="Criteria">
-          <textarea className="input-field" rows={3}
-            placeholder="e.g. First 5 students to scan booth Y win a Mug"
-            value={form.criteria}
-            onChange={(e) => setForm({ ...form, criteria: e.target.value })} />
-        </FormField>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
-          <FormField label="Reward Tier">
-            <select className="input-field" value={form.reward_tier}
-              onChange={(e) => setForm({ ...form, reward_tier: e.target.value })}>
-              <option value="STICKER">Sticker</option>
-              <option value="MUG">Mug</option>
-              <option value="TSHIRT">T-shirt</option>
-              <option value="PREMIUM_KIT">Premium Kit</option>
-              <option value="COINS">Coins</option>
-            </select>
-          </FormField>
-          <FormField label="Max Winners">
-            <input type="number" min={1} className="input-field" value={form.max_winners}
-              onChange={(e) => setForm({ ...form, max_winners: e.target.value })} />
-          </FormField>
-          <FormField label="Window (minutes)">
-            <input type="number" min={1} className="input-field" value={form.window_minutes}
-              onChange={(e) => setForm({ ...form, window_minutes: e.target.value })} />
-          </FormField>
-          <FormField label="Coin Reward (optional)">
-            <input type="number" className="input-field" value={form.coin_reward}
-              onChange={(e) => setForm({ ...form, coin_reward: e.target.value })}
-              placeholder="If awarding coins instead of merch" />
-          </FormField>
-        </div>
-
-        <button className="btn btn-primary" onClick={trigger} disabled={working}
-          style={{ marginTop: 16 }}>
-          {working ? '…' : 'Trigger Drop'}
-        </button>
-      </div>
-
-      {result && (
-        <div className="card" style={{ padding: 18, marginTop: 16, maxWidth: 640 }}>
-          <h3 style={{ marginBottom: 6 }}>Drop active</h3>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            {result.criteria} · {result.max_winners} winners · ends {fmtTime(result.window_end)}
-          </div>
-          <button className="btn btn-danger" onClick={cancel} disabled={working}
-            style={{ marginTop: 12 }}>
-            Cancel Drop
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────
 // 4. Booth Monitor
 // ─────────────────────────────────────────────────────────────
 export function BoothMonitor() {
@@ -559,7 +364,9 @@ export function BoothMonitor() {
     finally { setLoading(false) }
   }, [filters])
   useEffect(() => { load() }, [load])
-  useEffect(() => { const id = setInterval(load, 30000); return () => clearInterval(id) }, [load])
+  const boothLoadRef = useRef(load)
+  useEffect(() => { boothLoadRef.current = load }, [load])
+  useEffect(() => { const id = setInterval(() => boothLoadRef.current(), 30000); return () => clearInterval(id) }, [])
 
   return (
     <div className="fade-in">
@@ -1195,10 +1002,12 @@ function ReVerifyView() {
     finally { if (showSpinner) setLoading(false) }
   }, [hours])
   useEffect(() => { load(true) }, [load])
+  const reVerifyLoadRef = useRef(load)
+  useEffect(() => { reVerifyLoadRef.current = load }, [load])
   useEffect(() => {
-    const id = setInterval(() => load(false), 30000)
+    const id = setInterval(() => reVerifyLoadRef.current(false), 30000)
     return () => clearInterval(id)
-  }, [load])
+  }, [])
 
   const approve = async (id) => {
     setWorking(true); setError('')
