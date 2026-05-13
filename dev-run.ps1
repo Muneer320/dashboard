@@ -54,7 +54,8 @@ function Start-ManagedProcess {
         [string]$Name,
         [string]$FilePath,
         [string[]]$Arguments,
-        [string]$WorkingDirectory
+        [string]$WorkingDirectory,
+        [hashtable]$Environment = @{}
     )
 
     $stdout = Join-Path $logDir "$sessionId.$Name.out.log"
@@ -62,14 +63,33 @@ function Start-ManagedProcess {
     "" | Set-Content $stdout
     "" | Set-Content $stderr
 
-    $proc = Start-Process `
-        -FilePath $FilePath `
-        -ArgumentList $Arguments `
-        -WorkingDirectory $WorkingDirectory `
-        -RedirectStandardOutput $stdout `
-        -RedirectStandardError $stderr `
-        -PassThru `
-        -WindowStyle Hidden
+    $startParams = @{
+        FilePath = $FilePath
+        ArgumentList = $Arguments
+        WorkingDirectory = $WorkingDirectory
+        RedirectStandardOutput = $stdout
+        RedirectStandardError = $stderr
+        PassThru = $true
+        WindowStyle = "Hidden"
+    }
+
+    $previousEnv = @{}
+    if ($Environment.Count -gt 0) {
+        foreach ($key in $Environment.Keys) {
+            $previousEnv[$key] = [Environment]::GetEnvironmentVariable($key, "Process")
+            [Environment]::SetEnvironmentVariable($key, [string]$Environment[$key], "Process")
+        }
+    }
+
+    try {
+        $proc = Start-Process @startParams
+    } finally {
+        if ($Environment.Count -gt 0) {
+            foreach ($key in $Environment.Keys) {
+                [Environment]::SetEnvironmentVariable($key, $previousEnv[$key], "Process")
+            }
+        }
+    }
 
     $tailOutJob = Start-Job -ScriptBlock {
         param($Path, $Tag)
@@ -86,6 +106,32 @@ function Start-ManagedProcess {
     $script:jobs += $tailErrJob
 
     Write-Host "Started $Name (PID: $($proc.Id))"
+}
+
+function Stop-StaleDevProcesses {
+    param([int]$BackendPortToUse)
+
+    $portsToCheck = @(5173, 5174, 5175, 5176, 5177, 54321, 15432, 8000, 8001, $BackendPortToUse)
+    $listenerPids = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+        Where-Object { $_.LocalPort -in $portsToCheck } |
+        Select-Object -ExpandProperty OwningProcess -Unique
+
+    $candidatePids = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and (
+                $_.CommandLine -match "vite --host 127\.0\.0\.1 --port 5173" -or
+                $_.CommandLine -match "uvicorn app\.main:app" -or
+                $_.CommandLine -match "dashboard-2\.pem" -or
+                $_.CommandLine -match "Ascent Dashboard\\backend"
+            )
+        } |
+        Select-Object -ExpandProperty ProcessId
+
+    $targets = @($listenerPids + $candidatePids | Sort-Object -Unique)
+    foreach ($targetPid in $targets) {
+        if (-not $targetPid -or $targetPid -eq $PID) { continue }
+        try { Stop-Process -Id $targetPid -Force -ErrorAction Stop } catch {}
+    }
 }
 
 function Cleanup-All {
@@ -111,6 +157,8 @@ try {
         $backendPort = 8001
         Write-Host "Port 8000 is already in use; switching backend to port $backendPort for this dev session."
     }
+
+    Stop-StaleDevProcesses -BackendPortToUse $backendPort
 
     Write-Host "Starting SSH tunnels..."
     Start-ManagedProcess `
@@ -155,12 +203,31 @@ try {
     Wait-LocalPort -Port $backendPort -TimeoutSeconds 25
     Write-Host "Backend is up at http://127.0.0.1:$backendPort"
 
+    $leaderboardUrl = "http://127.0.0.1:$backendPort/api/v1/users/me/leaderboard"
+    try {
+        Invoke-WebRequest -Uri $leaderboardUrl -Method GET -UseBasicParsing -TimeoutSec 6 | Out-Null
+        Write-Host "Leaderboard route check: OK"
+    } catch {
+        $statusCode = $null
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            $statusCode = [int]$_.Exception.Response.StatusCode
+        }
+        if ($statusCode -eq 401 -or $statusCode -eq 403) {
+            Write-Host "Leaderboard route check: OK (auth required)"
+        } elseif ($statusCode -eq 404) {
+            Write-Warning "Leaderboard route check failed with 404. Backend code may be outdated."
+        } else {
+            Write-Host "Leaderboard route check: unable to verify (status: $statusCode)"
+        }
+    }
+
     Write-Host "Starting frontend..."
     Start-ManagedProcess `
         -Name "frontend" `
         -FilePath $npmCmd `
-        -Arguments @("/c", "npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "$frontendPort") `
-        -WorkingDirectory $frontendDir
+        -Arguments @("/c", "npm", "run", "dev", "--", "--host", "127.0.0.1", "--port", "$frontendPort", "--strictPort") `
+        -WorkingDirectory $frontendDir `
+        -Environment @{ BACKEND_URL = "http://127.0.0.1:$backendPort" }
 
     Write-Host "Frontend target: http://127.0.0.1:$frontendPort"
     Write-Host "Press Ctrl+C to stop everything."
