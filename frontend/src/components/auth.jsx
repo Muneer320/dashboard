@@ -142,7 +142,7 @@ function VisitorSignupForm({ isMobile, onSwitchToLogin, navigate }) {
     'MCA',
     'Other',
   ];
-  const YEAR_OPTIONS = ['2024', '2025', '2026', '2027', '2028', 'Graduated'];
+  const YEAR_OPTIONS = ['2025', '2026', '2027', '2028', '2029', '2030', 'Graduated'];
 
   function validateStep1() {
     if (!form.name.trim()) return 'Full name is required.';
@@ -261,28 +261,28 @@ function VisitorSignupForm({ isMobile, onSwitchToLogin, navigate }) {
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <Field label="Branch / Programme">
               <select className="input" value={form.branch} onChange={set('branch')}
-                style={{ appearance: 'none', cursor: 'pointer' }}>
-                <option value="">Select branch</option>
-                {BRANCH_OPTIONS.map(b => <option key={b} value={b}>{b}</option>)}
+                style={{ appearance: 'none', cursor: 'pointer', background: 'var(--glass-bg, rgba(255,255,255,0.06))', color: 'var(--ink)', borderColor: 'var(--glass-border)' }}>
+                <option value="" style={{ background: '#1a1a2e', color: '#e0e0e0' }}>Select branch</option>
+                {BRANCH_OPTIONS.map(b => <option key={b} value={b} style={{ background: '#1a1a2e', color: '#e0e0e0' }}>{b}</option>)}
               </select>
             </Field>
             <Field label="Graduation year">
               <select className="input" value={form.year} onChange={set('year')}
-                style={{ appearance: 'none', cursor: 'pointer' }}>
-                <option value="">Select year</option>
-                {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                style={{ appearance: 'none', cursor: 'pointer', background: 'var(--glass-bg, rgba(255,255,255,0.06))', color: 'var(--ink)', borderColor: 'var(--glass-border)' }}>
+                <option value="" style={{ background: '#1a1a2e', color: '#e0e0e0' }}>Select year</option>
+                {YEAR_OPTIONS.map(y => <option key={y} value={y} style={{ background: '#1a1a2e', color: '#e0e0e0' }}>{y}</option>)}
               </select>
             </Field>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <Field label="Gender">
               <select className="input" value={form.gender} onChange={set('gender')}
-                style={{ appearance: 'none', cursor: 'pointer' }}>
-                <option value="">Prefer not to say</option>
-                <option value="M">Male</option>
-                <option value="F">Female</option>
-                <option value="NB">Non-binary</option>
-                <option value="O">Other</option>
+                style={{ appearance: 'none', cursor: 'pointer', background: 'var(--glass-bg, rgba(255,255,255,0.06))', color: 'var(--ink)', borderColor: 'var(--glass-border)' }}>
+                <option value="" style={{ background: '#1a1a2e', color: '#e0e0e0' }}>Prefer not to say</option>
+                <option value="M" style={{ background: '#1a1a2e', color: '#e0e0e0' }}>Male</option>
+                <option value="F" style={{ background: '#1a1a2e', color: '#e0e0e0' }}>Female</option>
+                <option value="NB" style={{ background: '#1a1a2e', color: '#e0e0e0' }}>Non-binary</option>
+                <option value="O" style={{ background: '#1a1a2e', color: '#e0e0e0' }}>Other</option>
               </select>
             </Field>
             <Field label="Emergency contact (optional)">
