@@ -23,6 +23,7 @@ class MeResponse(BaseModel):
     username: str
     name: str
     is_attending: bool
+    role: str = "participant"
 
 
 # ── Internal-only (used by unstop/sync, not exposed to public UI) ─────────────
@@ -39,3 +40,24 @@ class RegisterResponse(BaseModel):
     id: str
     username: str
     name: str
+
+
+class VisitorSignupRequest(BaseModel):
+    """Public self-registration for walk-in visitors."""
+    name: str = Field(min_length=1, max_length=255)
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+    phone: str | None = Field(default=None, max_length=32)
+    college: str | None = Field(default=None, max_length=512)
+    city: str | None = Field(default=None, max_length=255)
+    branch: str | None = Field(default=None, max_length=255)
+    year: str | None = Field(default=None, max_length=16)
+    gender: str | None = Field(default=None, max_length=4)
+    emergency_contact: str | None = Field(default=None, max_length=32)
+
+
+class VisitorSignupResponse(BaseModel):
+    id: str
+    username: str
+    name: str
+    access_token: str
