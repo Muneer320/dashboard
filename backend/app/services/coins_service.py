@@ -219,56 +219,53 @@ async def post_reversal(
 async def generate_sticker_code(
     supabase: AsyncClient, student_id: UUID | str
 ) -> dict[str, Any]:
+    """Thin wrapper kept for call-site compatibility — delegates to reserve_reward."""
+    return await reserve_reward(supabase, student_id=student_id, tier="BADGE_STICKER")
+
+
+async def reserve_reward(
+    supabase: AsyncClient,
+    *,
+    student_id: UUID | str,
+    tier: str,
+) -> dict[str, Any]:
     """
-    Generate a redemption code for sticker (FCFS).
-    Decrements inventory at generation time, not handover.
+    Reserve a reward tier for a student: check inventory, decrement
+    allocated count, insert a pending row. No code is generated —
+    the student redeems at the booth by showing their QR (student UUID).
 
     Race-condition note: supabase-py / PostgREST does not expose SELECT FOR
-    UPDATE. The robust approach is a Postgres RPC wrapping the read +
-    increment in one transaction. Until that RPC exists we read-then-write
-    here; the inventory is small (500) so the residual race window is
-    acceptable, but treat this as a known TODO before high-traffic launch.
+    UPDATE. Robust fix is a Postgres RPC wrapping read+write in one
+    transaction. Until then, read-then-write is acceptable at fest scale.
     """
     inventory_resp = await (
         supabase.table("reward_inventory")
         .select("*")
-        .eq("tier", "STICKER")
+        .eq("tier", tier)
         .limit(1)
         .execute()
     )
     inv = first_row(inventory_resp)
     if inv is None:
-        raise ValueError("sticker_inventory_missing")
+        raise ValueError(f"inventory_missing:{tier}")
 
     available = inv["total_stock"] - inv["allocated"] - inv["surprise_drop_reserve"]
     if available <= 0:
-        raise ValueError("sticker_out_of_stock")
-
-    code = secrets.token_urlsafe(12).upper()[:16]
-    expires_at = (
-        datetime.now(timezone.utc) + timedelta(minutes=STICKER_CODE_TTL_MINUTES)
-    ).isoformat()
+        raise ValueError(f"out_of_stock:{tier}")
 
     await (
         supabase.table("reward_inventory")
         .update({"allocated": inv["allocated"] + 1})
-        .eq("tier", "STICKER")
+        .eq("tier", tier)
         .execute()
     )
 
-    redemption = {
-        "student_id": str(student_id),
-        "tier": "STICKER",
-        "redemption_code": code,
-        "status": "pending",
-        "expires_at": expires_at,
-    }
-    resp = await supabase.table("reward_redemptions").insert(redemption).execute()
-    return {
-        "code": code,
-        "expires_at": expires_at,
-        "redemption_id": rows(resp)[0]["id"],
-    }
+    resp = await (
+        supabase.table("reward_redemptions")
+        .insert({"student_id": str(student_id), "tier": tier, "status": "pending"})
+        .execute()
+    )
+    return {"redemption_id": rows(resp)[0]["id"]}
 
 
 # ----------------------------- snapshots -----------------------------

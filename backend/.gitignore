@@ -11,3 +11,6 @@ wheels/
 
 # Miscellaneous
 scratch/*
+
+# Google service account credentials — never commit
+google_service_account.json

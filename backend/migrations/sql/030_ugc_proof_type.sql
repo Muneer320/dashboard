@@ -11,3 +11,4 @@ SET proof_type = 'screenshot'
 WHERE source_type = 'AR_FILTER' AND proof_type = 'url';
 
 NOTIFY pgrst, 'reload schema';
+

@@ -19,20 +19,10 @@ async function loadScanner() {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function uuidv4() {
-  if (typeof crypto?.randomUUID === "function") return crypto.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
-  });
-}
-
 const TIER_COLORS = {
-  STICKER:      { bg: "rgba(127,119,221,0.10)", border: "rgba(127,119,221,0.4)", badge: "#7f77dd" },
-  BADGE:        { bg: "rgba(64,212,196,0.10)",  border: "rgba(64,212,196,0.4)",  badge: "#40d4c4" },
-  NOTEPAD:      { bg: "rgba(245,176,76,0.10)",  border: "rgba(245,176,76,0.4)",  badge: "#f5b04c" },
-  MUG:          { bg: "rgba(29,158,117,0.10)",  border: "rgba(29,158,117,0.4)",  badge: "#1d9e75" },
-  TOTE_BAG_MUG: { bg: "rgba(220,100,100,0.10)", border: "rgba(220,100,100,0.4)", badge: "#dc6464" },
+  BADGE_STICKER: { bg: "rgba(127,119,221,0.10)", border: "rgba(127,119,221,0.35)", badge: "#7f77dd" },
+  NOTEBOOK_MUG:  { bg: "rgba(64,212,196,0.10)",  border: "rgba(64,212,196,0.35)",  badge: "#40d4c4" },
+  TOTE_BAG:      { bg: "rgba(245,176,76,0.10)",  border: "rgba(245,176,76,0.35)",  badge: "#f5b04c" },
 };
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
@@ -89,7 +79,14 @@ const S = {
 function QRScanner({ onScan }) {
   const divId = "redemption-qr-reader";
   const scannerRef = useRef(null);
+  const startedRef = useRef(false); // true only after scanner.start() resolves
   const [status, setStatus] = useState("LOADING");
+
+  const safeStop = (scanner) => {
+    if (!scanner || !startedRef.current) return;
+    startedRef.current = false;
+    try { scanner.stop().catch(() => {}); } catch {}
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -108,23 +105,27 @@ function QRScanner({ onScan }) {
       scannerRef.current = scanner;
       setStatus("STARTING");
 
+      const onDecode = (value) => {
+        setStatus("DECODED");
+        safeStop(scanner);
+        onScan(value);
+      };
+
       try {
         await scanner.start(
           { facingMode: { exact: "environment" } },
           { fps: 10, qrbox: { width: 220, height: 220 } },
-          (value) => { setStatus("DECODED"); scanner.stop().catch(() => {}); onScan(value); },
-          () => {},
+          onDecode, () => {},
         );
-        if (!cancelled) setStatus("RUNNING");
+        if (!cancelled) { startedRef.current = true; setStatus("RUNNING"); }
       } catch {
         try {
           await scanner.start(
             { facingMode: "environment" },
             { fps: 10, qrbox: { width: 220, height: 220 } },
-            (value) => { setStatus("DECODED"); scanner.stop().catch(() => {}); onScan(value); },
-            () => {},
+            onDecode, () => {},
           );
-          if (!cancelled) setStatus("RUNNING");
+          if (!cancelled) { startedRef.current = true; setStatus("RUNNING"); }
         } catch (e) {
           if (!cancelled) setStatus("ERROR: " + (e?.message || "Camera unavailable"));
         }
@@ -134,7 +135,7 @@ function QRScanner({ onScan }) {
     start();
     return () => {
       cancelled = true;
-      if (scannerRef.current) scannerRef.current.stop().catch(() => {});
+      safeStop(scannerRef.current);
     };
   }, [onScan]);
 
@@ -148,53 +149,49 @@ function QRScanner({ onScan }) {
   );
 }
 
-// ─── Tier Card ────────────────────────────────────────────────────────────────
-function TierCard({ tier, onGive, working }) {
-  const colors = TIER_COLORS[tier.key] || TIER_COLORS.STICKER;
-  const disabled = !tier.eligible || tier.already_redeemed || working;
-
-  let statusText, statusColor;
-  if (tier.already_redeemed) { statusText = "ALREADY REDEEMED"; statusColor = "#6b6b8a"; }
-  else if (!tier.eligible)   { statusText = `NEED ${tier.threshold} COINS`; statusColor = "#f5b04c"; }
-  else                       { statusText = "ELIGIBLE"; statusColor = "#40d4c4"; }
+// ─── Cart Item Card (pending reservation) ────────────────────────────────────
+function CartItemCard({ item, onGive, working, justGiven }) {
+  const colors = TIER_COLORS[item.tier] || TIER_COLORS.BADGE_STICKER;
 
   return (
     <div style={{
-      background: tier.eligible && !tier.already_redeemed ? colors.bg : "rgba(255,255,255,0.02)",
-      border: `1px solid ${tier.eligible && !tier.already_redeemed ? colors.border : "rgba(255,255,255,0.08)"}`,
+      background: justGiven ? "rgba(29,158,117,0.08)" : colors.bg,
+      border: `1px solid ${justGiven ? "rgba(29,158,117,0.4)" : colors.border}`,
       borderRadius: 12, padding: "16px 18px", marginBottom: 10,
-      opacity: tier.already_redeemed ? 0.55 : 1,
       display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+      opacity: justGiven ? 0.7 : 1,
+      transition: "all 0.2s",
     }}>
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
           <span style={{
             fontSize: 10, fontWeight: 700, letterSpacing: "0.14em",
             padding: "2px 8px", borderRadius: 999,
-            background: colors.badge + "22", color: colors.badge, border: `1px solid ${colors.badge}55`,
-          }}>{tier.label.toUpperCase()}</span>
-          <span style={{ fontSize: 10, color: statusColor, fontWeight: 600, letterSpacing: "0.1em" }}>
-            {statusText}
+            background: colors.badge + "22", color: colors.badge,
+            border: `1px solid ${colors.badge}55`,
+          }}>{item.label.toUpperCase()}</span>
+          <span style={{
+            fontSize: 10, fontWeight: 600, letterSpacing: "0.1em",
+            color: justGiven ? "#40d4c4" : "#f5b04c",
+          }}>
+            {justGiven ? "✓ GIVEN" : "RESERVED — PENDING HANDOUT"}
           </span>
-        </div>
-        <div style={{ fontSize: 13, color: "#a0a0c0" }}>
-          {tier.threshold.toLocaleString()} coins required
         </div>
       </div>
       <button
-        onClick={() => onGive(tier)}
-        disabled={disabled}
+        onClick={() => onGive(item)}
+        disabled={justGiven || working}
         style={{
           ...S.btnSm,
-          background: !disabled ? colors.badge : "rgba(255,255,255,0.04)",
-          borderColor: !disabled ? colors.badge : "rgba(255,255,255,0.08)",
-          color: !disabled ? "#0d0d14" : "#6b6b8a",
+          background: justGiven ? "rgba(255,255,255,0.04)" : colors.badge,
+          borderColor: justGiven ? "rgba(255,255,255,0.08)" : colors.badge,
+          color: justGiven ? "#6b6b8a" : "#0d0d14",
           fontWeight: 700, whiteSpace: "nowrap",
-          opacity: working ? 0.6 : 1,
-          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: working && !justGiven ? 0.6 : 1,
+          cursor: justGiven || working ? "not-allowed" : "pointer",
         }}
       >
-        {tier.already_redeemed ? "Done" : "Give Reward"}
+        {justGiven ? "Given ✓" : "Hand Over"}
       </button>
     </div>
   );
@@ -215,19 +212,27 @@ export default function RedemptionBooth() {
   const [scanKey, setScanKey]         = useState(0); // re-mount scanner on reset
 
   // Student data
-  const [studentData, setStudentData] = useState(null); // { student, balance, tiers }
+  const [studentData, setStudentData] = useState(null); // { student, balance, cart, claimed }
   const [lookupErr, setLookupErr]     = useState("");
   const [looking, setLooking]         = useState(false);
 
-  // Award
+  // Award — tracks which reservation_ids were just given this session
   const [working, setWorking]         = useState(false);
+  const [givenIds, setGivenIds]       = useState(new Set());
   const [awardMsg, setAwardMsg]       = useState(null); // { ok, text }
 
   // History
   const [history, setHistory]         = useState([]);
 
   const loadHistory = useCallback(async () => {
-    try { setHistory(await redemptionApi.history()); } catch {}
+    try {
+      setHistory(await redemptionApi.history());
+    } catch (err) {
+      if (err?.status === 401) {
+        token.clearAdmin();
+        setLoggedIn(false);
+      }
+    }
   }, []);
 
   useEffect(() => { if (loggedIn) loadHistory(); }, [loggedIn, loadHistory]);
@@ -256,30 +261,30 @@ export default function RedemptionBooth() {
       const data = await redemptionApi.getStudent(clean);
       setStudentData(data);
     } catch (err) {
+      if (err?.status === 401) { token.clearAdmin(); setLoggedIn(false); return; }
       setLookupErr(err.message || "Student not found");
     } finally { setLooking(false); }
   }, []);
 
   const onScan = useCallback((value) => { lookupStudent(value); }, [lookupStudent]);
 
-  // ── Give reward ──
-  const giveReward = async (tier) => {
-    if (!window.confirm(`Give ${tier.label} to ${studentData.student.name}?\n\nThis will deduct ${tier.threshold} coins.`)) return;
+  // ── Hand over reward ──
+  const giveReward = async (item) => {
+    if (!window.confirm(`Hand over ${item.label} to ${studentData.student.name}?\n\nCoins were already deducted when they locked their cart.`)) return;
     setWorking(true); setAwardMsg(null);
     try {
-      const res = await redemptionApi.award(studentData.student.id, tier.key, uuidv4());
-      setAwardMsg({ ok: true, text: `✓ ${res.tier_label} given! ${res.coins_deducted} coins deducted. New balance: ${res.new_balance}` });
-      // Refresh student data
-      const updated = await redemptionApi.getStudent(studentData.student.id);
-      setStudentData(updated);
+      const res = await redemptionApi.award(item.reservation_id);
+      setGivenIds(prev => new Set([...prev, item.reservation_id]));
+      setAwardMsg({ ok: true, text: `✓ ${res.tier_label} handed over to ${studentData.student.name}.` });
       loadHistory();
     } catch (err) {
-      setAwardMsg({ ok: false, text: err.message || "Failed to award reward" });
+      setAwardMsg({ ok: false, text: err.message || "Failed to record handout" });
     } finally { setWorking(false); }
   };
 
   const reset = () => {
     setStudentData(null); setLookupErr(""); setAwardMsg(null);
+    setGivenIds(new Set());
     setScanKey(k => k + 1); setScanMode("scan"); setManualId("");
   };
 
@@ -357,7 +362,7 @@ export default function RedemptionBooth() {
           </div>
         )}
 
-        {/* ── Step 2: Student card + tiers ── */}
+        {/* ── Step 2: Student card + cart ── */}
         {studentData && (
           <>
             {/* Student header */}
@@ -377,18 +382,51 @@ export default function RedemptionBooth() {
               </div>
             </div>
 
-            {/* Award result message */}
+            {/* Handout result message */}
             {awardMsg && (
               <div style={awardMsg.ok ? S.ok : S.err}>{awardMsg.text}</div>
             )}
 
-            {/* Tier cards */}
+            {/* Pending cart items */}
             <div style={{ ...S.card }}>
-              <span style={{ ...S.label }}>REWARD TIERS</span>
-              {studentData.tiers.map(tier => (
-                <TierCard key={tier.key} tier={tier} onGive={giveReward} working={working} />
-              ))}
+              <span style={{ ...S.label }}>RESERVED REWARDS — CART</span>
+              {studentData.cart.length === 0 ? (
+                <div style={{
+                  padding: "18px 0", textAlign: "center",
+                  fontSize: 13, color: "#6b6b8a", lineHeight: 1.6,
+                }}>
+                  No rewards in cart.<br />
+                  <span style={{ fontSize: 11 }}>Student hasn't locked any rewards yet.</span>
+                </div>
+              ) : (
+                studentData.cart.map(item => (
+                  <CartItemCard
+                    key={item.reservation_id}
+                    item={item}
+                    onGive={giveReward}
+                    working={working}
+                    justGiven={givenIds.has(item.reservation_id)}
+                  />
+                ))
+              )}
             </div>
+
+            {/* Already claimed this session / previously */}
+            {studentData.claimed.length > 0 && (
+              <div style={{ ...S.card }}>
+                <span style={{ ...S.label }}>ALREADY GIVEN</span>
+                {studentData.claimed.map((c, i) => (
+                  <div key={i} style={{
+                    display: "flex", justifyContent: "space-between",
+                    padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.06)",
+                    fontSize: 13,
+                  }}>
+                    <span style={{ color: "#6b6b8a" }}>{c.label}</span>
+                    <span style={{ color: "#40d4c4", fontSize: 11 }}>✓ given</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 

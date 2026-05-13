@@ -1,11 +1,14 @@
 """
 Redemption Booth endpoints — used by redemption_volunteer accounts on event day.
 
-Flow:
-  1. Volunteer scans student QR (UUID).
-  2. GET /redemption/student/{student_id}  → balance + tier eligibility.
-  3. Volunteer gives physical reward, clicks confirm.
-  4. POST /redemption/award                → deducts coins, records redemption.
+New flow (cart-based):
+  1. Student locks cart in the app → pending reward_redemptions rows created,
+     coins already deducted at that point.
+  2. Student shows their QR (UUID) at the booth.
+  3. GET /redemption/student/{student_id}  → student info + pending cart items.
+  4. Volunteer hands over each physical item and clicks confirm.
+  5. POST /redemption/award  → marks the specific reservation row as claimed.
+     No coin deduction here — already handled by the student at cart-lock time.
 """
 
 from __future__ import annotations
@@ -14,26 +17,18 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from supabase import AsyncClient
 
 from app.api.deps import get_current_admin
-from app.core.coins_config import TIER_THRESHOLDS
+from app.core.coins_config import TIER_LABELS
 from app.db.supabase_client import first_row, get_supabase, rows
 from app.models.admin import Admin
-from app.services.coins_service import credit_coins, write_audit
+from app.services.coins_service import write_audit
 
 router = APIRouter()
 
 _REDEMPTION_ROLES = {"redemption_volunteer", "ops_lead", "admin"}
-
-TIER_LABELS = {
-    "STICKER":      "Sticker",
-    "BADGE":        "Badge",
-    "NOTEPAD":      "Notepad",
-    "MUG":          "Mug",
-    "TOTE_BAG_MUG": "Tote Bag + Mug",
-}
 
 
 async def _get_redemption_volunteer(
@@ -55,17 +50,6 @@ async def _balance(supabase: AsyncClient, student_id: str) -> int:
     return sum(r["coins"] for r in rows(resp))
 
 
-async def _redeemed_tiers(supabase: AsyncClient, student_id: str) -> set[str]:
-    resp = await (
-        supabase.table("reward_redemptions")
-        .select("tier")
-        .eq("student_id", student_id)
-        .in_("status", ["pending", "claimed"])
-        .execute()
-    )
-    return {r["tier"] for r in rows(resp)}
-
-
 # ── GET /redemption/student/{student_id} ─────────────────────────────────────
 
 @router.get("/student/{student_id}")
@@ -85,18 +69,40 @@ async def get_student_for_redemption(
     if student is None:
         raise HTTPException(404, "Student not found")
 
-    balance   = await _balance(supabase, student_id)
-    redeemed  = await _redeemed_tiers(supabase, student_id)
+    balance = await _balance(supabase, student_id)
 
-    tiers = [
+    # Fetch only pending cart reservations — these are what the volunteer hands out
+    cart_resp = await (
+        supabase.table("reward_redemptions")
+        .select("id, tier, status")
+        .eq("student_id", student_id)
+        .eq("status", "pending")
+        .execute()
+    )
+    cart = [
         {
-            "key":              key,
-            "label":            TIER_LABELS.get(key, key),
-            "threshold":        threshold,
-            "eligible":         balance >= threshold,
-            "already_redeemed": key in redeemed,
+            "reservation_id": r["id"],
+            "tier":            r["tier"],
+            "label":           TIER_LABELS.get(r["tier"], r["tier"]),
         }
-        for key, threshold in TIER_THRESHOLDS.items()
+        for r in rows(cart_resp)
+    ]
+
+    # Also fetch already-claimed items so volunteer can see what was given
+    claimed_resp = await (
+        supabase.table("reward_redemptions")
+        .select("id, tier, claimed_at")
+        .eq("student_id", student_id)
+        .eq("status", "claimed")
+        .execute()
+    )
+    claimed = [
+        {
+            "tier":       r["tier"],
+            "label":      TIER_LABELS.get(r["tier"], r["tier"]),
+            "claimed_at": r.get("claimed_at"),
+        }
+        for r in rows(claimed_resp)
     ]
 
     return {
@@ -106,16 +112,15 @@ async def get_student_for_redemption(
             "username": student.get("username", ""),
         },
         "balance": balance,
-        "tiers":   tiers,
+        "cart":    cart,
+        "claimed": claimed,
     }
 
 
 # ── POST /redemption/award ────────────────────────────────────────────────────
 
 class AwardIn(BaseModel):
-    student_id: str
-    tier: str
-    client_uuid: str = Field(..., min_length=8)
+    reservation_id: str
 
 
 @router.post("/award")
@@ -124,52 +129,35 @@ async def award_redemption(
     admin: Admin = Depends(_get_redemption_volunteer),
     supabase: AsyncClient = Depends(get_supabase),
 ) -> dict[str, Any]:
-    tier = payload.tier
-    if tier not in TIER_THRESHOLDS:
-        raise HTTPException(400, f"Unknown tier '{tier}'")
-
-    threshold  = TIER_THRESHOLDS[tier]
-    student_id = payload.student_id
-
-    # Guard: already redeemed this tier?
-    already = await (
+    # Fetch the specific pending reservation
+    res_resp = await (
         supabase.table("reward_redemptions")
-        .select("id")
-        .eq("student_id", student_id)
-        .eq("tier", tier)
-        .in_("status", ["pending", "claimed"])
+        .select("id, student_id, tier, status")
+        .eq("id", payload.reservation_id)
         .limit(1)
         .execute()
     )
-    if first_row(already):
-        raise HTTPException(400, f"{TIER_LABELS.get(tier, tier)} already redeemed for this student")
+    reservation = first_row(res_resp)
 
-    # Guard: sufficient balance?
-    balance = await _balance(supabase, student_id)
-    if balance < threshold:
-        raise HTTPException(400, f"Insufficient balance ({balance} < {threshold})")
+    if reservation is None:
+        raise HTTPException(404, "Reservation not found")
+    if reservation["status"] == "claimed":
+        raise HTTPException(400, f"{TIER_LABELS.get(reservation['tier'], reservation['tier'])} already handed out to this student")
+    if reservation["status"] != "pending":
+        raise HTTPException(400, f"Reservation is in status '{reservation['status']}' — cannot award")
 
-    # Record the redemption
+    tier = reservation["tier"]
+
+    # Mark as claimed
     await (
         supabase.table("reward_redemptions")
-        .insert({
-            "student_id":           student_id,
-            "tier":                 tier,
+        .update({
             "status":               "claimed",
             "claimed_at":           datetime.now(timezone.utc).isoformat(),
             "claimed_by_volunteer": admin.uid,
         })
+        .eq("id", payload.reservation_id)
         .execute()
-    )
-
-    # Deduct coins via a negative ledger entry
-    await credit_coins(
-        supabase,
-        student_id=student_id,
-        source_type="REDEMPTION",
-        coins=-threshold,
-        verified_by=admin.uid,
-        metadata={"tier": tier, "volunteer_uid": admin.uid},
     )
 
     await write_audit(
@@ -178,16 +166,14 @@ async def award_redemption(
         actor_role=admin.role.value,
         action="redemption_awarded",
         entity_type="reward_redemptions",
-        entity_id=student_id,
-        after_state={"tier": tier, "coins_deducted": threshold},
+        entity_id=payload.reservation_id,
+        after_state={"tier": tier, "student_id": reservation["student_id"]},
     )
 
     return {
-        "success":        True,
-        "tier":           tier,
-        "tier_label":     TIER_LABELS.get(tier, tier),
-        "coins_deducted": threshold,
-        "new_balance":    balance - threshold,
+        "success":   True,
+        "tier":      tier,
+        "tier_label": TIER_LABELS.get(tier, tier),
     }
 
 

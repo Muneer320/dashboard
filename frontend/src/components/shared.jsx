@@ -179,7 +179,7 @@ export function NavBar({ active, variant = "app" }) {
     "Schedule",
     "Explore",
     "Leaderboard",
-    "My Coins",
+    ...(user?.is_attending ? ["My Coins"] : []),
     "Mirage",
     "Announcements",
   ];
@@ -383,9 +383,8 @@ export function NavBar({ active, variant = "app" }) {
                 )}
               </div>
 
-              {/* Coin balance chip — between bell and profile.
-                  Hidden until first load to avoid a flash of "0". */}
-              {coinBalance != null && (
+              {/* Coin balance chip — only shown to attending users */}
+              {coinBalance != null && user?.is_attending && (
                 <button
                   onClick={() => navigate("/coins/rewards")}
                   aria-label={`Coin balance ${coinBalance.toLocaleString()}`}

@@ -320,6 +320,8 @@ export const coins = {
   dispute:          (ledger_entry_id, description) =>
     post('/coins/dispute', { ledger_entry_id, description }),
   redeemSticker:    () => post('/coins/redeem-sticker', {}),
+  reserveReward:    (tier) => post('/coins/reserve-reward', { tier }),
+  myReservations:   () => get('/coins/my-reservations'),
   activeDrops:      () => get('/coins/surprise-drops/active'),
   claimDrop:        (drop_id) => post('/coins/surprise-drops/claim', { drop_id }),
 };
@@ -353,8 +355,8 @@ export const ugc = {
 
 export const redemptionApi = {
   getStudent:  (student_id) => get(`/redemption/student/${student_id}`, { adminAuth: true }),
-  award:       (student_id, tier, client_uuid) =>
-    post('/redemption/award', { student_id, tier, client_uuid }, { adminAuth: true }),
+  award:       (reservation_id) =>
+    post('/redemption/award', { reservation_id }, { adminAuth: true }),
   history:     () => get('/redemption/history', { adminAuth: true }),
 };
 

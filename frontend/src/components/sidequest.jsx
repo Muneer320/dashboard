@@ -21,55 +21,60 @@ import ascentCoinImg from "../assets/ascent-coin.png";
 // Source labels & coin/tier reference
 // ─────────────────────────────────────────────────────────────
 const SOURCE_LABEL = {
-  RSVP_POST:              "RSVP LinkedIn",
-  ROUND1_PROJECT:         "Round 1 Project",
-  AR_FILTER:              "AR Filter Story",
-  SCAVENGER_HUNT:         "Scavenger Hunt",
-  RAZORPAY_PITCH:         "Razorpay Pitch",
-  FUTURE_VISION:          "Future Vision",
-  CREATOR_COLLAB:         "Creator Collab",
-  MVP_MUSEUM:             "MVP Museum",
-  JOBS_WALL:              "Jobs Wall",
-  ESPORTS_1ST:            "Esports — 1st",
-  ESPORTS_2ND:            "Esports — 2nd",
-  ESPORTS_3RD:            "Esports — 3rd",
-  ECO_EXCHANGE:           "Eco Exchange",
-  ECO_DESIGN_WIN:         "Eco Design Win",
-  EVENT_WIN:              "Event Win",
-  ENGAGEMENT:             "Engagement",
-  POWER_HOUR_BONUS:       "Power Hour Bonus",
-  SURPRISE_DROP:          "Surprise Drop",
-  REVERSAL:               "Reversal",
-  RESTORE:                "Restore",
-  MANUAL_ADJUSTMENT:      "Manual Adjustment",
-  REDEMPTION:             "Redemption",
-  MEME_CHALLENGE:         "Meme Challenge",
-  SIGNATURE_PHOTO_BOOTH:  "Signature & Photo Booth",
+  PROPASS:           "ProPass",
+  SPOT_LOCK:         "Spot Lock",
+  GRID_BLAST:        "Grid Blast",
+  BINGO_RUSH:        "Bingo Rush",
+  LIVE_DROP:         "LiveDrop",
+  VISION_BOARD:      "Vision Board",
+  FINTECH_FORWARD:   "Fintech Forward",
+  HALL_OF_MVPS:      "Hall of MVPs",
+  POWER_HOUR_BONUS:  "Power Hour Bonus",
+  SURPRISE_DROP:     "Surprise Drop",
+  REVERSAL:          "Reversal",
+  RESTORE:           "Restore",
+  MANUAL_ADJUSTMENT: "Manual Adjustment",
+  REDEMPTION:        "Redemption",
 };
 
 const COIN_VALUES = {
-  RSVP_POST: 300, ROUND1_PROJECT: 500, FUTURE_VISION: 100,
-  MVP_MUSEUM: 100, JOBS_WALL: 100, CREATOR_COLLAB: 150,
-  AR_FILTER: 200,
-  MEME_CHALLENGE: 0,           // TBD
-  SIGNATURE_PHOTO_BOOTH: 0,    // TBD
+  PROPASS:         200,
+  SPOT_LOCK:       200,
+  GRID_BLAST:       50,
+  BINGO_RUSH:       80,
+  LIVE_DROP:       200,
+  VISION_BOARD:    200,
+  FINTECH_FORWARD: 200,
+  HALL_OF_MVPS:     50,
+};
+
+const SOURCE_DESC = {
+  PROPASS:         "Register for ASCENT'26 and complete your participant onboarding.",
+  SPOT_LOCK:       "Upload your RSVP/registration story or post to confirm your attendance.",
+  GRID_BLAST:      "Post a 4-tile Instagram story capturing ASCENT aesthetics, tag @ascent.sst and use #ASCENT26.",
+  BINGO_RUSH:      "Complete 6 out of 9 activities on the bingo card and post it on your Instagram story with the required tags.",
+  LIVE_DROP:       "Post about any ongoing ASCENT event on LinkedIn during D-Day with 'ASCENT', 'Scaler School of Technology' and #ASCENT26.",
+  VISION_BOARD:    "Write your vision on the ASCENT Vision Wall, click a picture, and post it on LinkedIn with the required tags.",
+  FINTECH_FORWARD: "Pick a Razorpay problem statement, pitch your solution during the live session, and get verified directly by the volunteer team.",
+  HALL_OF_MVPS:    "Explore startup products/prototypes at the MVP Museum and post your favorite product or founder story on LinkedIn to earn cents.",
 };
 
 // 5-level tier system
-const TIER_THRESHOLDS  = { STICKER: 500, BADGE: 700, NOTEPAD: 1000, MUG: 1200, TOTE_BAG_MUG: 1500 };
-const TIER_RANK_CUTOFFS = { BADGE: 100, NOTEPAD: 75, MUG: 30, TOTE_BAG_MUG: 10 };
+const TIER_THRESHOLDS  = { BADGE_STICKER: 200, NOTEBOOK_MUG: 400, TOTE_BAG: 500 };
+const TIER_RANK_CUTOFFS = { NOTEBOOK_MUG: 100, TOTE_BAG: 10 };
 const TIER_LABEL = {
-  STICKER: "Sticker", BADGE: "Badge", NOTEPAD: "Notepad",
-  MUG: "Mug", TOTE_BAG_MUG: "Tote Bag + Mug",
+  BADGE_STICKER: "Badge + Stickers",
+  NOTEBOOK_MUG:  "Notebook + Mug",
+  TOTE_BAG:      "Tote Bag",
 };
 
 // Screenshot-based sources (file upload, not URL)
-const SCREENSHOT_SOURCES = new Set(["AR_FILTER"]);
+const SCREENSHOT_SOURCES = new Set(["GRID_BLAST", "BINGO_RUSH"]);
 
 // Sources shown in the student UGC submit grid
 const SUBMIT_SOURCES = [
-  "RSVP_POST", "AR_FILTER", "MEME_CHALLENGE", "SIGNATURE_PHOTO_BOOTH",
-  "ROUND1_PROJECT", "FUTURE_VISION", "MVP_MUSEUM", "JOBS_WALL", "CREATOR_COLLAB",
+  "PROPASS", "SPOT_LOCK", "GRID_BLAST", "BINGO_RUSH",
+  "LIVE_DROP", "VISION_BOARD", "FINTECH_FORWARD", "HALL_OF_MVPS",
 ];
 
 // ─────────────────────────────────────────────────────────────
@@ -906,7 +911,14 @@ function DisputeModal({ onCancel, text, setText, onSubmit }) {
 // Submission state helpers — render LOCK / REJECTED / NEEDS-REVIEW
 // pills on the source tiles and a contextual banner above the form.
 // ─────────────────────────────────────────────────────────────
-function tileStateFor(latest, eligible) {
+function tileStateFor(latest, eligible, ineligible = false) {
+  if (ineligible) {
+    return { kind: "ineligible", label: "INELIGIBLE", pillTone: "var(--ink-mute)",
+      borderColor: "rgba(255,80,80,0.25)", bg: "rgba(255,80,80,0.04)",
+      textColor: "var(--ink-mute)", opacity: 0.55,
+      subtext: "3 rejections reached — no further attempts allowed.",
+      subtextColor: "var(--red, #e05555)" };
+  }
   // No prior submission for this source.
   if (!latest) {
     return eligible
@@ -936,7 +948,7 @@ function tileStateFor(latest, eligible) {
         borderColor: "rgba(232,185,116,0.45)", bg: "rgba(232,185,116,0.06)",
         textColor: "var(--ink)", opacity: 1,
         subtext: latest.rejection_reason
-          ? `Reason: ${latest.rejection_reason}`
+          ? `Admin: ${latest.rejection_reason}`
           : "Tap to re-submit.",
         subtextColor: "var(--amber)" };
     case "needs_review":
@@ -979,7 +991,19 @@ function TileStatusPill({ state }) {
   );
 }
 
-function SubmissionStateBanner({ source, latest, eligible }) {
+function SubmissionStateBanner({ source, latest, eligible, ineligible }) {
+  if (ineligible) {
+    return (
+      <div style={{
+        marginTop: 14, padding: "10px 12px", borderRadius: "var(--r-md)",
+        background: "rgba(255,80,80,0.06)", border: "1px solid rgba(255,80,80,0.3)",
+        color: "#e05555", fontSize: 12.5,
+      }}>
+        <strong style={{ color: "var(--ink)" }}>Ineligible.</strong>{" "}
+        You've reached the 3-rejection limit for this source. No further submissions are allowed.
+      </div>
+    );
+  }
   if (!latest) {
     if (!eligible) {
       return (
@@ -988,11 +1012,7 @@ function SubmissionStateBanner({ source, latest, eligible }) {
           background: "rgba(232,185,116,0.08)", border: "1px solid rgba(232,185,116,0.4)",
           color: "var(--amber)", fontSize: 12.5,
         }}>
-          {source === "ROUND1_PROJECT"
-            ? "Register for a build event first."
-            : (source === "MVP_MUSEUM" || source === "JOBS_WALL")
-            ? "MVP + Jobs Wall shared cap reached."
-            : "Submission window is closed for this source."}
+          {"Submission window is closed for this source."}
         </div>
       );
     }
@@ -1030,12 +1050,16 @@ function SubmissionStateBanner({ source, latest, eligible }) {
     );
   }
   if (latest.status === "rejected") {
+    const byAdmin = !!latest.rejection_reason;
     return wrap(
       { bg: "rgba(232,185,116,0.10)", border: "rgba(232,185,116,0.4)", text: "var(--amber)" },
       <>
-        <strong style={{ color: "var(--ink)" }}>Rejected by admin.</strong>{" "}
-        {latest.rejection_reason ? `Reason: ${latest.rejection_reason}.` : ""}{" "}
-        Fix the issue and submit a new URL below.
+        <strong style={{ color: "var(--ink)" }}>
+          {byAdmin ? "Rejected by admin." : "Auto-check failed."}
+        </strong>{" "}
+        {byAdmin
+          ? `Reason: ${latest.rejection_reason}. Fix the issue and submit a new URL below.`
+          : "The URL didn't pass validation — make sure it's a direct post link (not a profile or feed page) and includes #ASCENT26."}
       </>
     );
   }
@@ -1059,10 +1083,9 @@ export function UGCSubmitPage() {
   const [pending, setPending] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState("RSVP_POST");
+  const [selected, setSelected] = useState("PROPASS");
   const [url, setUrl] = useState("");
   const [screenshotFile, setScreenshotFile] = useState(null);
-  const [partner, setPartner] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
 
@@ -1079,24 +1102,26 @@ export function UGCSubmitPage() {
   }, []);
   useEffect(() => { reload(); }, [reload]);
 
-  const isCollab = selected === "CREATOR_COLLAB";
   const isScreenshot = SCREENSHOT_SOURCES.has(selected);
   const eligibilityKey = {
-    RSVP_POST: "rsvp", ROUND1_PROJECT: "round1_project",
-    FUTURE_VISION: "future_vision", MVP_MUSEUM: "mvp_museum",
-    JOBS_WALL: "jobs_wall", CREATOR_COLLAB: "creator_collab",
-    AR_FILTER: "ar_filter",
-    MEME_CHALLENGE: "meme_challenge",
-    SIGNATURE_PHOTO_BOOTH: "signature_photo_booth",
+    PROPASS:         "propass",
+    SPOT_LOCK:       "spot_lock",
+    GRID_BLAST:      "grid_blast",
+    BINGO_RUSH:      "bingo_rush",
+    LIVE_DROP:       "live_drop",
+    VISION_BOARD:    "vision_board",
+    FINTECH_FORWARD: "fintech_forward",
+    HALL_OF_MVPS:    "hall_of_mvps",
   }[selected];
   const isEligible = eligibility?.[eligibilityKey];
+  const isIneligible = eligibility?.ineligible_sources?.includes(eligibilityKey) ?? false;
   const latestForSelected = eligibility?.latest_submissions?.[selected];
   // A source is "locked" while a submission is in review or already verified.
   // Rejected and needs_review (re-verification needed) are treated as open
   // so the user can re-submit a fresh URL.
   const lockedStatuses = new Set(["submitted", "auto_checked", "admin_queued", "pending_manual", "verified"]);
   const isLocked = !!latestForSelected && lockedStatuses.has(latestForSelected.status);
-  const canSubmit = isEligible && !isLocked;
+  const canSubmit = isEligible && !isLocked && !isIneligible;
 
   const submit = async () => {
     if (isScreenshot) {
@@ -1111,9 +1136,6 @@ export function UGCSubmitPage() {
         setResult({ ok: false, message: "That doesn't look like a URL — paste a valid link starting with https://" }); return;
       }
     }
-    if (isCollab && !partner.trim()) {
-      setResult({ ok: false, message: "Partner user ID required for Creator Collab." }); return;
-    }
     setSubmitting(true);
     try {
       let submitUrl = url.trim();
@@ -1126,7 +1148,6 @@ export function UGCSubmitPage() {
       }
       const res = await ugcApi.submit({
         source_type: selected, url: submitUrl, proof_type: proofType,
-        participant_2_id: isCollab ? partner.trim() : undefined,
       });
       const reason = res.auto_check_result?.reason;
       if (res.status === "rejected") {
@@ -1145,7 +1166,7 @@ export function UGCSubmitPage() {
             : "Auto-check passed! Moving to Admin Queue",
           flags: res.auto_check_result?.flags || [],
         });
-        setUrl(""); setPartner(""); setScreenshotFile(null);
+        setUrl(""); setScreenshotFile(null);
       }
       reload();
     } catch (e) {
@@ -1193,17 +1214,20 @@ export function UGCSubmitPage() {
             }}>
               {SUBMIT_SOURCES.map((src) => {
                 const key = {
-                  RSVP_POST: "rsvp", ROUND1_PROJECT: "round1_project",
-                  FUTURE_VISION: "future_vision", MVP_MUSEUM: "mvp_museum",
-                  JOBS_WALL: "jobs_wall", CREATOR_COLLAB: "creator_collab",
-                  AR_FILTER: "ar_filter",
-                  MEME_CHALLENGE: "meme_challenge",
-                  SIGNATURE_PHOTO_BOOTH: "signature_photo_booth",
+                  PROPASS:         "propass",
+                  SPOT_LOCK:       "spot_lock",
+                  GRID_BLAST:      "grid_blast",
+                  BINGO_RUSH:      "bingo_rush",
+                  LIVE_DROP:       "live_drop",
+                  VISION_BOARD:    "vision_board",
+                  FINTECH_FORWARD: "fintech_forward",
+                  HALL_OF_MVPS:    "hall_of_mvps",
                 }[src];
                 const eligibleHere = eligibility[key];
+                const ineligibleHere = eligibility?.ineligible_sources?.includes(key) ?? false;
                 const active = selected === src;
                 const latest = eligibility.latest_submissions?.[src];
-                const tileState = tileStateFor(latest, eligibleHere);
+                const tileState = tileStateFor(latest, eligibleHere, ineligibleHere);
                 return (
                   <button key={src} onClick={() => { setSelected(src); setResult(null); }}
                     style={{
@@ -1219,13 +1243,22 @@ export function UGCSubmitPage() {
                       color: tileState.textColor,
                       cursor: "pointer", opacity: tileState.opacity,
                     }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 12.5 }}>{SOURCE_LABEL[src]}</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>{SOURCE_LABEL[src]}</span>
                       <TileStatusPill state={tileState} />
                     </div>
-                    <div className="mono" style={{ fontSize: 10, color: "var(--ink-mute)", marginTop: 4 }}>
-                      +{COIN_VALUES[src] || 0} COINS
+                    <div className="mono" style={{ fontSize: 10, color: "var(--teal)", marginTop: 4, letterSpacing: "0.1em" }}>
+                      +{COIN_VALUES[src] || 0} CENTS
                     </div>
+                    {SOURCE_DESC[src] && tileState.kind !== "ineligible" && tileState.kind !== "verified" && (
+                      <div style={{
+                        fontSize: 11, color: "var(--ink-dim)",
+                        marginTop: 7, lineHeight: 1.5,
+                        opacity: tileState.kind === "review" ? 0.55 : 0.85,
+                      }}>
+                        {SOURCE_DESC[src]}
+                      </div>
+                    )}
                     {tileState.subtext && (
                       <div style={{
                         fontSize: 10.5,
@@ -1247,12 +1280,13 @@ export function UGCSubmitPage() {
               source={selected}
               latest={latestForSelected}
               eligible={isEligible}
+              ineligible={isIneligible}
             />
 
             {/* URL or screenshot upload depending on selected source */}
             {isScreenshot ? (
               <div style={{ marginTop: 22 }}>
-                <label className="label">STORY SCREENSHOT</label>
+                <label className="label">INSTAGRAM STORY SCREENSHOT</label>
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -1262,8 +1296,8 @@ export function UGCSubmitPage() {
                   style={{ padding: "10px 12px", cursor: canSubmit ? "pointer" : "not-allowed" }}
                 />
                 <p style={{ fontSize: 11.5, color: "var(--ink-mute)", marginTop: 8 }}>
-                  Upload your Instagram AR Filter story screenshot (JPEG/PNG/WebP, max 10 MB).
-                  Account must be public and must include #ASCENT26.
+                  Upload your Instagram story screenshot (JPEG/PNG/WebP, max 10 MB).
+                  Account must be public and must include the required tags and #ASCENT26.
                 </p>
               </div>
             ) : (
@@ -1272,17 +1306,6 @@ export function UGCSubmitPage() {
                 <input
                   className="input" placeholder="https://linkedin.com/posts/…"
                   value={url} onChange={(e) => setUrl(e.target.value)}
-                  disabled={!canSubmit}
-                />
-              </div>
-            )}
-
-            {isCollab && (
-              <div style={{ marginTop: 14 }}>
-                <label className="label">PARTNER USER ID</label>
-                <input
-                  className="input" placeholder="UUID of your collab partner"
-                  value={partner} onChange={(e) => setPartner(e.target.value)}
                   disabled={!canSubmit}
                 />
               </div>
@@ -1336,15 +1359,15 @@ export function UGCSubmitPage() {
                 <>
                   <ValidationRule
                     title="Instagram story screenshot"
-                    body="Upload a screenshot of your AR Filter story post. Stories cannot be reverified after approval."
+                    body="Upload a screenshot of your story post. Stories cannot be reverified after approval."
                   />
                   <ValidationRule
                     title="Account must be public"
                     body="Private or restricted accounts will be rejected."
                   />
                   <ValidationRule
-                    title="Include #ASCENT26"
-                    body="The hashtag must be visible in the story screenshot."
+                    title="Required tags and #ASCENT26"
+                    body="Tags (@ascent.sst) and hashtag (#ASCENT26) must be visible in the screenshot."
                   />
                 </>
               ) : (
@@ -1550,19 +1573,19 @@ export function LeaderboardPage() {
             <div className="glass" style={{ padding: 22 }}>
               <div className="eyebrow">§ EVENT HORIZONS</div>
               <HorizonItem
-                state="passed" tier="MUG"
+                state="passed" tier="NOTEBOOK_MUG"
                 title="Day 1 Midnight"
-                subtitle="Mug snapshot"
+                subtitle="Notebook + Mug snapshot"
               />
               <HorizonItem
-                state="incoming" tier="TSHIRT"
+                state="incoming" tier="TOTE_BAG"
                 title="Day 2 T-3h"
-                subtitle="Snapshot at Rank 50 cutoff"
+                subtitle="Tote Bag snapshot (top 10)"
               />
               <HorizonItem
-                state="pending" tier="PREMIUM_KIT"
+                state="pending" tier="TOTE_BAG"
                 title="Final Close"
-                subtitle="Premium Kit allocation"
+                subtitle="Tote Bag final allocation"
               />
             </div>
 
@@ -1570,21 +1593,17 @@ export function LeaderboardPage() {
             <div className="glass" style={{ padding: 22 }}>
               <div className="eyebrow">§ ACQUISITION STATUS</div>
               <AcquisitionRow
-                tier="STICKER" labelLevel="L1" sub="Base tier clearance"
+                tier="BADGE_STICKER" labelLevel="L1" sub="Badge + Stickers — FCFS"
                 balance={balance?.balance ?? 0} rank={balance?.rank}
               />
               <AcquisitionRow
-                tier="MUG" labelLevel="L2" sub="Awarded Digital Badge"
+                tier="NOTEBOOK_MUG" labelLevel="L2" sub="Notebook + Mug — top 100"
                 balance={balance?.balance ?? 0} rank={balance?.rank}
               />
               <AcquisitionRow
-                tier="TSHIRT" labelLevel="L3" sub="Current Goal"
+                tier="TOTE_BAG" labelLevel="L3" sub="Tote Bag — top 10"
                 balance={balance?.balance ?? 0} rank={balance?.rank}
                 showSafety
-              />
-              <AcquisitionRow
-                tier="PREMIUM_KIT" labelLevel="L4" sub="Final close target"
-                balance={balance?.balance ?? 0} rank={balance?.rank}
               />
 
               <div style={{ marginTop: 14 }}>
@@ -1640,7 +1659,7 @@ function AcquisitionRow({ tier, labelLevel, sub, balance, rank, showSafety }) {
   const meetsRank = cutoff == null ? meetsCoins : (rank != null && rank <= cutoff);
 
   let badge, badgeBg, badgeColor;
-  if (tier === "STICKER" && meetsCoins) {
+  if (tier === "BADGE_STICKER" && meetsCoins) {
     badge = "CLAIMED"; badgeBg = "rgba(29,158,117,0.16)"; badgeColor = "var(--teal)";
   } else if (!meetsCoins) {
     badge = "LOCKED"; badgeBg = "rgba(255,255,255,0.04)"; badgeColor = "var(--ink-mute)";
@@ -1661,7 +1680,7 @@ function AcquisitionRow({ tier, labelLevel, sub, balance, rank, showSafety }) {
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 13, color: "var(--ink-dim)", flexShrink: 0,
       }}>
-        {tier === "STICKER" ? "✦" : tier === "MUG" ? "☕" : tier === "TSHIRT" ? "👕" : "🎁"}
+        {tier === "BADGE_STICKER" ? "🎖️" : tier === "NOTEBOOK_MUG" ? "📓" : tier === "TOTE_BAG" ? "🛍️" : "🎁"}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1749,20 +1768,13 @@ function LeaderboardRow({ rank, row, isMe }) {
 // Reward journey — road of checkpoints from 0 to top tier.
 // ─────────────────────────────────────────────────────────────
 const TIER_ICONS = {
-  STICKER: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
-      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 11V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6" />
-      <path d="M21 11l-10 10v-6a4 4 0 0 1 4-4h6z" />
-    </svg>
-  ),
-  BADGE: (
+  BADGE_STICKER: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
       strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="8" r="6"/><path d="M8.21 13.89L7 23l5-3 5 3-1.21-9.12"/>
     </svg>
   ),
-  NOTEPAD: (
+  NOTEBOOK_MUG: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
       strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -1770,19 +1782,10 @@ const TIER_ICONS = {
       <line x1="16" y1="17" x2="8" y2="17"/>
     </svg>
   ),
-  MUG: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
-      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 8h13v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V8z" />
-      <path d="M16 11h2a3 3 0 0 1 0 6h-2" />
-      <path d="M7 4v2M11 4v2" />
-    </svg>
-  ),
-  TOTE_BAG_MUG: (
+  TOTE_BAG: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
       strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="8" width="18" height="13" rx="1" />
-      <path d="M3 12h18M12 8v13" />
       <path d="M12 8c-1.5-3-5-3-5-1s3 1 5 1zM12 8c1.5-3 5-3 5-1s-3 1-5 1z" />
     </svg>
   ),
@@ -1791,11 +1794,9 @@ const TIER_ICONS = {
 function RewardJourney({ balance }) {
   const isMobile = useMobile();
   const tiers = [
-    { key: "STICKER",      label: "Sticker",       threshold: TIER_THRESHOLDS.STICKER },
-    { key: "BADGE",        label: "Badge",         threshold: TIER_THRESHOLDS.BADGE },
-    { key: "NOTEPAD",      label: "Notepad",       threshold: TIER_THRESHOLDS.NOTEPAD },
-    { key: "MUG",          label: "Mug",           threshold: TIER_THRESHOLDS.MUG },
-    { key: "TOTE_BAG_MUG", label: "Tote Bag + Mug",threshold: TIER_THRESHOLDS.TOTE_BAG_MUG },
+    { key: "BADGE_STICKER", label: "Badge + Stickers", threshold: TIER_THRESHOLDS.BADGE_STICKER },
+    { key: "NOTEBOOK_MUG",  label: "Notebook + Mug",   threshold: TIER_THRESHOLDS.NOTEBOOK_MUG },
+    { key: "TOTE_BAG",      label: "Tote Bag",          threshold: TIER_THRESHOLDS.TOTE_BAG },
   ];
   const max = tiers[tiers.length - 1].threshold;
   const pct = Math.max(0, Math.min(100, (balance / max) * 100));
@@ -2061,100 +2062,407 @@ function CheckpointDot({ reached, isNext }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// RewardsPage  →  /coins/rewards   (Inventory)
+// RewardsPage  →  /coins/rewards
+// Cart → Confirm modal → Lock (reserve-reward API)
 // ─────────────────────────────────────────────────────────────
+
+const REWARD_META = [
+  { key: "BADGE_STICKER", level: 1, label: "Badge + Stickers", emoji: "🎖️",
+    color: "#7f77dd", tag: "FCFS",    tagColor: "var(--violet)" },
+  { key: "NOTEBOOK_MUG",  level: 2, label: "Notebook + Mug",   emoji: "📓",
+    color: "#40d4c4", tag: "TOP 100", tagColor: "var(--teal)"   },
+  { key: "TOTE_BAG",      level: 3, label: "Tote Bag",          emoji: "🛍️",
+    color: "#f5b04c", tag: "TOP 10",  tagColor: "var(--amber)"  },
+];
+
+function RewardCard({ meta, balance, rank, inCart, reserved, onAdd, onRemove }) {
+  const threshold  = TIER_THRESHOLDS[meta.key];
+  const cutoff     = TIER_RANK_CUTOFFS[meta.key];
+  const meetsCoins = balance >= threshold;
+  const meetsRank  = cutoff == null || (rank != null && rank <= cutoff);
+
+  let statusLabel, statusColor;
+  if (reserved)        { statusLabel = "RESERVED";              statusColor = "var(--teal)"; }
+  else if (!meetsCoins){ statusLabel = `NEED ${threshold} COINS`; statusColor = "var(--ink-mute)"; }
+  else if (!meetsRank) { statusLabel = `NEED TOP ${cutoff}`;    statusColor = "var(--amber)"; }
+  else if (inCart)     { statusLabel = "IN CART";               statusColor = "var(--violet)"; }
+  else                 { statusLabel = "ELIGIBLE";               statusColor = "var(--teal)"; }
+
+  return (
+    <div className="glass" style={{
+      padding: 22, borderRadius: 16,
+      borderTop: `3px solid ${meta.color}`,
+      opacity: !meetsCoins ? 0.7 : 1,
+      transition: "box-shadow 0.2s",
+      boxShadow: inCart ? `0 0 0 2px ${meta.color}66` : reserved ? "0 0 0 2px var(--teal)66" : "none",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 26 }}>{meta.emoji}</span>
+          <div>
+            <div className="eyebrow" style={{ fontSize: 9 }}>§ LEVEL {meta.level}</div>
+            <div style={{ fontFamily: "var(--f-display)", fontSize: 17, color: "var(--ink)", marginTop: 2 }}>
+              {meta.label}
+            </div>
+          </div>
+        </div>
+        <span style={{
+          fontSize: 9, fontWeight: 700, letterSpacing: "0.12em",
+          padding: "3px 8px", borderRadius: 999,
+          background: `${meta.tagColor}22`, color: meta.tagColor,
+          border: `1px solid ${meta.tagColor}55`, whiteSpace: "nowrap",
+        }}>{meta.tag}</span>
+      </div>
+
+      {/* Cost + status */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ fontFamily: "var(--f-mono)", fontSize: 22, fontWeight: 700, color: meta.color }}>
+          {threshold.toLocaleString()}
+          <span style={{ fontSize: 11, color: "var(--ink-mute)", marginLeft: 4 }}>COINS</span>
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: statusColor }}>
+          {statusLabel}
+        </span>
+      </div>
+
+      {/* Reserved: show QR prompt */}
+      {reserved && (
+        <div style={{
+          padding: "12px 14px", borderRadius: "var(--r-md)",
+          background: "rgba(64,212,196,0.07)", border: "1px solid rgba(64,212,196,0.25)",
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <span style={{ fontSize: 20 }}>📲</span>
+          <div style={{ fontSize: 12, color: "var(--ink-mute)", lineHeight: 1.5 }}>
+            Reserved. Show your <strong style={{ color: "var(--teal)" }}>My QR</strong> at
+            the redemption booth to collect this reward.
+          </div>
+        </div>
+      )}
+
+      {/* Progress bar if not eligible on coins */}
+      {!reserved && !meetsCoins && (
+        <ProgressTo current={balance} target={threshold} />
+      )}
+
+      {/* Cart button */}
+      {!reserved && meetsCoins && (
+        <button
+          onClick={() => inCart ? onRemove(meta.key) : onAdd(meta.key)}
+          style={{
+            marginTop: 14, width: "100%",
+            padding: "10px", borderRadius: 8, border: "none", cursor: "pointer",
+            fontFamily: "var(--f-display)", fontSize: 13, fontWeight: 700,
+            letterSpacing: "0.06em",
+            background: inCart
+              ? `${meta.color}22`
+              : `linear-gradient(135deg, ${meta.color}dd, ${meta.color}99)`,
+            color: inCart ? meta.color : "#0d0d14",
+            transition: "all 0.15s",
+          }}
+        >
+          {inCart ? "✕  Remove from Cart" : "+ Add to Cart"}
+        </button>
+      )}
+
+      {/* Rank gap note */}
+      {!reserved && meetsCoins && !meetsRank && cutoff && (
+        <div style={{
+          marginTop: 12, fontSize: 11, color: "var(--amber)",
+          padding: "8px 12px", borderRadius: 8, background: "rgba(245,176,76,0.07)",
+          border: "1px solid rgba(245,176,76,0.2)",
+        }}>
+          You need to be in the top {cutoff} by leaderboard snapshot.
+          Currently rank {rank ?? "—"}.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CartPanel({ cart, balance, onRemove, onCheckout, isMobile }) {
+  if (cart.size === 0) return null;
+
+  const items   = REWARD_META.filter(m => cart.has(m.key));
+  const total   = items.reduce((s, m) => s + TIER_THRESHOLDS[m.key], 0);
+  const remaining = balance - total;
+
+  return (
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0,
+      zIndex: 50,
+      background: "rgba(10,10,18,0.92)",
+      backdropFilter: "blur(18px)",
+      borderTop: "1px solid rgba(127,119,221,0.3)",
+      padding: isMobile ? "14px 16px" : "16px 32px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 16,
+      flexWrap: "wrap",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", flex: 1 }}>
+        <span style={{ fontSize: 11, color: "var(--ink-mute)", letterSpacing: "0.12em" }}>CART</span>
+        {items.map(m => (
+          <span key={m.key} style={{
+            fontSize: 12, background: "rgba(127,119,221,0.12)",
+            border: "1px solid rgba(127,119,221,0.3)",
+            color: "var(--ink)", padding: "4px 10px", borderRadius: 999,
+            display: "flex", alignItems: "center", gap: 6,
+          }}>
+            {m.emoji} {m.label}
+            <span style={{
+              cursor: "pointer", color: "var(--ink-mute)", fontSize: 10, marginLeft: 2,
+            }} onClick={() => onRemove(m.key)}>✕</span>
+          </span>
+        ))}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--violet)" }}>
+            −{total.toLocaleString()} coins
+          </div>
+          <div style={{ fontSize: 10, color: remaining < 0 ? "#e05252" : "var(--ink-mute)" }}>
+            {remaining >= 0 ? `${remaining.toLocaleString()} remaining` : "Insufficient balance"}
+          </div>
+        </div>
+        <button
+          onClick={onCheckout}
+          disabled={remaining < 0}
+          style={{
+            padding: "11px 22px", borderRadius: 8, border: "none",
+            background: remaining < 0 ? "rgba(255,255,255,0.06)" : "linear-gradient(135deg,#7f77dd,#5f58c0)",
+            color: remaining < 0 ? "var(--ink-mute)" : "#fff",
+            fontFamily: "var(--f-display)", fontWeight: 700, fontSize: 13,
+            letterSpacing: "0.08em", cursor: remaining < 0 ? "not-allowed" : "pointer",
+          }}
+        >
+          Lock Rewards →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConfirmModal({ cart, balance, onCancel, onConfirm, locking }) {
+  const items     = REWARD_META.filter(m => cart.has(m.key));
+  const total     = items.reduce((s, m) => s + TIER_THRESHOLDS[m.key], 0);
+  const remaining = balance - total;
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: "rgba(0,0,0,0.72)", backdropFilter: "blur(6px)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: 16,
+    }}>
+      <div style={{
+        background: "#12121e", border: "1px solid rgba(127,119,221,0.3)",
+        borderRadius: 18, padding: 28, maxWidth: 420, width: "100%",
+        boxShadow: "0 24px 60px rgba(0,0,0,0.6)",
+      }}>
+        <div style={{ fontFamily: "var(--f-display)", fontSize: 22, marginBottom: 6, color: "var(--ink)" }}>
+          Lock your rewards?
+        </div>
+        <div style={{ fontSize: 13, color: "var(--ink-mute)", marginBottom: 22, lineHeight: 1.6 }}>
+          This is <strong style={{ color: "var(--ink)" }}>irreversible</strong>. Coins are deducted
+          immediately and your reservation is confirmed. Visit the redemption booth with your code
+          before it expires.
+        </div>
+
+        {/* Items */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+          {items.map(m => (
+            <div key={m.key} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "12px 16px", borderRadius: 10,
+              background: `${m.color}0f`, border: `1px solid ${m.color}33`,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>{m.emoji}</span>
+                <span style={{ fontSize: 14, color: "var(--ink)" }}>{m.label}</span>
+              </div>
+              <span style={{ fontFamily: "var(--f-mono)", fontSize: 14, color: m.color, fontWeight: 700 }}>
+                −{TIER_THRESHOLDS[m.key].toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Summary */}
+        <div style={{
+          display: "flex", justifyContent: "space-between",
+          padding: "12px 0", borderTop: "1px solid rgba(255,255,255,0.08)",
+          marginBottom: 22,
+        }}>
+          <span style={{ fontSize: 12, color: "var(--ink-mute)" }}>Balance after</span>
+          <span style={{ fontFamily: "var(--f-mono)", fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>
+            {remaining.toLocaleString()} coins
+          </span>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={onCancel}
+            disabled={locking}
+            style={{
+              flex: 1, padding: "11px", borderRadius: 8,
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+              color: "var(--ink-mute)", fontSize: 13, cursor: "pointer",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={locking}
+            style={{
+              flex: 2, padding: "11px", borderRadius: 8, border: "none",
+              background: locking ? "rgba(127,119,221,0.4)" : "linear-gradient(135deg,#7f77dd,#5f58c0)",
+              color: "#fff", fontFamily: "var(--f-display)", fontWeight: 700,
+              fontSize: 13, letterSpacing: "0.06em", cursor: locking ? "not-allowed" : "pointer",
+            }}
+          >
+            {locking ? "Locking…" : "Confirm & Lock"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function RewardsPage() {
   const isMobile = useMobile();
   const [balance, setBalance] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [stickerCode, setStickerCode] = useState(null);
-  const [redeeming, setRedeeming] = useState(false);
+
+  // Cart & confirmation
+  const [cart, setCart] = useState(new Set());
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [locking, setLocking] = useState(false);
+  const [lockErr, setLockErr] = useState("");
+
+  // Set of tier keys already reserved (pending or claimed)
+  const [reservedTiers, setReservedTiers] = useState(new Set());
+
+  const refreshBalance = () => coinsApi.balance().then(setBalance);
 
   useEffect(() => {
-    coinsApi.balance().then(setBalance).finally(() => setLoading(false));
+    Promise.all([
+      coinsApi.balance(),
+      coinsApi.myReservations(),
+    ]).then(([bal, reservations]) => {
+      setBalance(bal);
+      setReservedTiers(new Set(reservations.map(r => r.tier)));
+    }).finally(() => setLoading(false));
   }, []);
 
-  const redeem = async () => {
-    setRedeeming(true);
-    try {
-      const res = await coinsApi.redeemSticker();
-      setStickerCode(res);
-    } catch (e) { alert(`Failed: ${e.message}`); }
-    finally { setRedeeming(false); }
+  const addToCart    = (tier) => setCart(prev => new Set([...prev, tier]));
+  const removeFromCart = (tier) => setCart(prev => { const n = new Set(prev); n.delete(tier); return n; });
+
+  const lockRewards = async () => {
+    setLocking(true);
+    setLockErr("");
+    const succeeded = [];
+    const failed    = [];
+    for (const tier of cart) {
+      try {
+        await coinsApi.reserveReward(tier);
+        succeeded.push(tier);
+      } catch (e) {
+        failed.push(`${TIER_LABEL[tier]}: ${e.message}`);
+      }
+    }
+    setReservedTiers(prev => new Set([...prev, ...succeeded]));
+    setCart(new Set());
+    setShowConfirm(false);
+    await refreshBalance();
+    setLocking(false);
+    if (failed.length) setLockErr(failed.join(" · "));
   };
 
   if (loading || !balance) return <SidequestLayout active="inventory"><Spinner /></SidequestLayout>;
 
+  const cartCost = [...cart].reduce((s, t) => s + TIER_THRESHOLDS[t], 0);
+
   return (
     <SidequestLayout active="inventory">
+      {/* Balance hero */}
       <div className="eyebrow">§ REWARDS VAULT</div>
-      <h1 className="display" style={{ fontSize: isMobile ? 28 : 40, marginTop: 6 }}>
-        Your <span style={{ color: "var(--violet)" }}>{balance.balance.toLocaleString()}</span>{" "}
+      <h1 className="display" style={{ fontSize: isMobile ? 28 : 40, marginTop: 6, marginBottom: 4 }}>
+        Your{" "}
+        <span style={{ color: "var(--violet)" }}>{balance.balance.toLocaleString()}</span>{" "}
         <span style={{ color: "var(--ink-dim)" }}>coins.</span>
       </h1>
 
       <RewardJourney balance={balance.balance} />
 
-      {/* Stock notice */}
+      {/* Error from locking */}
+      {lockErr && (
+        <div style={{
+          marginTop: 14, padding: "10px 14px", borderRadius: 8,
+          background: "rgba(220,80,80,0.1)", border: "1px solid rgba(220,80,80,0.35)",
+          fontSize: 12.5, color: "#f08080",
+        }}>{lockErr}</div>
+      )}
+
+      {/* How cart works note */}
       <div style={{
         marginTop: 18, padding: "12px 16px", borderRadius: "var(--r-md)",
-        background: "rgba(232,185,116,0.07)", border: "1px solid rgba(232,185,116,0.3)",
+        background: "rgba(127,119,221,0.06)", border: "1px solid rgba(127,119,221,0.18)",
         fontSize: 12.5, color: "var(--ink-dim)", display: "flex", alignItems: "center", gap: 10,
       }}>
-        <span style={{ color: "var(--amber)", fontSize: 16 }}>⚠</span>
+        <span style={{ fontSize: 16 }}>🛒</span>
         <span>
-          <strong style={{ color: "var(--ink)" }}>Stock note:</strong>{" "}
-          Adding a reward to cart does not reserve stock. Redemption QR codes expire
-          after a limited time if unused — visit the redemption booth promptly.
+          Add eligible rewards to your cart, then <strong style={{ color: "var(--ink)" }}>Lock Rewards</strong>{" "}
+          to confirm. Coins are deducted immediately and your rewards are reserved —
+          show your QR code at the redemption booth on event day to collect them.
         </span>
       </div>
 
+      {/* Tier cards */}
       <div style={{
-        marginTop: 18,
-        display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-        gap: 18,
+        marginTop: 20,
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
+        gap: 16,
+        paddingBottom: cart.size > 0 ? 100 : 0,
       }}>
-        {/* LEVEL 1 — STICKER (FCFS) */}
-        <div className="glass" style={{ padding: 22 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div className="eyebrow">§ LEVEL 1 · STICKER</div>
-              <div className="display" style={{ fontSize: 26, marginTop: 8 }}>
-                {TIER_THRESHOLDS.STICKER.toLocaleString()} coins
-              </div>
-              <div className="mono" style={{ fontSize: 10.5, color: "var(--ink-mute)", marginTop: 4, letterSpacing: "0.1em" }}>
-                FIRST-COME-FIRST-SERVED
-              </div>
-            </div>
-            <span className="chip violet" style={{ fontSize: 9 }}>FCFS</span>
-          </div>
-
-          {stickerCode ? (
-            <div style={{ marginTop: 18 }}>
-              <div className="mono" style={{
-                fontSize: 22, padding: "16px 14px", borderRadius: "var(--r-md)",
-                background: "rgba(127,119,221,0.10)", border: "1px solid var(--violet-dim)",
-                color: "var(--ink)", textAlign: "center", letterSpacing: "0.2em",
-              }}>{stickerCode.code}</div>
-              <p style={{ fontSize: 12, color: "var(--ink-dim)", marginTop: 10 }}>
-                Present this code at the redemption booth. Expires {fmtTime(stickerCode.expires_at)}.
-              </p>
-            </div>
-          ) : balance.balance >= TIER_THRESHOLDS.STICKER ? (
-            <button className="btn primary sm" onClick={redeem} disabled={redeeming}
-              style={{ marginTop: 18 }}>
-              {redeeming ? "…" : "GENERATE REDEMPTION CODE"}
-            </button>
-          ) : (
-            <ProgressTo current={balance.balance} target={TIER_THRESHOLDS.STICKER} />
-          )}
-        </div>
-
-        <RankRewardCard tier="BADGE"        level="LEVEL 2 · BADGE"         balance={balance.balance} rank={balance.rank} />
-        <RankRewardCard tier="NOTEPAD"      level="LEVEL 3 · NOTEPAD"       balance={balance.balance} rank={balance.rank} />
-        <RankRewardCard tier="MUG"          level="LEVEL 4 · MUG"           balance={balance.balance} rank={balance.rank} />
-        <RankRewardCard tier="TOTE_BAG_MUG" level="LEVEL 5 · TOTE BAG + MUG" balance={balance.balance} rank={balance.rank} />
+        {REWARD_META.map(meta => (
+          <RewardCard
+            key={meta.key}
+            meta={meta}
+            balance={balance.balance}
+            rank={balance.rank}
+            inCart={cart.has(meta.key)}
+            reserved={reservedTiers.has(meta.key)}
+            onAdd={addToCart}
+            onRemove={removeFromCart}
+          />
+        ))}
       </div>
+
+      {/* Sticky cart panel */}
+      <CartPanel
+        cart={cart}
+        balance={balance.balance}
+        onRemove={removeFromCart}
+        onCheckout={() => setShowConfirm(true)}
+        isMobile={isMobile}
+      />
+
+      {/* Confirmation modal */}
+      {showConfirm && (
+        <ConfirmModal
+          cart={cart}
+          balance={balance.balance}
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={lockRewards}
+          locking={locking}
+        />
+      )}
 
     </SidequestLayout>
   );
@@ -2309,21 +2617,28 @@ function Stat({ label, value, color }) {
 // ─────────────────────────────────────────────────────────────
 
 const EARN_ACTIVITIES = [
-  { icon: "💼", activity: "RSVP LinkedIn Post",     type: "LinkedIn URL",          coins: 300,  confirmed: true  },
-  { icon: "📸", activity: "AR Filter Story",         type: "Instagram Screenshot",  coins: 200,  confirmed: true  },
-  { icon: "🔍", activity: "Scavenger Hunt",           type: "Volunteer Verification",coins: null, confirmed: false },
-  { icon: "✍️", activity: "Signature & Photo Booth", type: "LinkedIn URL",          coins: null, confirmed: false },
-  { icon: "😂", activity: "Meme Challenge",           type: "LinkedIn URL",          coins: null, confirmed: false },
-  { icon: "🎮", activity: "Esports Arena",            type: "Tournament Results",    coins: null, confirmed: false },
-  { icon: "🏟️", activity: "Booth Activities",        type: "Volunteer Verification",coins: null, confirmed: false },
+  { icon: "🎫", activity: "ProPass",          type: "LinkedIn URL",          coins: 200, confirmed: true,
+    desc: SOURCE_DESC.PROPASS },
+  { icon: "📍", activity: "Spot Lock",        type: "LinkedIn URL",          coins: 200, confirmed: true,
+    desc: SOURCE_DESC.SPOT_LOCK },
+  { icon: "🎨", activity: "Grid Blast",       type: "Instagram Screenshot",  coins:  50, confirmed: true,
+    desc: SOURCE_DESC.GRID_BLAST },
+  { icon: "🎲", activity: "Bingo Rush",       type: "Instagram Screenshot",  coins:  80, confirmed: true,
+    desc: SOURCE_DESC.BINGO_RUSH },
+  { icon: "📡", activity: "LiveDrop",         type: "LinkedIn URL",          coins: 200, confirmed: true,
+    desc: SOURCE_DESC.LIVE_DROP },
+  { icon: "🔭", activity: "Vision Board",     type: "LinkedIn URL",          coins: 200, confirmed: true,
+    desc: SOURCE_DESC.VISION_BOARD },
+  { icon: "💡", activity: "Fintech Forward",  type: "LinkedIn URL",          coins: 200, confirmed: true,
+    desc: SOURCE_DESC.FINTECH_FORWARD },
+  { icon: "🏆", activity: "Hall of MVPs",     type: "LinkedIn URL",          coins:  50, confirmed: true,
+    desc: SOURCE_DESC.HALL_OF_MVPS },
 ];
 
 const REWARD_TIERS = [
-  { level: 1, reward: "Sticker",       emoji: "🏷️", color: "#7f77dd", hint: "Claim at any merch booth" },
-  { level: 2, reward: "Badge",          emoji: "🎖️", color: "#40d4c4", hint: "Snap-on enamel badge" },
-  { level: 3, reward: "Notepad",        emoji: "📓", color: "#f5b04c", hint: "ASCENT branded notepad" },
-  { level: 4, reward: "Mug",            emoji: "☕", color: "#1d9e75", hint: "Limited edition mug" },
-  { level: 5, reward: "Tote Bag + Mug", emoji: "🛍️", color: "#dc6464", hint: "Top participants only" },
+  { level: 1, reward: "Badge + Stickers", emoji: "🎖️", color: "#7f77dd", hint: "200 coins — first-come-first-served" },
+  { level: 2, reward: "Notebook + Mug",   emoji: "📓", color: "#40d4c4", hint: "400 coins — top 100 by rank" },
+  { level: 3, reward: "Tote Bag",         emoji: "🛍️", color: "#f5b04c", hint: "500 coins — top 10 only" },
 ];
 
 const HOW_IT_WORKS = [
@@ -2494,7 +2809,7 @@ export function GuidePage() {
           color: "var(--ink)",
         }}>Ways to earn</h2>
         <p style={{ margin: "0 0 18px", fontSize: 13.5, color: "var(--ink-mute)" }}>
-          Confirmed Cent values shown below. TBD activities will be updated before the event.
+          All 8 activities and their Cent values are confirmed.
         </p>
 
         <div style={{
@@ -2502,12 +2817,11 @@ export function GuidePage() {
           gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)",
           gap: 12,
         }}>
-          {EARN_ACTIVITIES.map(({ icon, activity, type, coins, confirmed }) => (
+          {EARN_ACTIVITIES.map(({ icon, activity, type, coins, confirmed, desc }) => (
             <div key={activity} className="glass" style={{
               padding: "18px 20px",
               borderRadius: 14,
-              display: "flex", alignItems: "center", gap: 16,
-              opacity: confirmed ? 1 : 0.7,
+              display: "flex", alignItems: "flex-start", gap: 16,
             }}>
               <div style={{
                 fontSize: 28, flexShrink: 0,
@@ -2524,7 +2838,11 @@ export function GuidePage() {
                 <div style={{
                   fontSize: 11.5, color: "var(--ink-mute)",
                   fontFamily: "var(--f-mono)", letterSpacing: "0.04em",
+                  marginBottom: desc ? 6 : 0,
                 }}>{type}</div>
+                {desc && (
+                  <div style={{ fontSize: 12, color: "var(--ink-dim)", lineHeight: 1.55 }}>{desc}</div>
+                )}
               </div>
               <div style={{ flexShrink: 0, textAlign: "right" }}>
                 {confirmed ? (
@@ -2571,7 +2889,7 @@ export function GuidePage() {
 
         <div style={{
           display: "grid",
-          gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(5, 1fr)",
+          gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
           gap: 12,
         }}>
           {REWARD_TIERS.map(({ level, reward, emoji, color, hint }) => (

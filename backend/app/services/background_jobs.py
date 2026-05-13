@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 
 from app.core.config import settings
-from app.core.coins_config import COIN_VALUES, UGC_URL_SOURCES
+from app.core.coins_config import UGC_URL_SOURCES
 from app.db.supabase_client import get_client, rows
 from app.schemas.unstop import UnstopUserItem
 from app.services.coins_service import credit_coins, post_reversal
@@ -207,14 +207,7 @@ async def creator_collab_deadline_checker() -> None:
             .execute()
         )
 
-        await credit_coins(
-            supabase,
-            student_id=collab["participant_1"],
-            source_type="CREATOR_COLLAB",
-            coins=COIN_VALUES["CREATOR_COLLAB"],
-            verified_by=None,
-            metadata={"collab_id": collab["id"], "partial": True},
-        )
+        pass  # Creator Collab source type removed — no coins to credit
 
 
 async def surprise_drop_window_closer() -> None:
@@ -249,7 +242,7 @@ async def sticker_code_expiry_checker() -> None:
     expired_resp = await (
         supabase.table("reward_redemptions")
         .select("*")
-        .eq("tier", "STICKER")
+        .eq("tier", "BADGE_STICKER")
         .eq("status", "pending")
         .lt("expires_at", now_iso)
         .execute()
@@ -271,7 +264,7 @@ async def sticker_code_expiry_checker() -> None:
     inventory_resp = await (
         supabase.table("reward_inventory")
         .select("allocated")
-        .eq("tier", "STICKER")
+        .eq("tier", "BADGE_STICKER")
         .limit(1)
         .execute()
     )
@@ -280,7 +273,7 @@ async def sticker_code_expiry_checker() -> None:
     await (
         supabase.table("reward_inventory")
         .update({"allocated": new_allocated})
-        .eq("tier", "STICKER")
+        .eq("tier", "BADGE_STICKER")
         .execute()
     )
 

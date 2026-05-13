@@ -36,25 +36,20 @@ function AdminFlipCoin({ size = 16 }) {
 // Shared helpers
 // ─────────────────────────────────────────────────────────────
 const SOURCE_LABEL = {
-  RSVP_POST: 'RSVP LinkedIn',
-  ROUND1_PROJECT: 'Round 1 Project',
-  AR_FILTER: 'AR Filter Snap',
-  SCAVENGER_HUNT: 'Scavenger Hunt',
-  RAZORPAY_PITCH: 'Razorpay Pitch',
-  FUTURE_VISION: 'Future Vision',
-  CREATOR_COLLAB: 'Creator Collab',
-  MVP_MUSEUM: 'MVP Museum',
-  JOBS_WALL: 'Jobs Wall',
-  ECO_EXCHANGE: 'Eco Exchange',
-  ECO_DESIGN_WIN: 'Eco Design Win',
-  EVENT_WIN: 'Event Win',
-  ENGAGEMENT: 'Engagement',
-  POWER_HOUR_BONUS: 'Power Hour Bonus',
-  SURPRISE_DROP: 'Surprise Drop',
-  REVERSAL: 'Reversal',
-  RESTORE: 'Restore',
+  PROPASS:           'ProPass',
+  SPOT_LOCK:         'Spot Lock',
+  GRID_BLAST:        'Grid Blast',
+  BINGO_RUSH:        'Bingo Rush',
+  LIVE_DROP:         'LiveDrop',
+  VISION_BOARD:      'Vision Board',
+  FINTECH_FORWARD:   'Fintech Forward',
+  HALL_OF_MVPS:      'Hall of MVPs',
+  POWER_HOUR_BONUS:  'Power Hour Bonus',
+  SURPRISE_DROP:     'Surprise Drop',
+  REVERSAL:          'Reversal',
+  RESTORE:           'Restore',
   MANUAL_ADJUSTMENT: 'Manual Adjustment',
-  REDEMPTION: 'Redemption',
+  REDEMPTION:        'Redemption',
 }
 
 const REJECT_TEMPLATES = [

@@ -20,7 +20,6 @@ import {
   GuidePage,
   TermsPage,
 } from './components/sidequest';
-import BoothTool from './components/booth';
 import RedemptionBooth from './components/redemption';
 
 /** Blocks access to protected user pages — redirects to /login if not authed. */
@@ -28,6 +27,15 @@ function RequireAuth({ children }) {
   const { user, ready } = useUserAuth();
   if (!ready) return null; // wait for token check before rendering
   return user ? children : <Navigate to="/login" replace />;
+}
+
+/** Blocks /coins/* for users whose is_attending flag is false. */
+function RequireAttending({ children }) {
+  const { user, ready } = useUserAuth();
+  if (!ready) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.is_attending) return <Navigate to="/dashboard" replace />;
+  return children;
 }
 
 /** Prevents logged-in users from seeing login page again. Redirects to respective dashboards. */
@@ -69,21 +77,18 @@ export default function App() {
         <Route path="/feedback"      element={<RequireAuth><Feedback /></RequireAuth>} />
         {/* <Route path="/report"        element={<RequireAuth><Report /></RequireAuth>} /> */}
 
-        {/* Booth Tool — has its own auth (booth_volunteer JWT) */}
-        <Route path="/booth"             element={<BoothTool />} />
-
         {/* Redemption Booth — has its own auth (redemption_volunteer JWT) */}
         <Route path="/redemption"        element={<RedemptionBooth />} />
 
         {/* Sidequest — Ascent Coins */}
-        <Route path="/coins"             element={<RequireAuth><CoinsHomePage /></RequireAuth>} />
-        <Route path="/coins/submit"      element={<RequireAuth><UGCSubmitPage /></RequireAuth>} />
-        <Route path="/coins/leaderboard" element={<RequireAuth><CoinsLeaderboardPage /></RequireAuth>} />
-        <Route path="/coins/rewards"     element={<RequireAuth><RewardsPage /></RequireAuth>} />
-        <Route path="/coins/qr"          element={<RequireAuth><MyQRPage /></RequireAuth>} />
-        <Route path="/coins/history"     element={<RequireAuth><CoinHistoryPage /></RequireAuth>} />
-        <Route path="/coins/guide"       element={<RequireAuth><GuidePage /></RequireAuth>} />
-        <Route path="/coins/terms"       element={<RequireAuth><TermsPage /></RequireAuth>} />
+        <Route path="/coins"             element={<RequireAttending><CoinsHomePage /></RequireAttending>} />
+        <Route path="/coins/submit"      element={<RequireAttending><UGCSubmitPage /></RequireAttending>} />
+        <Route path="/coins/leaderboard" element={<RequireAttending><CoinsLeaderboardPage /></RequireAttending>} />
+        <Route path="/coins/rewards"     element={<RequireAttending><RewardsPage /></RequireAttending>} />
+        <Route path="/coins/qr"          element={<RequireAttending><MyQRPage /></RequireAttending>} />
+        <Route path="/coins/history"     element={<RequireAttending><CoinHistoryPage /></RequireAttending>} />
+        <Route path="/coins/guide"       element={<RequireAttending><GuidePage /></RequireAttending>} />
+        <Route path="/coins/terms"       element={<RequireAttending><TermsPage /></RequireAttending>} />
 
         <Route path="*"              element={<Navigate to="/" replace />} />
       </Routes>

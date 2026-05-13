@@ -9,7 +9,7 @@ pending invite for the second participant.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import uuid as _uuid
@@ -21,8 +21,6 @@ from supabase import AsyncClient
 from app.api.deps import get_current_user
 from app.core.coins_config import (
     COIN_VALUES,
-    CREATOR_COLLAB_CONFIRM_HOURS,
-    MVP_JOBS_SHARED_CAP,
     PER_STUDENT_CAPPED_SOURCES,
     UGC_URL_SOURCES,
     UGC_SCREENSHOT_SOURCES,
@@ -82,22 +80,6 @@ async def _verified_submission_count(
     return len(rows(resp))
 
 
-async def _verified_submission_coins(
-    supabase: AsyncClient, student_id: str, source_types: list[str]
-) -> int:
-    """Sum of base coin values for currently-verified submissions across the
-    given sources. Used for the MVP_MUSEUM + JOBS_WALL shared cap."""
-    resp = await (
-        supabase.table("ugc_submissions")
-        .select("source_type")
-        .eq("student_id", student_id)
-        .in_("source_type", source_types)
-        .eq("status", "verified")
-        .execute()
-    )
-    return sum(COIN_VALUES.get(r["source_type"], 0) for r in rows(resp))
-
-
 async def _has_pending_submission(
     supabase: AsyncClient, student_id: str, source_type: str
 ) -> bool:
@@ -113,16 +95,6 @@ async def _has_pending_submission(
     return first_row(resp) is not None
 
 
-async def _has_round_registration(supabase: AsyncClient, user: User) -> bool:
-    """ROUND1_PROJECT requires registration in at least one event with rounds."""
-    if not user.events:
-        return False
-    return any(
-        isinstance(v, dict) and v.get("status") in {"registered", "qualified"}
-        for v in user.events.values()
-    )
-
-
 # ----------------------------- eligibility -----------------------------
 
 @router.get("/eligibility")
@@ -131,17 +103,11 @@ async def get_eligibility(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> dict[str, Any]:
     student_id = str(user.id)
-    rsvp_count    = await _verified_submission_count(supabase, student_id, "RSVP_POST")
-    round1_count  = await _verified_submission_count(supabase, student_id, "ROUND1_PROJECT")
-    fv_count      = await _verified_submission_count(supabase, student_id, "FUTURE_VISION")
-    cc_count      = await _verified_submission_count(supabase, student_id, "CREATOR_COLLAB")
-    ar_count      = await _verified_submission_count(supabase, student_id, "AR_FILTER")
-    meme_count    = await _verified_submission_count(supabase, student_id, "MEME_CHALLENGE")
-    sig_count     = await _verified_submission_count(supabase, student_id, "SIGNATURE_PHOTO_BOOTH")
-    mvp_jobs_total = await _verified_submission_coins(
-        supabase, student_id, ["MVP_MUSEUM", "JOBS_WALL"]
-    )
-    has_round = await _has_round_registration(supabase, user)
+    all_sources = UGC_URL_SOURCES + UGC_SCREENSHOT_SOURCES
+
+    counts = {}
+    for src in all_sources:
+        counts[src] = await _verified_submission_count(supabase, student_id, src)
 
     subs_resp = await (
         supabase.table("ugc_submissions")
@@ -151,6 +117,7 @@ async def get_eligibility(
         .execute()
     )
     latest: dict[str, dict[str, Any]] = {}
+    rejection_counts: dict[str, int] = {}
     for row in rows(subs_resp):
         src = row["source_type"]
         if src not in latest:
@@ -161,19 +128,17 @@ async def get_eligibility(
                 "submitted_at": row.get("submitted_at"),
                 "verified_at": row.get("verified_at"),
             }
+        if row["status"] == "rejected":
+            rejection_counts[src] = rejection_counts.get(src, 0) + 1
 
-    return {
-        "rsvp":                   rsvp_count == 0,
-        "round1_project":         round1_count == 0 and has_round,
-        "future_vision":          fv_count == 0,
-        "mvp_museum":             mvp_jobs_total < MVP_JOBS_SHARED_CAP,
-        "jobs_wall":              mvp_jobs_total < MVP_JOBS_SHARED_CAP,
-        "creator_collab":         cc_count == 0,
-        "ar_filter":              ar_count == 0,
-        "meme_challenge":         meme_count == 0,
-        "signature_photo_booth":  sig_count == 0,
-        "latest_submissions": latest,
+    ineligible = {src for src in all_sources if rejection_counts.get(src, 0) >= 3}
+    eligibility = {
+        src.lower(): counts[src] == 0 and src not in ineligible
+        for src in all_sources
     }
+    eligibility["latest_submissions"] = latest
+    eligibility["ineligible_sources"] = [src.lower() for src in ineligible]
+    return eligibility
 
 
 # ----------------------------- submit -----------------------------
@@ -214,9 +179,6 @@ class UGCSubmitIn(BaseModel):
     source_type: str = Field(..., description="One of UGC_URL_SOURCES or UGC_SCREENSHOT_SOURCES")
     url: str = Field(..., min_length=8)
     proof_type: str = Field("url", description="'url' for link submissions, 'screenshot' for uploads")
-    participant_2_id: str | None = Field(
-        None, description="Required only for CREATOR_COLLAB"
-    )
 
 
 @router.post("/submit")
@@ -247,45 +209,22 @@ async def submit_ugc(
                 detail=f"{src} already credited for this student",
             )
 
-    # 2. MVP + Jobs Wall shared cap (shared across the two sources)
-    if src in {"MVP_MUSEUM", "JOBS_WALL"}:
-        combined = await _verified_submission_coins(
-            supabase, student_id, ["MVP_MUSEUM", "JOBS_WALL"]
-        )
-        if combined >= MVP_JOBS_SHARED_CAP:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="MVP_MUSEUM + JOBS_WALL shared cap reached",
-            )
-
-    # 3. ROUND1_PROJECT requires a registered event
-    if src == "ROUND1_PROJECT" and not await _has_round_registration(supabase, user):
+    # 2a. Block permanently ineligible sources (>= 3 rejections)
+    rejected_resp = await (
+        supabase.table("ugc_submissions")
+        .select("id")
+        .eq("student_id", student_id)
+        .eq("source_type", src)
+        .eq("status", "rejected")
+        .execute()
+    )
+    if len(rows(rejected_resp)) >= 3:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Register for a build event first",
+            detail=f"Maximum submission attempts (3) reached for {src}. This source is now ineligible.",
         )
 
-    # 4. CREATOR_COLLAB needs a second participant
-    if src == "CREATOR_COLLAB":
-        if not payload.participant_2_id or payload.participant_2_id == student_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="participant_2_id required and must be a different student",
-            )
-        p2_resp = await (
-            supabase.table("users")
-            .select("id")
-            .eq("id", payload.participant_2_id)
-            .limit(1)
-            .execute()
-        )
-        if first_row(p2_resp) is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="participant_2_id does not exist",
-            )
-
-    # 5. Block re-submit while one is already pending
+    # 2b. Block re-submit while one is already pending
     if await _has_pending_submission(supabase, student_id, src):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -409,20 +348,6 @@ async def submit_ugc(
     else:
         insert_resp = await supabase.table("ugc_submissions").insert(submission_payload).execute()
         submission = rows(insert_resp)[0]
-
-    # 8. Creator Collab — create pending invite for participant_2
-    if src == "CREATOR_COLLAB":
-        deadline = (
-            datetime.now(timezone.utc) + timedelta(hours=CREATOR_COLLAB_CONFIRM_HOURS)
-        ).isoformat()
-        await supabase.table("creator_collab_pending").insert({
-            "participant_1": student_id,
-            "participant_2": payload.participant_2_id,
-            "content_url": payload.url,
-            "submission_id": submission["id"],
-            "status": "pending",
-            "deadline": deadline,
-        }).execute()
 
     return {
         "status": sub_status,

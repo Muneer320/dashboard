@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.135.3",
     "fastapi-cache2>=0.2.2",
     "greenlet<3.4",
+    "gspread>=6.2.1",
     "jinja2>=3.1.6",
     "openpyxl>=3.1.5",
     "passlib[bcrypt]>=1.7.4",

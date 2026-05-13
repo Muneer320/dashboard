@@ -15,6 +15,7 @@ from supabase import AsyncClient
 from app.api.deps import get_current_user
 from app.core.coins_config import (
     POWER_HOURS,
+    TIER_LABELS,
     TIER_THRESHOLDS,
 )
 from app.db.supabase_client import first_row, get_supabase, rows
@@ -25,9 +26,11 @@ from app.services.coins_service import (
     get_live_leaderboard,
     get_student_balance,
     get_student_rank,
+    reserve_reward,
     write_audit,
 )
 from app.services.notification_service import notify_student
+from app.services.sheets_service import log_cart_order
 
 router = APIRouter()
 
@@ -184,18 +187,18 @@ async def redeem_sticker(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> dict[str, Any]:
     balance = await get_student_balance(supabase, user.id)
-    if balance < TIER_THRESHOLDS["STICKER"]:
+    if balance < TIER_THRESHOLDS["BADGE_STICKER"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Need {TIER_THRESHOLDS['STICKER']} coins to redeem sticker",
+            detail=f"Need {TIER_THRESHOLDS['BADGE_STICKER']} coins to redeem Badge + Stickers",
         )
 
-    # One sticker per student — block re-redemption
+    # One per student — block re-redemption
     existing_resp = await (
         supabase.table("reward_redemptions")
         .select("id, status")
         .eq("student_id", str(user.id))
-        .eq("tier", "STICKER")
+        .eq("tier", "BADGE_STICKER")
         .in_("status", ["pending", "claimed"])
         .limit(1)
         .execute()
@@ -219,9 +222,9 @@ async def redeem_sticker(
         supabase,
         student_id=user.id,
         source_type="REDEMPTION",
-        coins=-TIER_THRESHOLDS["STICKER"],
+        coins=-TIER_THRESHOLDS["BADGE_STICKER"],
         verified_by=None,
-        metadata={"tier": "STICKER", "redemption_id": result["redemption_id"]},
+        metadata={"tier": "BADGE_STICKER", "redemption_id": result["redemption_id"]},
     )
 
     await write_audit(
@@ -231,9 +234,101 @@ async def redeem_sticker(
         action="CODE_GENERATED",
         entity_type="reward_redemptions",
         entity_id=result["redemption_id"],
-        after_state={"tier": "STICKER", "coins_deducted": TIER_THRESHOLDS["STICKER"]},
+        after_state={"tier": "BADGE_STICKER", "coins_deducted": TIER_THRESHOLDS["BADGE_STICKER"]},
     )
-    return {**result, "coins_deducted": TIER_THRESHOLDS["STICKER"]}
+    return {**result, "coins_deducted": TIER_THRESHOLDS["BADGE_STICKER"]}
+
+
+# ----------------------------- cart / reserve-reward ---------------------
+
+class ReserveIn(BaseModel):
+    tier: str
+
+
+@router.post("/reserve-reward")
+async def reserve_reward_endpoint(
+    payload: ReserveIn,
+    user: User = Depends(get_current_user),
+    supabase: AsyncClient = Depends(get_supabase),
+) -> dict[str, Any]:
+    tier = payload.tier
+    if tier not in TIER_THRESHOLDS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unknown tier '{tier}'")
+
+    threshold = TIER_THRESHOLDS[tier]
+    bal = await get_student_balance(supabase, user.id)
+    if bal < threshold:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Need {threshold} coins to reserve {tier} (you have {bal})",
+        )
+
+    existing = await (
+        supabase.table("reward_redemptions")
+        .select("id")
+        .eq("student_id", str(user.id))
+        .eq("tier", tier)
+        .in_("status", ["pending", "claimed"])
+        .limit(1)
+        .execute()
+    )
+    if first_row(existing):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{tier} already reserved")
+
+    try:
+        result = await reserve_reward(supabase, student_id=user.id, tier=tier)
+    except ValueError as exc:
+        msg = str(exc)
+        if "out_of_stock" in msg:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Out of stock for this tier") from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Inventory not configured for this tier") from exc
+
+    await credit_coins(
+        supabase,
+        student_id=user.id,
+        source_type="REDEMPTION",
+        coins=-threshold,
+        verified_by=None,
+        metadata={"tier": tier, "redemption_id": result["redemption_id"]},
+    )
+
+    await write_audit(
+        supabase,
+        actor_id=user.id,
+        actor_role="user",
+        action="REWARD_RESERVED",
+        entity_type="reward_redemptions",
+        entity_id=result["redemption_id"],
+        after_state={"tier": tier, "coins_deducted": threshold},
+    )
+
+    # username == email in this system (organisers provision accounts with email as username)
+    await log_cart_order(
+        username=user.username,
+        email=user.username,
+        coins_before=bal,
+        coins_after=bal - threshold,
+        tier_label=TIER_LABELS.get(tier, tier),
+    )
+
+    return {"tier": tier, "reserved": True, "coins_deducted": threshold}
+
+
+# ── GET /coins/my-reservations ────────────────────────────────────────────────
+
+@router.get("/my-reservations")
+async def my_reservations(
+    user: User = Depends(get_current_user),
+    supabase: AsyncClient = Depends(get_supabase),
+) -> list[dict[str, Any]]:
+    resp = await (
+        supabase.table("reward_redemptions")
+        .select("id, tier, status")
+        .eq("student_id", str(user.id))
+        .in_("status", ["pending", "claimed"])
+        .execute()
+    )
+    return rows(resp)
 
 
 # ----------------------------- surprise drops -----------------------------
