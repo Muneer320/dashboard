@@ -41,10 +41,15 @@ async def scan_qr(
         return QRScanResponse(message=message, status=status_text)
 
     if payload.mode == "food":
-        # Meal slot is auto-assigned by the backend based on the user's
-        # remaining allowance; payload.meal (if sent) is ignored.
-        message = await scan_food(supabase, target_user)
-        status_text = "accepted" if "marked" in message.lower() else "rejected"
+        # Event-based food distribution. User must select event first.
+        # event_id is now REQUIRED.
+        if not payload.event_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="event_id is required for food distribution",
+            )
+        message = await scan_food(supabase, target_user, payload.event_id)
+        status_text = "accepted" if "claimed" in message.lower() else "rejected"
         return QRScanResponse(message=message, status=status_text)
 
     # Event-attendance mode

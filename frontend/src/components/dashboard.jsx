@@ -206,7 +206,8 @@ export function Dashboard() {
 
   const displayName = profile?.name ?? user?.name ?? "…";
   const userId = user?.id ?? "";
-  const qrSeed = `ASCENT-${userId.slice(0, 8).toUpperCase()}`;
+  const qrValue = userId ? `ASCENT:${userId}` : "ASCENT:UNKNOWN";
+  const qrLabel = userId ? userId.slice(0, 8).toUpperCase() : "UNKNOWN";
 
   return (
     <PageBackground
@@ -607,40 +608,6 @@ export function Dashboard() {
                   overflow: "hidden",
                 }}
               >
-                {/* ── Lock overlay — visible until user is checked in ── */}
-                {!profile?.is_attending && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      zIndex: 10,
-                      borderRadius: "inherit",
-                      backdropFilter: "blur(32px)",
-                      WebkitBackdropFilter: "blur(32px)",
-                      background: "rgba(10, 10, 16, 0.85)",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 12,
-                      border: "1px solid rgba(255, 255, 255, 0.08)",
-                    }}
-                  >
-                    <div style={{ fontSize: 32 }}>🔒</div>
-                    <div
-                      style={{
-                        fontFamily: "var(--f-mono)",
-                        fontSize: 15,
-                        letterSpacing: "0.14em",
-                        color: "var(--ink)",
-                        textTransform: "uppercase",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Unlock at Round 2
-                    </div>
-                  </div>
-                )}
                 <div
                   style={{
                     position: "absolute",
@@ -722,7 +689,7 @@ export function Dashboard() {
                       boxShadow: "0 0 40px rgba(127,119,221,0.25)",
                     }}
                   >
-                    <QRCode size={isMobile ? 120 : 152} seed={qrSeed} />
+                    <QRCode size={isMobile ? 120 : 152} seed={qrValue} />
                   </div>
                   <div style={{ flex: 1, width: isMobile ? "100%" : "auto" }}>
                     <div className="eyebrow" style={{ marginBottom: 10 }}>
@@ -781,7 +748,7 @@ export function Dashboard() {
                     textAlign: "center",
                   }}
                 >
-                  ID · {qrSeed} · ASCENT 2026
+                  ID · {qrLabel} · ASCENT 2026
                 </div>
               </div>
 

@@ -1,5 +1,6 @@
 // Ascent — Shared UI components
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { useNavigate } from "react-router-dom";
 import { useUserAuth } from "../lib/UserAuthContext";
 // ─────────────────────────────────────────────────────────────
@@ -665,60 +666,31 @@ export function ImgPlaceholder({
 }
 
 // ─────────────────────────────────────────────────────────────
-// QR placeholder (visual fake)
+// QR (real, scan-ready)
 // ─────────────────────────────────────────────────────────────
 export function QRCode({ size = 180, seed = "ASCENT-ABC123" }) {
-  const cells = 21;
-  const rng = (i) => {
-    let h = 2166136261;
-    for (let j = 0; j < seed.length; j++)
-      h = (h ^ seed.charCodeAt(j)) * 16777619;
-    h = (h ^ i) * 16777619;
-    return ((h >>> 0) % 1000) / 1000;
-  };
-  const c = size / cells;
-  const rects = [];
-  for (let y = 0; y < cells; y++) {
-    for (let x = 0; x < cells; x++) {
-      const inFinder =
-        (x < 7 && y < 7) ||
-        (x >= cells - 7 && y < 7) ||
-        (x < 7 && y >= cells - 7);
-      let on;
-      if (inFinder) {
-        const lx = x < 7 ? x : x - (cells - 7);
-        const ly = y < 7 ? y : y - (cells - 7);
-        on =
-          lx === 0 ||
-          lx === 6 ||
-          ly === 0 ||
-          ly === 6 ||
-          (lx >= 2 && lx <= 4 && ly >= 2 && ly <= 4);
-      } else {
-        on = rng(y * cells + x) > 0.52;
-      }
-      if (on)
-        rects.push(
-          <rect
-            key={`${x}-${y}`}
-            x={x * c}
-            y={y * c}
-            width={c}
-            height={c}
-            fill="#F1EFE8"
-          />,
-        );
-    }
-  }
+  const value = seed || "ASCENT-ABC123";
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      style={{ borderRadius: 8, background: "#0D0D12" }}
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 8,
+        overflow: "hidden",
+        background: "#0D0D12",
+        display: "grid",
+        placeItems: "center",
+      }}
     >
-      {rects}
-    </svg>
+      <QRCodeSVG
+        value={value}
+        size={size}
+        level="M"
+        includeMargin={true}
+        bgColor="#0D0D12"
+        fgColor="#F1EFE8"
+      />
+    </div>
   );
 }
 
