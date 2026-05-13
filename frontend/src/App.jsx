@@ -13,6 +13,7 @@ import { Rating, Feedback, Report } from './components/forms';
 import AdminApp from './admin-panel/App';
 import FAQ from './components/faq';
 import Sponsors from './components/sponsors';
+import Tour from './components/tour';
 
 /** Blocks access to protected user pages — redirects to /login if not authed. */
 function RequireAuth({ children }) {
@@ -49,6 +50,7 @@ export default function App() {
         <Route path="/explore"       element={<Explore />}/>
         <Route path="/merch"         element={<MerchStore />}/>
         <Route path="/sponsors"      element={<Sponsors />}/>
+        <Route path="/tour"          element={<Tour />}/>
 
 
         {/* Protected user app */}
