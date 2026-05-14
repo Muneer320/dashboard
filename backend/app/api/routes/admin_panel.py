@@ -284,20 +284,26 @@ async def select_phase(
     if not normalised:
         return {"updated": 0, "edge_cases": []}
 
-    # Fetch all matching users in one query (username = email in this system)
-    try:
-        resp = await (
-            supabase.table("users")
-            .select("id, username, events")
-            .in_("username", normalised)
-            .execute()
-        )
-        db_rows = resp.data if resp.data is not None else []
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database query failed: {exc}",
-        )
+    # Fetch matching users in batches of 50 to avoid HTTP 414 (URI Too Large).
+    # PostgREST encodes .in_() as a URL query param — large lists blow nginx's limit.
+    _BATCH = 50
+    db_rows: list[dict] = []
+    for i in range(0, len(normalised), _BATCH):
+        chunk = normalised[i : i + _BATCH]
+        try:
+            resp = await (
+                supabase.table("users")
+                .select("id, username, events")
+                .in_("username", chunk)
+                .execute()
+            )
+            if resp.data:
+                db_rows.extend(resp.data)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database query failed (batch {i // _BATCH + 1}): {exc}",
+            )
 
     # Index by normalised username for O(1) lookup
     found = {
