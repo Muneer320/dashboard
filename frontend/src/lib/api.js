@@ -341,6 +341,7 @@ export const ugc = {
 
 export const redemptionApi = {
   getStudent:  (student_id) => get(`/redemption/student/${student_id}`, { adminAuth: true }),
+  searchStudents: (q) => get(`/redemption/search?q=${encodeURIComponent(q)}`, { adminAuth: true }),
   award:       (reservation_id) =>
     post('/redemption/award', { reservation_id }, { adminAuth: true }),
   history:     () => get('/redemption/history', { adminAuth: true }),

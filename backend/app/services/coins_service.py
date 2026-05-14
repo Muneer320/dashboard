@@ -230,9 +230,13 @@ async def reserve_reward(
     tier: str,
 ) -> dict[str, Any]:
     """
-    Reserve a reward tier for a student: check inventory, decrement
-    allocated count, insert a pending row. No code is generated —
-    the student redeems at the booth by showing their QR (student UUID).
+    Reserve a reward tier for a student: check inventory, insert a
+    pending row. No code is generated — the student redeems at the
+    booth by showing their QR (student UUID).
+
+    `reward_inventory.allocated` is NOT touched here — it now tracks
+    only items physically handed out. Availability is the live count of
+    pending + claimed reservations against total_stock - surprise_reserve.
 
     Race-condition note: supabase-py / PostgREST does not expose SELECT FOR
     UPDATE. Robust fix is a Postgres RPC wrapping read+write in one
@@ -249,16 +253,19 @@ async def reserve_reward(
     if inv is None:
         raise ValueError(f"inventory_missing:{tier}")
 
-    available = inv["total_stock"] - inv["allocated"] - inv["surprise_drop_reserve"]
-    if available <= 0:
-        raise ValueError(f"out_of_stock:{tier}")
-
-    await (
-        supabase.table("reward_inventory")
-        .update({"allocated": inv["allocated"] + 1})
+    # Live count of outstanding reservations for this tier.
+    reserved_resp = await (
+        supabase.table("reward_redemptions")
+        .select("id")
         .eq("tier", tier)
+        .in_("status", ["pending", "claimed"])
         .execute()
     )
+    reserved_count = len(rows(reserved_resp))
+
+    available = inv["total_stock"] - reserved_count - inv["surprise_drop_reserve"]
+    if available <= 0:
+        raise ValueError(f"out_of_stock:{tier}")
 
     resp = await (
         supabase.table("reward_redemptions")
