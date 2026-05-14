@@ -271,6 +271,28 @@ async def approve_ugc(
             )
             apply_bonus = first_row(existing) is None
 
+    # Atomically claim the submission by flipping its status to 'verified' only
+    # while it is still in a creditable state. Because PostgreSQL acquires a
+    # row-level lock when processing the UPDATE, exactly one concurrent request
+    # can win this race; the loser receives an empty result set and gets a 409.
+    # Coins are only credited after we hold this exclusive claim.
+    claim_resp = await (
+        supabase.table("ugc_submissions")
+        .update({
+            "status": "verified",
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+            "verified_by": admin.uid,
+        })
+        .eq("id", submission["id"])
+        .in_("status", ["admin_queued", "pending_manual"])
+        .execute()
+    )
+    if not rows(claim_resp):
+        raise HTTPException(
+            status_code=409,
+            detail="Submission was already processed by another admin",
+        )
+
     # Insert the base credit row.
     ledger = await credit_coins(
         supabase,
@@ -307,17 +329,6 @@ async def approve_ugc(
             },
         )
         coins_credited += base_coins
-
-    await (
-        supabase.table("ugc_submissions")
-        .update({
-            "status": "verified",
-            "verified_at": datetime.now(timezone.utc).isoformat(),
-            "verified_by": admin.uid,
-        })
-        .eq("id", submission["id"])
-        .execute()
-    )
 
     await write_audit(
         supabase,
