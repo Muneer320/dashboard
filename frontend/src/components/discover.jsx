@@ -1213,7 +1213,7 @@ export function Leaderboard() {
             }}
           >
             {[10, 25, 50, 100].map((size) => (
-              <option key={size} value={size}>
+              <option key={size} value={size} style={{ background: '#13131a', color: 'var(--ink)' }}>
                 {size} / page
               </option>
             ))}
