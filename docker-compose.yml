@@ -5,6 +5,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       PROJECT_NAME: Ascent Dashboard Backend
       VERSION: 0.1.0
@@ -26,6 +28,14 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+      REDIS_URL: ${REDIS_URL:-}
+      CACHE_PREFIX: ${CACHE_PREFIX:-ascent-cache}
+      REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS: ${REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS:-2.0}
+      LEADERBOARD_CACHE_TTL_SECONDS: ${LEADERBOARD_CACHE_TTL_SECONDS:-1800}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+      UVICORN_KEEP_ALIVE_TIMEOUT_SECONDS: ${UVICORN_KEEP_ALIVE_TIMEOUT_SECONDS:-20}
+      UVICORN_BACKLOG: ${UVICORN_BACKLOG:-2048}
+      UVICORN_LIMIT_MAX_REQUESTS: ${UVICORN_LIMIT_MAX_REQUESTS:-5000}
       PORT: 8000
     ports:
       - "8000:8000"

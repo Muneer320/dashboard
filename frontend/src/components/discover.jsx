@@ -977,10 +977,25 @@ export function Leaderboard() {
   const { user } = useUserAuth();
   const [tab, setTab] = React.useState("global");
   const [topLimit] = React.useState(100);
+  const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(25);
+  const [searchInput, setSearchInput] = React.useState("");
+  const [searchTerm, setSearchTerm] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [data, setData] = React.useState(null);
   const [eventIndex, setEventIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setSearchTerm(searchInput.trim());
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
+
+  React.useEffect(() => {
+    setPage(1);
+  }, [tab, eventIndex, searchTerm]);
 
   React.useEffect(() => {
     if (!user) return;
@@ -988,11 +1003,15 @@ export function Leaderboard() {
     setLoading(true);
     setError("");
     users
-      .myLeaderboard(topLimit)
+      .myLeaderboard({
+        topLimit,
+        page,
+        pageSize,
+        search: searchTerm || undefined,
+      })
       .then((payload) => {
         if (!cancelled) {
           setData(payload);
-          setEventIndex(0);
         }
       })
       .catch((e) => {
@@ -1012,23 +1031,38 @@ export function Leaderboard() {
     return () => {
       cancelled = true;
     };
-  }, [user, topLimit]);
+  }, [user, topLimit, page, pageSize, searchTerm]);
+
+  React.useEffect(() => {
+    const eventBoards = data?.event_boards ?? [];
+    if (eventBoards.length === 0) {
+      if (eventIndex !== 0) setEventIndex(0);
+      return;
+    }
+    if (eventIndex >= eventBoards.length) {
+      setEventIndex(0);
+    }
+  }, [data, eventIndex]);
 
   const globalBoard = data?.global_board ?? null;
   const eventBoards = data?.event_boards ?? [];
   const selectedEvent = eventBoards[eventIndex] ?? null;
-  const activeRows =
-    tab === "global"
-      ? globalBoard?.top ?? []
-      : selectedEvent?.top ?? [];
-  const activeMe =
-    tab === "global" ? globalBoard?.me ?? null : selectedEvent?.me ?? null;
+  const activeBoard = tab === "global" ? globalBoard : selectedEvent;
+  const activeRows = activeBoard?.top ?? [];
+  const activeMe = activeBoard?.me ?? null;
   const totalCount =
     tab === "global"
       ? globalBoard?.total_users ?? 0
       : selectedEvent?.total_participants ?? 0;
+  const filteredCount =
+    tab === "global"
+      ? globalBoard?.filtered_users ?? activeRows.length
+      : selectedEvent?.filtered_participants ?? activeRows.length;
+  const activePage = activeBoard?.page ?? page;
+  const totalPages = activeBoard?.total_pages ?? 0;
 
-  const podiumRows = activeRows.slice(0, 3);
+  const showPodium = !searchTerm && activePage === 1;
+  const podiumRows = showPodium ? activeRows.slice(0, 3) : [];
   const meInTop = !!activeRows.find((row) => row.is_current_user);
 
   const renderRow = (row, i) => (
@@ -1137,6 +1171,53 @@ export function Leaderboard() {
           {tab === "global"
             ? "Global ranking across all users, sorted by total cents."
             : "Event ranking among participants in the selected event."}
+        </div>
+
+        <div
+          style={{
+            marginTop: 18,
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search by name or username"
+            style={{
+              minWidth: isMobile ? "100%" : 320,
+              flex: isMobile ? "1 1 100%" : "0 0 auto",
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid var(--glass-border)",
+              background: "rgba(255,255,255,0.04)",
+              color: "var(--ink)",
+              outline: "none",
+              fontSize: 13,
+              fontFamily: "var(--f-mono)",
+            }}
+          />
+          <select
+            value={String(pageSize)}
+            onChange={(e) => setPageSize(Number(e.target.value) || 25)}
+            style={{
+              padding: "10px 12px",
+              borderRadius: 10,
+              border: "1px solid var(--glass-border)",
+              background: "rgba(255,255,255,0.04)",
+              color: "var(--ink)",
+              fontSize: 12,
+              fontFamily: "var(--f-mono)",
+            }}
+          >
+            {[10, 25, 50, 100].map((size) => (
+              <option key={size} value={size} style={{ background: '#13131a', color: 'var(--ink)' }}>
+                {size} / page
+              </option>
+            ))}
+          </select>
         </div>
 
         <div
@@ -1255,152 +1336,193 @@ export function Leaderboard() {
           </div>
         ) : (
           <>
-        <div
-          style={{
-            marginTop: 32,
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr 1.2fr 1fr" : "1fr 1.2fr 1fr",
-            gap: isMobile ? 8 : 14,
-            alignItems: "end",
-          }}
-        >
-          {[
-            { podiumRank: 2, h: isMobile ? 110 : 180 },
-            { podiumRank: 1, h: isMobile ? 140 : 230 },
-            { podiumRank: 3, h: isMobile ? 90 : 150 },
-          ].map((slot, i) => {
-            const row = podiumRows.find((entry) => entry.rank === slot.podiumRank);
-            return (
-            <div
-              key={i}
-              className="glass-strong"
-              style={{
-                height: slot.h,
-                padding: isMobile ? 12 : 22,
-                position: "relative",
-                overflow: "hidden",
-                background:
-                  slot.podiumRank === 1
-                    ? "linear-gradient(180deg, rgba(232,185,116,0.18), rgba(232,185,116,0.04))"
-                    : undefined,
-                borderColor:
-                  slot.podiumRank === 1 ? "rgba(232,185,116,0.4)" : undefined,
-              }}
-            >
+            {showPodium && (
               <div
                 style={{
-                  position: "absolute",
-                  top: -40,
-                  right: -40,
-                  width: 140,
-                  height: 140,
-                  borderRadius: "50%",
-                  background:
-                    slot.podiumRank === 1
-                      ? "radial-gradient(closest-side, rgba(232,185,116,0.3), transparent 70%)"
-                      : "radial-gradient(closest-side, rgba(127,119,221,0.18), transparent 70%)",
+                  marginTop: 32,
+                  display: "grid",
+                  gridTemplateColumns: isMobile ? "1fr 1.2fr 1fr" : "1fr 1.2fr 1fr",
+                  gap: isMobile ? 8 : 14,
+                  alignItems: "end",
                 }}
-              />
-              <div style={{ position: "relative" }}>
-                <div
-                  className="display"
-                  style={{
-                    fontSize: isMobile
-                      ? slot.podiumRank === 1
-                        ? 44
-                        : 36
-                      : slot.podiumRank === 1
-                        ? 86
-                        : 68,
-                    letterSpacing: "-0.04em",
-                    color: slot.podiumRank === 1 ? "var(--amber)" : "var(--ink)",
-                    lineHeight: 1,
-                  }}
-                >
-                  #{slot.podiumRank}
-                </div>
-                <div
-                  style={{
-                    marginTop: 6,
-                    fontFamily: "var(--f-display)",
-                    fontSize: isMobile ? 12 : 18,
-                    fontWeight: 600,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {row?.name ?? "—"}
-                </div>
-                <div
-                  style={{
-                    marginTop: 2,
-                    fontFamily: "var(--f-mono)",
-                    fontSize: 10,
-                    color: "var(--ink-mute)",
-                  }}
-                >
-                  {row ? `${row.cents} cents` : "—"}
-                </div>
+              >
+                {[
+                  { podiumRank: 2, h: isMobile ? 110 : 180 },
+                  { podiumRank: 1, h: isMobile ? 140 : 230 },
+                  { podiumRank: 3, h: isMobile ? 90 : 150 },
+                ].map((slot, i) => {
+                  const row = podiumRows.find((entry) => entry.rank === slot.podiumRank);
+                  return (
+                    <div
+                      key={i}
+                      className="glass-strong"
+                      style={{
+                        height: slot.h,
+                        padding: isMobile ? 12 : 22,
+                        position: "relative",
+                        overflow: "hidden",
+                        background:
+                          slot.podiumRank === 1
+                            ? "linear-gradient(180deg, rgba(232,185,116,0.18), rgba(232,185,116,0.04))"
+                            : undefined,
+                        borderColor:
+                          slot.podiumRank === 1 ? "rgba(232,185,116,0.4)" : undefined,
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: -40,
+                          right: -40,
+                          width: 140,
+                          height: 140,
+                          borderRadius: "50%",
+                          background:
+                            slot.podiumRank === 1
+                              ? "radial-gradient(closest-side, rgba(232,185,116,0.3), transparent 70%)"
+                              : "radial-gradient(closest-side, rgba(127,119,221,0.18), transparent 70%)",
+                        }}
+                      />
+                      <div style={{ position: "relative" }}>
+                        <div
+                          className="display"
+                          style={{
+                            fontSize: isMobile
+                              ? slot.podiumRank === 1
+                                ? 44
+                                : 36
+                              : slot.podiumRank === 1
+                                ? 86
+                                : 68,
+                            letterSpacing: "-0.04em",
+                            color: slot.podiumRank === 1 ? "var(--amber)" : "var(--ink)",
+                            lineHeight: 1,
+                          }}
+                        >
+                          #{slot.podiumRank}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 6,
+                            fontFamily: "var(--f-display)",
+                            fontSize: isMobile ? 12 : 18,
+                            fontWeight: 600,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {row?.name ?? "—"}
+                        </div>
+                        <div
+                          style={{
+                            marginTop: 2,
+                            fontFamily: "var(--f-mono)",
+                            fontSize: 10,
+                            color: "var(--ink-mute)",
+                          }}
+                        >
+                          {row ? `${row.cents} cents` : "—"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-            );
-          })}
-        </div>
+            )}
 
-        <div
-          className="glass"
-          style={{ marginTop: 20, padding: 0, overflow: "hidden" }}
-        >
-          {activeRows.length === 0 ? (
             <div
-              style={{
-                padding: "22px 18px",
-                color: "var(--ink-mute)",
-                fontSize: 13,
-                textAlign: "center",
-              }}
+              className="glass"
+              style={{ marginTop: 20, padding: 0, overflow: "hidden" }}
             >
-              No leaderboard entries available.
+              {activeRows.length === 0 ? (
+                <div
+                  style={{
+                    padding: "22px 18px",
+                    color: "var(--ink-mute)",
+                    fontSize: 13,
+                    textAlign: "center",
+                  }}
+                >
+                  No leaderboard entries available.
+                </div>
+              ) : (
+                activeRows.map((row, i) => renderRow(row, i))
+              )}
             </div>
-          ) : (
-            activeRows.map((row, i) => renderRow(row, i))
-          )}
-        </div>
 
-        <div
-          style={{
-            marginTop: 12,
-            display: "flex",
-            gap: 10,
-            flexWrap: "wrap",
-            alignItems: "center",
-            color: "var(--ink-mute)",
-            fontSize: 12,
-            fontFamily: "var(--f-mono)",
-          }}
-        >
-          <span>{`TOTAL: ${totalCount}`}</span>
-          <span>{`SHOWING: ${activeRows.length}`}</span>
-        </div>
-
-        {!meInTop && activeMe && (
-          <div className="glass" style={{ marginTop: 14, padding: 0, overflow: "hidden" }}>
             <div
               style={{
-                padding: "10px 16px",
-                borderBottom: "1px solid var(--glass-border)",
-                fontSize: 11,
+                marginTop: 12,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+                color: "var(--ink-mute)",
+                fontSize: 12,
                 fontFamily: "var(--f-mono)",
-                color: "var(--ink-mute)",
-                letterSpacing: "0.08em",
               }}
             >
-              YOUR POSITION
+              <span>{`TOTAL: ${totalCount}`}</span>
+              <span>{`MATCHED: ${filteredCount}`}</span>
+              <span>{`SHOWING: ${activeRows.length}`}</span>
             </div>
-            {renderRow(activeMe, 0)}
-          </div>
-        )}
+
+            <div
+              style={{
+                marginTop: 10,
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={activePage <= 1}
+              >
+                Prev
+              </button>
+              <span
+                style={{
+                  fontFamily: "var(--f-mono)",
+                  fontSize: 12,
+                  color: "var(--ink-mute)",
+                  minWidth: 98,
+                  textAlign: "center",
+                }}
+              >
+                {totalPages > 0 ? `PAGE ${activePage} / ${totalPages}` : "PAGE 0 / 0"}
+              </span>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => setPage((prev) => prev + 1)}
+                disabled={totalPages === 0 || activePage >= totalPages}
+              >
+                Next
+              </button>
+            </div>
+
+            {!meInTop && activeMe && (
+              <div className="glass" style={{ marginTop: 14, padding: 0, overflow: "hidden" }}>
+                <div
+                  style={{
+                    padding: "10px 16px",
+                    borderBottom: "1px solid var(--glass-border)",
+                    fontSize: 11,
+                    fontFamily: "var(--f-mono)",
+                    color: "var(--ink-mute)",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  YOUR POSITION
+                </div>
+                {renderRow(activeMe, 0)}
+              </div>
+            )}
           </>
         )}
       </div>

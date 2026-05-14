@@ -15,6 +15,7 @@ from app.services.event_service import (
     register_for_event,
 )
 from app.services.team_service import get_my_team
+from app.services.cache_service import auth_aware_cache_key_builder
 
 router = APIRouter()
 
@@ -33,7 +34,7 @@ def _build_event_response(event, participants_count: int) -> EventResponse:
 
 
 @router.get("", response_model=list[EventResponse])
-@cache(expire=120)
+@cache(expire=120, key_builder=auth_aware_cache_key_builder)
 async def get_events(
     supabase: AsyncClient = Depends(get_supabase),
     _: User = Depends(get_current_user),
@@ -44,7 +45,7 @@ async def get_events(
 
 
 @router.get("/public", response_model=list[EventResponse])
-@cache(expire=120)
+@cache(expire=120, key_builder=auth_aware_cache_key_builder)
 async def get_public_events(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> list[EventResponse]:

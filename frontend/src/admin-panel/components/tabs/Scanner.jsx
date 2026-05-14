@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { useData } from '../../context/DataContext'
 import QrScanner from '../QrScanner'
@@ -12,7 +12,7 @@ const SUB_TABS = [
 
 export default function Scanner() {
   const { user, canAccess } = useAuth()
-  const { participants, events, markAttended, markFoodClaimed, markEntryScanned } = useData()
+  const { participants, events, loadParticipants, markAttended, markFoodClaimed, markEntryScanned } = useData()
 
   // Determine default tab based on access
   const firstAccessible = SUB_TABS.find(t => canAccess(`scan${t.key.charAt(0).toUpperCase() + t.key.slice(1)}`))
@@ -28,6 +28,10 @@ export default function Scanner() {
     ? events
     : events.filter(ev => (user?.events || []).includes(ev.id))
   const needsEventPick = activeTab === 'attendance' || activeTab === 'food'
+
+  useEffect(() => {
+    loadParticipants()
+  }, [loadParticipants])
 
   // Participants in scope for the current tab
   function getScopeParticipants() {

@@ -9,6 +9,7 @@ DELETE /announcements/{id}      → delete announcement (admin)
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi_cache.decorator import cache
 from pydantic import BaseModel
 from supabase import AsyncClient
 
@@ -23,6 +24,7 @@ from app.services.announcement_service import (
     update_announcement,
     delete_announcement,
 )
+from app.services.cache_service import auth_aware_cache_key_builder
 
 router = APIRouter()
 
@@ -50,6 +52,7 @@ class UpdateAnnouncementBody(BaseModel):
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[AnnouncementItem])
+@cache(expire=120, key_builder=auth_aware_cache_key_builder)
 async def get_announcements(
     limit: int = Query(50, ge=1, le=500),
     category: str | None = Query(

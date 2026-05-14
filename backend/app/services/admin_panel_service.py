@@ -171,6 +171,7 @@ _EVENTS_LEAN_COLS = (
 # users: excludes `password_hash`, `unstop_id`, `is_profile_complete`,
 # `cents`, timestamps — only what aggregation code actually reads
 _USERS_LEAN_COLS = "id,name,username,is_attending,events,food,details"
+_TEAMS_LEAN_COLS = "id,member_ids"
 
 
 _PAGE_SIZE = 1000  # Supabase default max per request
@@ -239,6 +240,34 @@ async def _all_users_lean(supabase: AsyncClient) -> list[User]:
     async def _fetch():
         return [User.from_row(r) for r in await _fetch_all(supabase, "users", _USERS_LEAN_COLS)]
     return await _cached_lean("users_lean", _fetch)
+
+
+async def _all_teams_lean(supabase: AsyncClient) -> list[dict]:
+    """Team rows trimmed to only the columns the admin panel aggregation uses."""
+    async def _fetch():
+        return await _fetch_all(supabase, "teams", _TEAMS_LEAN_COLS)
+    return await _cached_lean("teams_lean", _fetch)
+
+
+def _build_team_members_map(team_rows: list[dict]) -> dict[str, list[str]]:
+    return {
+        str(t["id"]): [str(member_id) for member_id in (t.get("member_ids") or [])]
+        for t in team_rows
+    }
+
+
+def _build_event_entries_index(
+    users: list[User],
+    scoped_ids: set[str] | None = None,
+) -> dict[str, list[tuple[User, dict]]]:
+    """Group user event entries once so event-centric views avoid nested rescans."""
+    event_entries: dict[str, list[tuple[User, dict]]] = {}
+    for user in users:
+        for event_id, entry in (user.events or {}).items():
+            if scoped_ids is not None and event_id not in scoped_ids:
+                continue
+            event_entries.setdefault(event_id, []).append((user, entry))
+    return event_entries
 
 
 
@@ -320,6 +349,7 @@ async def get_events_with_stats(
     all_event_ids = [str(e.id) for e in all_events]
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
     scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
+    event_entries = _build_event_entries_index(all_users, scoped_ids)
 
     result: list[dict] = []
     for event in scoped_events:
@@ -328,10 +358,7 @@ async def get_events_with_stats(
         submitted_teams_seen: set[str] = set()
         registered_teams: set[str] = set()
 
-        for user in all_users:
-            entry = (user.events or {}).get(eid)
-            if entry is None:
-                continue
+        for _, entry in event_entries.get(eid, []):
             registered += 1
             team_id = entry.get("teamId")
             if team_id:
@@ -379,7 +406,7 @@ async def get_participants_list(
     all_events, all_users, team_rows = await asyncio.gather(
         _all_events_lean(supabase),
         _all_users_lean(supabase),
-        _fetch_all(supabase, "teams"),
+        _all_teams_lean(supabase),
     )
     all_event_ids = [str(e.id) for e in all_events]
     event_name_map = {str(e.id): e.name for e in all_events}
@@ -394,17 +421,13 @@ async def get_participants_list(
             )
         scoped_ids = {event_id}
 
-    team_members_map: dict[str, list[str]] = {
-        str(t["id"]): [str(m) for m in (t.get("member_ids") or [])]
-        for t in team_rows
-    }
+    team_members_map = _build_team_members_map(team_rows)
+    needle = (search or "").strip().lower()
 
     result: list[dict] = []
     for user in all_users:
-        if search:
-            s = search.lower()
-            if s not in user.name.lower() and s not in user.username.lower():
-                continue
+        if needle and needle not in user.name.lower() and needle not in user.username.lower():
+            continue
 
         user_events: dict = user.events or {}
 
@@ -453,7 +476,7 @@ async def restrict_participant(
     user_uuid = _parse_user_uuid(user_id)
     user_resp = await (
         supabase.table("users")
-        .select("*")
+        .select(_USERS_LEAN_COLS)
         .eq("id", str(user_uuid))
         .limit(1)
         .execute()
@@ -477,6 +500,7 @@ async def restrict_participant(
         .eq("id", str(user.id))
         .execute()
     )
+    _invalidate_lean_cache()
 
     return {"user_id": user_id, "event_id": event_id, "restricted": restricted}
 
@@ -508,7 +532,7 @@ async def lookup_participant(
         user_uuid = _parse_user_uuid(user_id)
         resp = await (
             supabase.table("users")
-            .select("*")
+            .select(_USERS_LEAN_COLS)
             .eq("id", str(user_uuid))
             .limit(1)
             .execute()
@@ -525,26 +549,23 @@ async def lookup_participant(
         try:
             resp = await (
                 supabase.table("users")
-                .select("*")
+                .select(_USERS_LEAN_COLS)
                 .or_(f"name.ilike.{pattern},username.ilike.{pattern}")
                 .execute()
             )
             found = rows(resp)
         except Exception:
-            # Fallback: paginated full-table scan
-            all_rows = await _fetch_all(supabase, "users")
             needle = q.lower()
             found = [
-                r
-                for r in all_rows
-                if needle in (r.get("name") or "").lower()
-                or needle in (r.get("username") or "").lower()
+                user
+                for user in await _all_users_lean(supabase)
+                if needle in user.name.lower() or needle in user.username.lower()
             ]
         if not found:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Participant not found."
             )
-        users = [User.from_row(r) for r in found]
+        users = found if found and isinstance(found[0], User) else [User.from_row(r) for r in found]
 
     else:
         raise HTTPException(
@@ -554,11 +575,8 @@ async def lookup_participant(
 
     result: list[dict] = []
     # Pre-fetch teams for member_ids lookup
-    team_rows = await _fetch_all(supabase, "teams")
-    team_members_map: dict[str, list[str]] = {
-        str(t["id"]): [str(m) for m in (t.get("member_ids") or [])]
-        for t in team_rows
-    }
+    team_rows = await _all_teams_lean(supabase)
+    team_members_map = _build_team_members_map(team_rows)
     for user in users:
         for eid, entry in (user.events or {}).items():
             if eid not in scoped_ids:
@@ -577,18 +595,16 @@ async def lookup_participant(
 
 async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
     """Events with full participant list for My Events tab."""
-    all_events, all_users, _team_rows = await asyncio.gather(
+    all_events, all_users, team_rows = await asyncio.gather(
         _all_events_lean(supabase),
         _all_users_lean(supabase),
-        _fetch_all(supabase, "teams"),
+        _all_teams_lean(supabase),
     )
     all_event_ids = [str(e.id) for e in all_events]
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
     scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
-    team_members_map: dict[str, list[str]] = {
-        str(t["id"]): [str(m) for m in (t.get("member_ids") or [])]
-        for t in _team_rows
-    }
+    team_members_map = _build_team_members_map(team_rows)
+    event_entries = _build_event_entries_index(all_users, scoped_ids)
 
     result: list[dict] = []
     for event in scoped_events:
@@ -598,11 +614,7 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
         submitted_teams_seen: set[str] = set()
         registered_teams: set[str] = set()
 
-        for user in all_users:
-            entry = (user.events or {}).get(eid)
-            if entry is None:
-                continue
-
+        for user, entry in event_entries.get(eid, []):
             registered += 1
             team_id = entry.get("teamId")
             if team_id:
@@ -970,6 +982,7 @@ async def update_event_meals_count(
         .execute()
     )
     updated = first_row(update_resp) or {}
+    _invalidate_lean_cache()
     return {
         "id": str(event_uuid),
         "name": updated.get("name") or first_row(resp)["name"],
@@ -1046,7 +1059,7 @@ async def set_user_meal_entry(
     user_uuid = _parse_user_uuid(user_id)
     user_resp = await (
         supabase.table("users")
-        .select("*")
+        .select(_USERS_LEAN_COLS)
         .eq("id", str(user_uuid))
         .limit(1)
         .execute()
@@ -1105,6 +1118,7 @@ async def set_user_meal_entry(
         .eq("id", str(user.id))
         .execute()
     )
+    _invalidate_lean_cache()
 
     return {
         "user_id": str(user.id),
@@ -1211,6 +1225,7 @@ async def get_event_detail(
     )
     all_event_ids = [str(e.id) for e in all_events]
     scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
+    event_entries = _build_event_entries_index(all_users, scoped_ids)
 
     if event_id not in scoped_ids:
         raise HTTPException(
@@ -1227,10 +1242,7 @@ async def get_event_detail(
     submitted_teams_seen: set[str] = set()
     registered_teams: set[str] = set()
 
-    for user in all_users:
-        entry = (user.events or {}).get(event_id)
-        if entry is None:
-            continue
+    for user, entry in event_entries.get(event_id, []):
         registered += 1
         team_id = entry.get("teamId")
         if team_id:

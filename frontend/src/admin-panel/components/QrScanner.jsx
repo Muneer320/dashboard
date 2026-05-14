@@ -83,7 +83,7 @@ export default function QrScanner({
     if (processingRef.current) return
 
     const now = Date.now()
-    if (now - lastScanRef.current < 1200) return
+    if (now - lastScanRef.current < 600) return
     lastScanRef.current = now
 
     processingRef.current = true
@@ -96,10 +96,16 @@ export default function QrScanner({
 
       const normalized = normalisePayload(raw)
       const lookup = normalized || raw
+      
+      // DEBUG: Log what was scanned and participants available
+      console.log('QR Scanned:', { raw, normalized, lookup })
+      console.log('Available participants:', participantsRef.current?.map(p => ({ id: p.id, name: p.name, username: p.username })))
+      
       const p = findParticipant(lookup)
 
       if (!p) {
         setResult({ type: 'error', msg: `No participant found for "${lookup}"` })
+        console.warn('Participant not found:', lookup)
         return
       }
       if (p.status === 'restricted') {
@@ -190,11 +196,19 @@ export default function QrScanner({
               processScanValue(result.getText())
             }
           }
-        )
+        ).catch(e => {
+          // Suppress zxing video playback errors - they're harmless
+          if (!String(e?.message || '').includes('play()')) {
+            console.error('zxing error:', e)
+          }
+        })
         controlsRef.current = controls
       } catch (e) {
         if (!active) return
-        setCameraError(e?.message || 'Camera access failed')
+        // Suppress zxing internal video errors
+        if (!String(e?.message || '').includes('play()')) {
+          setCameraError(e?.message || 'Camera access failed')
+        }
       }
     }
 
