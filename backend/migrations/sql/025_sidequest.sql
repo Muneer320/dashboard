@@ -107,21 +107,20 @@ CREATE TABLE IF NOT EXISTS leaderboard_snapshots (
 CREATE TABLE IF NOT EXISTS reward_inventory (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tier                    VARCHAR(20) NOT NULL UNIQUE,
-    -- STICKER | MUG | TSHIRT | PREMIUM_KIT
+    -- BADGE_STICKER | NOTEBOOK_MUG | TOTE_BAG
     total_stock             INTEGER NOT NULL,
     allocated               INTEGER NOT NULL DEFAULT 0,
     surprise_drop_reserve   INTEGER NOT NULL DEFAULT 0,
-    -- ~10% held back: 3 mugs, 5 tshirts, 1 premium kit
     updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Seed initial inventory
+-- Seed initial inventory — counts match the ops-confirmed allocation
+-- for ASCENT'26 (350 sticker kits, 70 notebook+mug, 20 tote bags).
 INSERT INTO reward_inventory (tier, total_stock, surprise_drop_reserve)
 VALUES
-    ('STICKER',     500, 0),
-    ('MUG',          30, 3),
-    ('TSHIRT',       50, 5),
-    ('PREMIUM_KIT',  10, 1)
+    ('BADGE_STICKER', 350, 0),
+    ('NOTEBOOK_MUG',   70, 0),
+    ('TOTE_BAG',       20, 0)
 ON CONFLICT (tier) DO NOTHING;
 
 -- Reward redemptions
@@ -130,9 +129,9 @@ CREATE TABLE IF NOT EXISTS reward_redemptions (
     student_id              UUID NOT NULL REFERENCES users(id),
     tier                    VARCHAR(20) NOT NULL,
     redemption_code         VARCHAR(20) UNIQUE,
-    -- generated only for STICKER (FCFS). NULL for rank-based tiers.
+    -- generated only for BADGE_STICKER (FCFS). NULL for rank-based tiers.
     snapshot_id             UUID REFERENCES leaderboard_snapshots(id),
-    -- set for MUG / TSHIRT / PREMIUM_KIT redemptions
+    -- set for NOTEBOOK_MUG / TOTE_BAG redemptions
     status                  VARCHAR(20) NOT NULL DEFAULT 'pending',
     -- pending | claimed | expired | returned
     generated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),

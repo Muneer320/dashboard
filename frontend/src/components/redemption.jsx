@@ -170,12 +170,14 @@ function CartItemCard({ item, onGive, working, justGiven }) {
             background: colors.badge + "22", color: colors.badge,
             border: `1px solid ${colors.badge}55`,
           }}>{item.label.toUpperCase()}</span>
-          <span style={{
-            fontSize: 10, fontWeight: 600, letterSpacing: "0.1em",
-            color: justGiven ? "#40d4c4" : "#f5b04c",
-          }}>
-            {justGiven ? "✓ GIVEN" : "RESERVED — PENDING HANDOUT"}
-          </span>
+          {justGiven && (
+            <span style={{
+              fontSize: 10, fontWeight: 600, letterSpacing: "0.1em",
+              color: "#40d4c4",
+            }}>
+              ✓ GIVEN
+            </span>
+          )}
         </div>
       </div>
       <button
@@ -209,6 +211,9 @@ export default function RedemptionBooth() {
   // Scan / lookup
   const [scanMode, setScanMode]       = useState("scan"); // "scan" | "manual"
   const [manualId, setManualId]       = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching]     = useState(false);
   const [scanKey, setScanKey]         = useState(0); // re-mount scanner on reset
 
   // Student data
@@ -268,6 +273,23 @@ export default function RedemptionBooth() {
 
   const onScan = useCallback((value) => { lookupStudent(value); }, [lookupStudent]);
 
+  // ── Debounced name search ──
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await redemptionApi.searchStudents(q);
+        setSearchResults(res || []);
+      } catch (err) {
+        if (err?.status === 401) { token.clearAdmin(); setLoggedIn(false); return; }
+        setSearchResults([]);
+      } finally { setSearching(false); }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
   // ── Hand over reward ──
   const giveReward = async (item) => {
     if (!window.confirm(`Hand over ${item.label} to ${studentData.student.name}?\n\nCoins were already deducted when they locked their cart.`)) return;
@@ -286,6 +308,7 @@ export default function RedemptionBooth() {
     setStudentData(null); setLookupErr(""); setAwardMsg(null);
     setGivenIds(new Set());
     setScanKey(k => k + 1); setScanMode("scan"); setManualId("");
+    setSearchQuery(""); setSearchResults([]);
   };
 
   // ── Login screen ──
@@ -333,9 +356,12 @@ export default function RedemptionBooth() {
           <div style={S.card}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>
-                {scanMode === "scan" ? "Scan Student QR" : "Enter Student ID"}
+                {scanMode === "scan" ? "Scan Student QR" : "Search Student"}
               </span>
-              <button style={S.btnSm} onClick={() => { setScanMode(m => m === "scan" ? "manual" : "scan"); setLookupErr(""); }}>
+              <button style={S.btnSm} onClick={() => {
+                setScanMode(m => m === "scan" ? "manual" : "scan");
+                setLookupErr(""); setSearchQuery(""); setSearchResults([]);
+              }}>
                 {scanMode === "scan" ? "Manual Entry" : "Use Scanner"}
               </button>
             </div>
@@ -347,16 +373,50 @@ export default function RedemptionBooth() {
               <QRScanner key={scanKey} onScan={onScan} />
             ) : (
               <div>
-                <label style={S.label}>STUDENT UUID</label>
+                <label style={S.label}>STUDENT NAME OR EMAIL</label>
                 <input
                   style={{ ...S.input, marginBottom: 12 }}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  value={manualId}
-                  onChange={e => setManualId(e.target.value)}
+                  placeholder="Start typing a name or email…"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  autoFocus
                 />
-                <button style={S.btnPrimary} onClick={() => lookupStudent(manualId)} disabled={looking}>
-                  LOOK UP
-                </button>
+                {searching && (
+                  <p style={{ fontSize: 12, color: "#6b6b8a", margin: "0 0 8px" }}>Searching…</p>
+                )}
+                {searchQuery.trim().length >= 2 && !searching && searchResults.length === 0 && (
+                  <p style={{ fontSize: 12, color: "#6b6b8a", margin: "0 0 8px" }}>No matches.</p>
+                )}
+                {searchResults.length > 0 && (
+                  <div style={{
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 10,
+                    overflow: "hidden",
+                    marginBottom: 8,
+                  }}>
+                    {searchResults.map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => lookupStudent(r.id)}
+                        style={{
+                          width: "100%", textAlign: "left",
+                          padding: "10px 12px",
+                          background: "transparent",
+                          border: "none",
+                          borderBottom: "1px solid rgba(255,255,255,0.05)",
+                          color: "var(--ink)",
+                          cursor: "pointer",
+                          display: "flex", justifyContent: "space-between", gap: 8,
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(127,119,221,0.10)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                      >
+                        <span style={{ fontSize: 13 }}>{r.name || "(no name)"}</span>
+                        <span style={{ fontSize: 11, color: "#6b6b8a" }}>{r.username}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

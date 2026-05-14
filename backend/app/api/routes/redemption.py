@@ -50,6 +50,34 @@ async def _balance(supabase: AsyncClient, student_id: str) -> int:
     return sum(r["coins"] for r in rows(resp))
 
 
+# ── GET /redemption/search?q=<name> ──────────────────────────────────────────
+
+@router.get("/search")
+async def search_students(
+    q: str = "",
+    admin: Admin = Depends(_get_redemption_volunteer),
+    supabase: AsyncClient = Depends(get_supabase),
+) -> list[dict[str, Any]]:
+    """Used by the booth's manual-entry UI to look up students by name or
+    email/username when the QR is unreadable. Returns at most 10 matches."""
+    query = q.strip()
+    if len(query) < 2:
+        return []
+
+    pattern = f"%{query}%"
+    resp = await (
+        supabase.table("users")
+        .select("id, name, username")
+        .or_(f"name.ilike.{pattern},username.ilike.{pattern}")
+        .limit(10)
+        .execute()
+    )
+    return [
+        {"id": str(r["id"]), "name": r.get("name") or "", "username": r.get("username") or ""}
+        for r in rows(resp)
+    ]
+
+
 # ── GET /redemption/student/{student_id} ─────────────────────────────────────
 
 @router.get("/student/{student_id}")
@@ -159,6 +187,24 @@ async def award_redemption(
         .eq("id", payload.reservation_id)
         .execute()
     )
+
+    # Increment the allocated counter — `allocated` now reflects only
+    # items that have physically left the booth.
+    inv_resp = await (
+        supabase.table("reward_inventory")
+        .select("allocated")
+        .eq("tier", tier)
+        .limit(1)
+        .execute()
+    )
+    inv = first_row(inv_resp)
+    if inv is not None:
+        await (
+            supabase.table("reward_inventory")
+            .update({"allocated": inv["allocated"] + 1})
+            .eq("tier", tier)
+            .execute()
+        )
 
     await write_audit(
         supabase,
