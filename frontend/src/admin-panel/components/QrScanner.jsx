@@ -187,6 +187,31 @@ export default function QrScanner({
         return
       }
 
+      // Food phase gate: only selected participants (phase >= 1) can claim food
+      if (actionLabelRef.current === 'Food' && (p.phase ?? 0) === 0) {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+        setToast({ label: 'Not Qualified', name: `${p.name} — not selected for Round 2`, isError: true })
+        toastTimerRef.current = setTimeout(() => setToast(null), 3000)
+        return
+      }
+
+      // Selection gate: event attendance requires phase >= 1 (selected for Round 2)
+      if (actionLabelRef.current === 'Attendance' && (p.phase ?? 0) === 0) {
+        // Use the toast popup so it's unmistakable
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+        setToast({ label: 'Not Qualified', name: `${p.name} — not selected for Round 2`, isError: true })
+        toastTimerRef.current = setTimeout(() => setToast(null), 3000)
+        return
+      }
+
+      // Entry informational: flag visitors (phase = 0) — scan still proceeds, just notify operator
+      if (actionLabelRef.current === 'Entry' && (p.phase ?? 0) === 0) {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+        setToast({ label: 'Visitor', name: `${p.name} — not selected for any round`, isWarn: true })
+        toastTimerRef.current = setTimeout(() => setToast(null), 2500)
+        // ↑ No return — scan continues below
+      }
+
       if (!trustServerRef.current && alreadyFieldRef.current && p[alreadyFieldRef.current]) {
         setResult({
           type: 'warn',
@@ -269,13 +294,25 @@ export default function QrScanner({
       {toast && (
         <div className="qr-toast-overlay" onClick={() => setToast(null)} role="dialog" aria-live="assertive">
           <div className="qr-toast">
-            <div className="qr-toast-icon">
-              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="9 12 11.5 14.5 15.5 10" />
-              </svg>
+            <div className={`qr-toast-icon${toast.isError ? ' error' : toast.isWarn ? ' warn' : ''}`}>
+              {toast.isError ? (
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
+              ) : toast.isWarn ? (
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="13" /><circle cx="12" cy="17" r="0.5" fill="currentColor" />
+                </svg>
+              ) : (
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="9 12 11.5 14.5 15.5 10" />
+                </svg>
+              )}
             </div>
-            <p className="qr-toast-label">{toast.label}</p>
+            <p className={`qr-toast-label${toast.isError ? ' error' : toast.isWarn ? ' warn' : ''}`}>{toast.label}</p>
             {toast.name && <p className="qr-toast-name">{toast.name}</p>}
             <p className="qr-toast-dismiss">Tap to dismiss</p>
           </div>

@@ -77,6 +77,14 @@ async def scan_food(supabase: AsyncClient, user: User, event_id: str) -> str:
             detail="User has not completed main gate entry. Entry scan required before food can be claimed.",
         )
 
+    # Phase gate: only selected participants (phase >= 1) can claim food
+    event_entry = (user.events or {}).get(event_id, {})
+    if int(event_entry.get("phase") or 0) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has not been selected for Round 2. Only selected participants (phase = 1) can claim food.",
+        )
+
     # Get the event to check meals_count limit
     resp = await (
         supabase.table("events")
@@ -191,6 +199,13 @@ async def scan_event_entry(
 
     if event_entry.get("restricted"):
         return "User is restricted from this event"
+
+    # SELECTION GATE: only phase >= 1 (selected) participants may attend events
+    if int(event_entry.get("phase") or 0) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has not been selected for Round 2. Only selected participants (phase = 1) can mark event attendance.",
+        )
 
     if event_entry.get("isAttending"):
         return "User already scanned for this event"
