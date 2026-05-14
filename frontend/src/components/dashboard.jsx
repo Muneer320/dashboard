@@ -640,7 +640,7 @@ export function Dashboard() {
                         letterSpacing: "-0.01em",
                       }}
                     >
-                      Scan at any meal counter.
+                      Your Universal QR Code
                     </div>
                     <div
                       style={{
@@ -649,7 +649,7 @@ export function Dashboard() {
                         fontSize: 12,
                       }}
                     >
-                      One code · all meals · both days
+                      One code for <b>Everything</b> for both days!
                     </div>
                   </div>
                   <div

@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt pyproject.toml README.md main.py ./
+COPY requirements.txt pyproject.toml README.md main.py anvil.html ./
 COPY app ./app
 COPY docker ./docker
 

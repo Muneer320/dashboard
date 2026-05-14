@@ -248,6 +248,101 @@ async def manual_registration(
     return ManualEnrollResponse(**data)
 
 
+# ── Select Participants (phase = 1) ───────────────────────────────────────────
+
+class _SelectPhaseBody(BaseModel):
+    event_id: str
+    emails: list[str]
+
+
+@router.post("/registrations/select-phase")
+async def select_phase(
+    body: _SelectPhaseBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    """
+    Given a list of emails and an event_id, set phase = 1 inside
+    ``users.events[event_id]`` for each user found and registered.
+
+    Returns:
+        {
+          "updated":    <int>,
+          "edge_cases": [{"email": ..., "reason": ...}, ...]
+        }
+
+    Edge-case reasons:
+      - "User not found"
+      - "Not registered for this event"
+    """
+    updated    = 0
+    edge_cases = []
+
+    # Normalise emails once
+    normalised = [e.strip().lower() for e in body.emails if e.strip()]
+
+    if not normalised:
+        return {"updated": 0, "edge_cases": []}
+
+    # Fetch matching users in batches of 50 to avoid HTTP 414 (URI Too Large).
+    # PostgREST encodes .in_() as a URL query param — large lists blow nginx's limit.
+    _BATCH = 50
+    db_rows: list[dict] = []
+    for i in range(0, len(normalised), _BATCH):
+        chunk = normalised[i : i + _BATCH]
+        try:
+            resp = await (
+                supabase.table("users")
+                .select("id, username, events")
+                .in_("username", chunk)
+                .execute()
+            )
+            if resp.data:
+                db_rows.extend(resp.data)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database query failed (batch {i // _BATCH + 1}): {exc}",
+            )
+
+    # Index by normalised username for O(1) lookup
+    found = {
+        r["username"].strip().lower(): r
+        for r in db_rows
+        if isinstance(r.get("username"), str)
+    }
+
+    for email in normalised:
+        row = found.get(email)
+        if not row:
+            edge_cases.append({"email": email, "reason": "User not found"})
+            continue
+
+        events_col: dict = row.get("events") or {}
+        if not isinstance(events_col, dict) or body.event_id not in events_col:
+            edge_cases.append({"email": email, "reason": "Not registered for this event"})
+            continue
+
+        # Safely copy event entry — guard against None / non-dict values in production
+        raw_entry = events_col[body.event_id]
+        event_entry = dict(raw_entry) if isinstance(raw_entry, dict) else {}
+        event_entry["phase"] = 1
+        events_col[body.event_id] = event_entry
+
+        try:
+            await (
+                supabase.table("users")
+                .update({"events": events_col})
+                .eq("id", row["id"])
+                .execute()
+            )
+            updated += 1
+        except Exception as exc:
+            edge_cases.append({"email": email, "reason": f"Update failed: {exc}"})
+
+    return {"updated": updated, "edge_cases": edge_cases}
+
+
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)

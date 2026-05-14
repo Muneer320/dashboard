@@ -47,6 +47,7 @@ class ParticipantItem(BaseModel):
     isAttending: bool            # event-level gate
     foodClaimed: bool
     entryScanned: bool           # campus-level gate (user.is_attending)
+    phase: int = 0               # 0 = R1, 1 = selected, 2 = R2 active
     submitted: bool              # True once ANY phase has a completed submission
     submissionData: Optional[dict] = None  # raw submission JSONB from users.events[eid]
 

@@ -153,6 +153,7 @@ def _build_participant_dict(
         "isAttending": bool(entry.get("isAttending", False)),
         "foodClaimed": any(food.values()),
         "entryScanned": bool(user.is_attending),
+        "phase": int(entry.get("phase") or 0),
         "submitted": _has_any_submission(entry),
         "submissionData": sub if isinstance(sub, dict) else None,
     }

@@ -13,7 +13,7 @@ const SPONSORS = [
   { name: 'Vorflux.AI',            logo: `${s3Base}/Vorflux.svg`,             tier: 'GOLD',      color: '#7F77DD', desc: 'Building next-generation AI infrastructure for the modern web.' },
   { name: 'Together Fund',         logo: `${s3Base}/TogetherFund.svg`,        tier: 'SILVER',    color: '#1D9E75', desc: 'Backing the builders of tomorrow through community-led investment.' },
   { name: 'CodeCrafters',          logo: `${s3Base}/CodeCrafters.svg`,        tier: 'SILVER',    color: '#7F77DD', desc: 'The platform where engineers learn by rebuilding real-world software.' },
-  { name: 'Dymension',             logo: `${s3Base}/Dymension.svg`,           tier: 'SILVER',    color: '#818CF8', desc: 'A network of easily deployable and lightning fast modular blockchains.' },
+  { name: 'Dymension',             logo: `${s3Base}/Dymension.svg`,           tier: 'SILVER',    color: '#818CF8', desc: 'The future of fashion, an AI-driven clothing brand redefining style through generative design.' },
   { name: 'Omium AI',              logo: `${s3Base}/Omium.svg`,               tier: 'SILVER',    color: '#1D9E75', desc: 'AI-first solutions for a smarter, more connected world.' },
   { name: 'Fueler',                logo: `${s3Base}/Fueler.svg`,              tier: 'SILVER',    color: '#E8B974', desc: 'Proof-of-work portfolios for developers, designers, and creators.' },
   { name: 'Eyecandy Robotics',     logo: `${s3Base}/EyeCandy%20Robotics.svg`, tier: 'ROBOTICS',  color: '#EC4899', desc: 'Pushing the edge of embedded systems and autonomous hardware.' },

@@ -233,6 +233,9 @@ export const adminPanel = {
   manualEnroll: (body) =>
     post('/admin-panel/registrations/manual', body, { adminAuth: true }),
 
+  selectPhase: (eventId, emails) =>
+    post('/admin-panel/registrations/select-phase', { event_id: eventId, emails }, { adminAuth: true }),
+
   downloadSubmissions: async (eventId) => {
     const tok = token.getAdmin();
     const res = await fetch(`${BASE}/admin-panel/events/${eventId}/submissions/download`, {
