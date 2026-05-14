@@ -285,16 +285,26 @@ async def select_phase(
         return {"updated": 0, "edge_cases": []}
 
     # Fetch all matching users in one query (username = email in this system)
-    resp = await (
-        supabase.table("users")
-        .select("id, username, events")
-        .in_("username", normalised)
-        .execute()
-    )
-    rows = resp.data or []
+    try:
+        resp = await (
+            supabase.table("users")
+            .select("id, username, events")
+            .in_("username", normalised)
+            .execute()
+        )
+        db_rows = resp.data if resp.data is not None else []
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database query failed: {exc}",
+        )
 
     # Index by normalised username for O(1) lookup
-    found = {r["username"].strip().lower(): r for r in rows}
+    found = {
+        r["username"].strip().lower(): r
+        for r in db_rows
+        if isinstance(r.get("username"), str)
+    }
 
     for email in normalised:
         row = found.get(email)
@@ -302,23 +312,27 @@ async def select_phase(
             edge_cases.append({"email": email, "reason": "User not found"})
             continue
 
-        events: dict = row.get("events") or {}
-        if body.event_id not in events:
+        events_col: dict = row.get("events") or {}
+        if not isinstance(events_col, dict) or body.event_id not in events_col:
             edge_cases.append({"email": email, "reason": "Not registered for this event"})
             continue
 
-        # Set phase = 1 for this event
-        event_entry = dict(events[body.event_id])
+        # Safely copy event entry — guard against None / non-dict values in production
+        raw_entry = events_col[body.event_id]
+        event_entry = dict(raw_entry) if isinstance(raw_entry, dict) else {}
         event_entry["phase"] = 1
-        events[body.event_id] = event_entry
+        events_col[body.event_id] = event_entry
 
-        await (
-            supabase.table("users")
-            .update({"events": events})
-            .eq("id", row["id"])
-            .execute()
-        )
-        updated += 1
+        try:
+            await (
+                supabase.table("users")
+                .update({"events": events_col})
+                .eq("id", row["id"])
+                .execute()
+            )
+            updated += 1
+        except Exception as exc:
+            edge_cases.append({"email": email, "reason": f"Update failed: {exc}"})
 
     return {"updated": updated, "edge_cases": edge_cases}
 
