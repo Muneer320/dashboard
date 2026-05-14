@@ -1,6 +1,8 @@
 import httpx
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi_cache import FastAPICache
 
+from app.core.config import settings
 from app.db.supabase_client import get_client
 
 router = APIRouter()
@@ -30,4 +32,13 @@ async def health_check(
             ),
         ) from exc
 
-    return {"status": "ok", "db": "ok"}
+    response: dict[str, str] = {"status": "ok", "db": "ok"}
+    try:
+        backend = FastAPICache.get_backend()
+        response["cache"] = backend.__class__.__name__
+    except Exception:
+        response["cache"] = "unknown"
+    if settings.REDIS_URL:
+        response["redis_configured"] = "yes"
+
+    return response

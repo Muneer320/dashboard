@@ -98,8 +98,23 @@ export const users = {
   events: (id) => get(`/users/${id}/events`),
   meals: (id) => get(`/users/${id}/meals`),
   myEvents: () => get('/users/me/my-events'),
-  myLeaderboard: (topLimit = 100) =>
-    get(`/users/me/leaderboard?top_limit=${encodeURIComponent(topLimit)}`),
+  myLeaderboard: (options = 100) => {
+    if (typeof options === 'number') {
+      return get(`/users/me/leaderboard?top_limit=${encodeURIComponent(options)}`);
+    }
+    const {
+      topLimit = 100,
+      page = 1,
+      pageSize,
+      search,
+    } = options || {};
+    const params = new URLSearchParams();
+    params.set('top_limit', String(topLimit));
+    params.set('page', String(page));
+    if (pageSize != null) params.set('page_size', String(pageSize));
+    if (search && String(search).trim()) params.set('search', String(search).trim());
+    return get(`/users/me/leaderboard?${params.toString()}`);
+  },
   mirageProfile: () => get('/users/me/mirage/profile'),
   uploadMirageImage: (file, poseLabel = null) => {
     const formData = new FormData();

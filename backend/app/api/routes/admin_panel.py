@@ -97,6 +97,7 @@ from app.services.mirage_pipeline_service import (
     update_mirage_job_image_review,
 )
 from app.services.announcement_service import list_announcements
+from app.services.cache_service import auth_aware_cache_key_builder
 
 router = APIRouter()
 
@@ -217,7 +218,7 @@ async def post_regenerate_uncovered(
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)
-@cache(expire=60)
+@cache(expire=60, key_builder=auth_aware_cache_key_builder)
 async def overview_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -232,7 +233,7 @@ async def overview_stats(
 
 
 @router.get("/events/stats", response_model=list[EventStatsItem])
-@cache(expire=60)
+@cache(expire=60, key_builder=auth_aware_cache_key_builder)
 async def events_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked

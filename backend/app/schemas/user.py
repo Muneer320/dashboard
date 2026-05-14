@@ -45,16 +45,26 @@ class LeaderboardEntry(BaseModel):
 
 class GlobalLeaderboardResponse(BaseModel):
     total_users: int
+    filtered_users: int | None = None
     top: list[LeaderboardEntry]
     me: LeaderboardEntry | None = None
+    page: int = 1
+    page_size: int = 100
+    total_pages: int = 0
+    search: str | None = None
 
 
 class EventLeaderboardItem(BaseModel):
     event_id: str
     event_name: str
     total_participants: int
+    filtered_participants: int | None = None
     top: list[LeaderboardEntry]
     me: LeaderboardEntry | None = None
+    page: int = 1
+    page_size: int = 100
+    total_pages: int = 0
+    search: str | None = None
 
 
 class MyLeaderboardResponse(BaseModel):
