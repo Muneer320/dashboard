@@ -53,7 +53,7 @@ const SOURCE_DESC = {
   SPOT_LOCK:       "Upload your RSVP/registration story or post to confirm your attendance.",
   GRID_BLAST:      "Post a 4-tile Instagram story capturing ASCENT aesthetics, tag @ascent.sst and use #ASCENT26.",
   BINGO_RUSH:      "Complete 6 out of 9 activities on the bingo card and post it on your Instagram story with the required tags.",
-  LIVE_DROP:       "Post about any ongoing ASCENT event on LinkedIn during D-Day with 'ASCENT', 'Scaler School of Technology' and #ASCENT26.",
+  LIVE_DROP:       "Post about any ongoing ASCENT event on LinkedIn during D-Day. Tag @Ascent and @Scaler School of Technology, and include the hashtag #ASCENT26.",
   VISION_BOARD:    "Write your vision on the ASCENT Vision Wall, click a picture, and post it on LinkedIn with the required tags.",
   FINTECH_FORWARD: "Pick a Razorpay problem statement, pitch your solution during the live session, and get verified directly by the volunteer team.",
   HALL_OF_MVPS:    "Explore startup products/prototypes at the MVP Museum and post your favorite product or founder story on LinkedIn to earn cents.",
@@ -583,16 +583,6 @@ function CommandGuide({ isMobile }) {
                   </div>
                 </div>
 
-                <div style={{
-                  padding: "12px 14px", borderRadius: 10,
-                  background: "rgba(245,176,76,0.07)",
-                  border: "1px solid rgba(245,176,76,0.22)",
-                  fontSize: 12.5, color: "var(--ink-mute)", lineHeight: 1.6,
-                }}>
-                  <strong style={{ color: "#f5b04c" }}>To redeem —</strong>{" "}
-                  go to Rewards, generate a code, then visit the merch booth
-                  before it expires. Code is valid for 30 min.
-                </div>
               </div>
             </div>
 
@@ -2947,11 +2937,11 @@ export function GuidePage() {
 
         <div className="glass" style={{ padding: isMobile ? 20 : 28, borderRadius: 14 }}>
           {[
-            { n: 1, head: "Open Rewards",         body: "Go to the Rewards section in your dashboard.",                         icon: "🏆" },
-            { n: 2, head: "Select a reward",       body: "Pick a reward you're eligible for based on your Cents balance.",        icon: "👆" },
-            { n: 3, head: "Generate a code",       body: "Tap Claim to generate a redemption QR code — it's valid for 30 min.",  icon: "📲" },
-            { n: 4, head: "Visit the booth",       body: "Head to the merch booth before your code expires.",                     icon: "🏃" },
-            { n: 5, head: "Collect your reward",   body: "Volunteer scans or reads your code and hands over the reward.",         icon: "🎁" },
+            { n: 1, head: "Open Rewards",         body: "Go to the Rewards section in your dashboard.",                                            icon: "🏆" },
+            { n: 2, head: "Reserve your merch",    body: "Add the merch you're eligible for to your cart and lock it in. Coins are deducted immediately.", icon: "🛒" },
+            { n: 3, head: "Visit the redemption booth", body: "Head to the redemption booth at the venue.",                                         icon: "🏃" },
+            { n: 4, head: "Show your redemption QR", body: "Open the My QR page and show the code to the volunteer.",                              icon: "📱" },
+            { n: 5, head: "Collect your reward",   body: "The volunteer scans your QR and hands over the merch from your cart.",                  icon: "🎁" },
           ].map(({ n, head, body, icon }, idx, arr) => (
             <div key={n} style={{
               display: "flex", gap: 18,
@@ -3098,14 +3088,14 @@ export function MyQRPage() {
           padding: isMobile ? 24 : 36, maxWidth: 480, width: "100%",
           display: "flex", flexDirection: "column", alignItems: "center", gap: 18,
         }}>
-          <div className="eyebrow">My QR</div>
-          <h2 style={{ margin: 0, textAlign: "center" }}>Show this at any booth</h2>
+          <div className="eyebrow">Redemption QR</div>
+          <h2 style={{ margin: 0, textAlign: "center" }}>Show this at the redemption booth</h2>
           <p style={{
             color: "var(--ink-mute)", textAlign: "center", margin: 0, fontSize: 14, lineHeight: 1.5,
           }}>
-            A volunteer scans this code to credit coins for the activity you just
-            completed at their booth. The booth is pre-scoped to one micro-event,
-            so you can&apos;t be awarded for the wrong thing.
+            Once you&apos;ve reserved your rewards from the cart, show this QR
+            to a volunteer at the redemption booth and they&apos;ll hand over
+            your merch. No code needed — your QR is your identity.
           </p>
 
           <div style={{
@@ -3131,8 +3121,8 @@ export function MyQRPage() {
             color: "var(--ink-mute)", fontSize: 12, lineHeight: 1.5,
           }}>
             <strong style={{ color: "var(--ink)" }}>Heads up:</strong>{" "}
-            keep your screen on full brightness. Each booth credits a fixed
-            coin amount; one award per student per booth.
+            keep your screen on full brightness so the volunteer can scan
+            quickly. Reserved items in your cart will be handed over together.
           </div>
         </div>
       </div>
@@ -3147,7 +3137,7 @@ const TERMS_SECTIONS = [
   {
     id: "ugc",
     emoji: "📤",
-    title: "User-Generated Content (UGC) Submissions",
+    title: "Content Submission Guidelines",
     color: "var(--violet)",
     items: [
       "You may submit proof of participation for eligible activities listed in the How to Earn guide.",
