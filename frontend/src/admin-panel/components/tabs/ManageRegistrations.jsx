@@ -728,6 +728,9 @@ export default function ManageRegistrations() {
         </div>
       )}
 
+      {/* ── Add Participant Manually ─────────────────────────── */}
+      <ManualEntryCard events={events} onCredentialEmailed={sendCredentialEmails} />
+
       {/* ── Find users missing from your credentials CSV ────────────────── */}
       <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
         <h3 style={{ marginBottom: 6 }}>Find Users Missing From Your CSV</h3>
@@ -925,4 +928,399 @@ const tdStyle = {
   padding: '11px 12px',
   color: 'var(--text-primary)',
   verticalAlign: 'middle',
+}
+
+// ─── Manual Entry Card ───────────────────────────────────────────────────────
+
+const TEAM_MODES = [
+  { value: 'none',     label: '👤 No Team',       desc: 'Solo participant' },
+  { value: 'existing', label: '🔗 Existing Team',  desc: 'Add to an existing team' },
+  { value: 'new',      label: '✦ New Team',        desc: 'Create a new team' },
+]
+
+const EMPTY_FORM = {
+  name: '', email: '', password: '',
+  event_id: '', team_mode: 'none',
+  existing_team_name: '', existing_member_name: '', new_team_name: '',
+}
+
+function ManualEntryCard({ events, onCredentialEmailed }) {
+  const [form, setForm]           = useState(EMPTY_FORM)
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState(null)
+  const [result, setResult]       = useState(null)   // ManualEnrollResponse from backend
+  const [showPw, setShowPw]       = useState(false)
+  const [copied, setCopied]       = useState(false)
+  const [emailStatus, setEmailStatus] = useState(null) // null | 'sending' | 'sent' | 'failed'
+
+  const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.name.trim())     { setError('Name is required.'); return }
+    if (!form.email.trim())    { setError('Email is required.'); return }
+    if (!form.password.trim()) { setError('Password is required.'); return }
+    if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return }
+    if (!form.event_id)        { setError('Please select an event.'); return }
+    if (form.team_mode === 'existing' && !form.existing_team_name.trim()) {
+      setError('Please enter the existing team name.'); return
+    }
+    if (form.team_mode === 'new' && !form.new_team_name.trim()) {
+      setError('Please enter the new team name.'); return
+    }
+
+    setLoading(true); setError(null); setResult(null); setEmailStatus(null)
+    try {
+      const res = await adminPanel.manualEnroll({
+        name:                 form.name.trim(),
+        email:                form.email.trim().toLowerCase(),
+        password:             form.password,
+        event_id:             form.event_id,
+        team_mode:            form.team_mode,
+        existing_team_name:   form.existing_team_name.trim() || null,
+        existing_member_name: form.existing_member_name.trim() || null,
+        new_team_name:        form.new_team_name.trim() || null,
+      })
+      setResult(res)
+      setForm(EMPTY_FORM)
+      setShowPw(false)
+    } catch (err) {
+      setError(err.message || 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCopy = () => {
+    if (!result) return
+    const text = [
+      `Name:     ${result.name}`,
+      `Email:    ${result.email}`,
+      result.password ? `Password: ${result.password}` : null,
+      `Event:    ${result.event_name}`,
+      result.team_name ? `Team:     ${result.team_name}` : null,
+    ].filter(Boolean).join('\n')
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  const handleSendEmail = async () => {
+    if (!result) return
+    setEmailStatus('sending')
+    const status = await onCredentialEmailed([{
+      name: result.name, email: result.email, password: result.password || '(existing account)',
+    }])
+    setEmailStatus(status)
+  }
+
+  // ── Pill selector for team mode ────────────────────────────────────────────
+  const TeamModePill = ({ mode }) => {
+    const active = form.team_mode === mode.value
+    return (
+      <button
+        type="button"
+        onClick={() => set('team_mode', mode.value)}
+        style={{
+          flex: 1, padding: '10px 8px', borderRadius: 10, cursor: 'pointer',
+          border: active ? '1.5px solid #6366f1' : '1.5px solid var(--border-color)',
+          background: active ? 'rgba(99,102,241,0.12)' : 'var(--bg-secondary)',
+          color: active ? '#a5b4fc' : 'var(--text-secondary)',
+          transition: 'all .18s', textAlign: 'center',
+          fontSize: 13, fontWeight: active ? 600 : 400,
+        }}
+      >
+        <div style={{ fontSize: 15, marginBottom: 2 }}>{mode.label.split(' ')[0]}</div>
+        <div>{mode.label.split(' ').slice(1).join(' ')}</div>
+        <div style={{ fontSize: 10, marginTop: 2, opacity: 0.7 }}>{mode.desc}</div>
+      </button>
+    )
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
+      <h3 style={{ marginBottom: 6 }}>Add Participant Manually</h3>
+      <p style={{ marginBottom: 22, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
+        Create a single participant account and enrol them in an event. If the email already
+        exists, the event is added to their existing account (no duplicate if already enrolled).
+      </p>
+
+      <form onSubmit={handleSubmit} autoComplete="off">
+        {/* ── Row 1: Name + Email ─────────────────────────────────────────── */}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={labelStyle}>Full Name <span style={{ color: '#f87171' }}>*</span></label>
+            <input
+              className="input-field"
+              type="text"
+              placeholder="e.g. Arjun Sharma"
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
+              disabled={loading}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={labelStyle}>Email <span style={{ color: '#f87171' }}>*</span></label>
+            <input
+              className="input-field"
+              type="email"
+              placeholder="e.g. arjun@example.com"
+              value={form.email}
+              onChange={e => set('email', e.target.value)}
+              disabled={loading}
+              autoComplete="off"
+            />
+          </div>
+        </div>
+
+        {/* ── Row 2: Password + Event ─────────────────────────────────────── */}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 18 }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={labelStyle}>Password <span style={{ color: '#f87171' }}>*</span></label>
+            <div style={{ position: 'relative' }}>
+              <input
+                className="input-field"
+                type={showPw ? 'text' : 'password'}
+                placeholder="Min 6 characters"
+                value={form.password}
+                onChange={e => set('password', e.target.value)}
+                disabled={loading}
+                autoComplete="new-password"
+                style={{ paddingRight: 40 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPw(v => !v)}
+                style={{
+                  position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-muted)', fontSize: 14, lineHeight: 1,
+                }}
+                tabIndex={-1}
+              >
+                {showPw ? '🙈' : '👁️'}
+              </button>
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={labelStyle}>Event <span style={{ color: '#f87171' }}>*</span></label>
+            <select
+              className="input-field"
+              value={form.event_id}
+              onChange={e => set('event_id', e.target.value)}
+              disabled={loading}
+            >
+              <option value="">— Select an Event —</option>
+              {events.map(ev => (
+                <option key={ev.eventId || ev.id} value={ev.eventId || ev.id}>
+                  {ev.name || ev.eventName}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* ── Team mode picker ────────────────────────────────────────────── */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={labelStyle}>Team Assignment</label>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {TEAM_MODES.map(m => <TeamModePill key={m.value} mode={m} />)}
+          </div>
+        </div>
+
+        {/* ── Conditional team fields ─────────────────────────────────────── */}
+        {form.team_mode === 'existing' && (
+          <div style={{
+            display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16,
+            padding: '14px 16px', borderRadius: 10,
+            background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.2)',
+          }}>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={labelStyle}>Existing Team Name <span style={{ color: '#f87171' }}>*</span></label>
+              <input
+                className="input-field"
+                type="text"
+                placeholder="e.g. Team Alpha"
+                value={form.existing_team_name}
+                onChange={e => set('existing_team_name', e.target.value)}
+                disabled={loading}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
+                Searched by name (case-insensitive) within the selected event.
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={labelStyle}>Any Existing Member's Name <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
+              <input
+                className="input-field"
+                type="text"
+                placeholder="e.g. Priya Nair"
+                value={form.existing_member_name}
+                onChange={e => set('existing_member_name', e.target.value)}
+                disabled={loading}
+              />
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
+                For reference only — the team is matched by name above.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {form.team_mode === 'new' && (
+          <div style={{
+            marginBottom: 16, padding: '14px 16px', borderRadius: 10,
+            background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.2)',
+          }}>
+            <label style={labelStyle}>New Team Name <span style={{ color: '#f87171' }}>*</span></label>
+            <input
+              className="input-field"
+              type="text"
+              placeholder="e.g. Team Phoenix"
+              value={form.new_team_name}
+              onChange={e => set('new_team_name', e.target.value)}
+              disabled={loading}
+              style={{ maxWidth: 380 }}
+            />
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
+              A new team will be created with this participant as the leader.
+            </div>
+          </div>
+        )}
+
+        {/* ── Error ───────────────────────────────────────────────────────── */}
+        {error && (
+          <div style={{
+            marginBottom: 14, padding: '10px 14px', borderRadius: 8,
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+            color: '#f87171', fontSize: 13,
+          }}>
+            ⚠️ {error}
+          </div>
+        )}
+
+        {/* ── Submit ──────────────────────────────────────────────────────── */}
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={loading}
+          style={{ minWidth: 200, display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          {loading ? (
+            <>
+              <span style={{
+                width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)',
+                borderTopColor: '#fff', borderRadius: '50%',
+                animation: 'spin 0.7s linear infinite', display: 'inline-block',
+              }} />
+              Adding Participant…
+            </>
+          ) : '➕ Add Participant'}
+        </button>
+      </form>
+
+      {/* ── Success banner ──────────────────────────────────────────────── */}
+      {result && (
+        <div style={{
+          marginTop: 22, padding: '18px 20px', borderRadius: 12,
+          background: 'rgba(16,185,129,0.08)', border: '1.5px solid rgba(16,185,129,0.3)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: '#10b981', marginBottom: 4 }}>
+                {result.is_new_user ? '🎉 New participant created & enrolled!' : '✓ Existing user enrolled in event!'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{result.message}</div>
+            </div>
+            <button
+              type="button"
+              onClick={handleCopy}
+              style={{
+                padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12,
+                background: copied ? 'rgba(16,185,129,0.15)' : 'var(--bg-secondary)',
+                border: copied ? '1px solid rgba(16,185,129,0.4)' : '1px solid var(--border-color)',
+                color: copied ? '#10b981' : 'var(--text-secondary)',
+                transition: 'all .2s', whiteSpace: 'nowrap',
+              }}
+            >
+              {copied ? '✓ Copied!' : '📋 Copy'}
+            </button>
+          </div>
+
+          {/* Credential grid */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gap: 10, marginTop: 16,
+          }}>
+            {[
+              { label: 'Name',  value: result.name },
+              { label: 'Email', value: result.email, mono: true },
+              result.password
+                ? { label: 'Password', value: result.password, mono: true, secret: true }
+                : { label: 'Password', value: '(existing account — unchanged)', dim: true },
+              { label: 'Event', value: result.event_name },
+              result.team_name ? { label: 'Team', value: result.team_name } : null,
+            ].filter(Boolean).map(item => (
+              <div key={item.label} style={{
+                padding: '10px 14px', borderRadius: 8,
+                background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+              }}>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 4 }}>
+                  {item.label}
+                </div>
+                <div style={{
+                  fontSize: 13, fontWeight: 600,
+                  fontFamily: item.mono ? 'monospace' : 'inherit',
+                  color: item.dim ? 'var(--text-muted)' : 'var(--text-primary)',
+                  wordBreak: 'break-all',
+                }}>
+                  {item.value}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Email send button — only meaningful if a password was returned (new user) */}
+          {result.password && (
+            <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSendEmail}
+                disabled={emailStatus === 'sending' || emailStatus === 'sent'}
+                style={{ minWidth: 200, display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                {emailStatus === 'sending' ? (
+                  <>
+                    <span style={{
+                      width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: '#fff', borderRadius: '50%',
+                      animation: 'spin 0.7s linear infinite', display: 'inline-block',
+                    }} />
+                    Sending…
+                  </>
+                ) : emailStatus === 'sent' ? '✓ Credential Email Sent'
+                  : emailStatus === 'failed' ? '✗ Email Failed — Retry?'
+                  : '📧 Send Credential Email'}
+              </button>
+              {emailStatus && (
+                <EmailStatusBadge status={emailStatus} />
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setResult(null)}
+            style={{
+              marginTop: 14, background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-muted)', fontSize: 12, padding: 0,
+            }}
+          >
+            ✕ Dismiss
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }

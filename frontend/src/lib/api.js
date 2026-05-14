@@ -212,6 +212,9 @@ export const adminPanel = {
   regenerateUncovered: (userIds) =>
     post('/admin-panel/uncovered-users/regenerate', { user_ids: userIds }, { adminAuth: true }),
 
+  manualEnroll: (body) =>
+    post('/admin-panel/registrations/manual', body, { adminAuth: true }),
+
   downloadSubmissions: async (eventId) => {
     const tok = token.getAdmin();
     const res = await fetch(`${BASE}/admin-panel/events/${eventId}/submissions/download`, {

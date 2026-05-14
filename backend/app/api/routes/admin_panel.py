@@ -27,6 +27,8 @@ from app.schemas.admin_panel import (
     EventMealsUpdate,
     EventStatsItem,
     EventUpdateRequest,
+    ManualEnrollRequest,
+    ManualEnrollResponse,
     MealEntryResponse,
     MyEventItem,
     ParticipantItem,
@@ -69,6 +71,7 @@ from app.services.admin_panel_service import (
 from app.services.bulk_enroll_service import (
     bulk_enroll,
     find_uncovered_users,
+    manual_enroll,
     parse_upload,
     regenerate_passwords_for_ids,
 )
@@ -212,6 +215,36 @@ async def post_regenerate_uncovered(
     frontend so each request fits inside the proxy timeout.
     """
     return await regenerate_passwords_for_ids(supabase, body.user_ids)
+
+
+# ── Manual single-participant entry ────────────────────────────────────────────────────
+
+@router.post("/registrations/manual", response_model=ManualEnrollResponse, status_code=201)
+async def manual_registration(
+    body: ManualEnrollRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> ManualEnrollResponse:
+    """
+    Manually add a single participant to an event.
+
+    - Creates the user account if the email is new (password is hashed server-side).
+    - Adds the event to an existing user's registrations (409 if already enrolled).
+    - team_mode: 'none' | 'existing' | 'new'
+    Admin role only.
+    """
+    data = await manual_enroll(
+        supabase,
+        name=body.name,
+        email=body.email,
+        plain_password=body.password,
+        event_id=body.event_id,
+        team_mode=body.team_mode,
+        existing_team_name=body.existing_team_name,
+        existing_member_name=body.existing_member_name,
+        new_team_name=body.new_team_name,
+    )
+    return ManualEnrollResponse(**data)
 
 
 # ── Overview ──────────────────────────────────────────────────────────────────

@@ -310,3 +310,30 @@ class RequestedMemberItem(BaseModel):
 class RequestedMemberStatusUpdate(BaseModel):
     """Body for PATCH /admin-panel/requested-members/{id}."""
     status: str                 # pending | approved | rejected
+
+
+# ── Manual Enroll ─────────────────────────────────────────────────────────────
+
+class ManualEnrollRequest(BaseModel):
+    """Body for POST /admin-panel/registrations/manual."""
+    name: str
+    email: str
+    password: str                   # plain-text; hashed server-side
+    event_id: str
+    # 'none' | 'existing' | 'new'
+    team_mode: str = "none"
+    existing_team_name: Optional[str] = None   # used when team_mode='existing'
+    existing_member_name: Optional[str] = None # optional hint for existing team lookup
+    new_team_name: Optional[str] = None        # used when team_mode='new'
+
+
+class ManualEnrollResponse(BaseModel):
+    """Response for POST /admin-panel/registrations/manual."""
+    user_id: str
+    name: str
+    email: str
+    password: Optional[str] = None  # present only if a NEW user was created
+    event_name: str
+    team_name: Optional[str] = None
+    is_new_user: bool
+    message: str
