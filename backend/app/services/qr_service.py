@@ -70,6 +70,13 @@ async def scan_food(supabase: AsyncClient, user: User, event_id: str) -> str:
             detail="User is not registered for this event",
         )
 
+    # Main gate entry must be completed before food can be claimed
+    if not user.is_attending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has not completed main gate entry. Entry scan required before food can be claimed.",
+        )
+
     # Get the event to check meals_count limit
     resp = await (
         supabase.table("events")
