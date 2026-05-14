@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useData } from '../../context/DataContext'
 import { adminPanel } from '../../../lib/api'
 import ConfirmModal from '../ConfirmModal'
@@ -19,7 +19,7 @@ const BOOTH_OPTIONS = [
 
 export default function AdminUsers() {
   const { user } = useAuth()
-  const { adminUsers, events, loadAdminUsers } = useData()
+  const { adminUsers, adminUsersLoading, events, loadAdminUsers } = useData()
 
   const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -43,6 +43,18 @@ export default function AdminUsers() {
 
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [activeTab, setActiveTab] = useState('active')
+
+  useEffect(() => {
+    loadAdminUsers()
+  }, [loadAdminUsers])
+
+  if (adminUsersLoading && adminUsers.length === 0) {
+    return (
+      <div className="card fade-in" style={{ padding: 24 }}>
+        Loading admin users…
+      </div>
+    )
+  }
 
   // Split by active / inactive, then filter by search
   const activeAdmins   = adminUsers.filter(u => !u.deleted_at)
@@ -137,7 +149,7 @@ export default function AdminUsers() {
         })
       }
       setIsFormOpen(false)
-      loadAdminUsers()
+      loadAdminUsers({ force: true })
     } catch (err) {
       setFormError(err.message || 'An error occurred')
     } finally {
@@ -150,7 +162,7 @@ export default function AdminUsers() {
       try {
         await adminPanel.deleteAdminUser(deleteConfirm.uid)
         setDeleteConfirm(null)
-        loadAdminUsers()
+        loadAdminUsers({ force: true })
       } catch (err) {
         alert(err.message || 'Failed to deactivate admin')
       }
@@ -160,7 +172,7 @@ export default function AdminUsers() {
   async function handleRestore(u) {
     try {
       await adminPanel.restoreAdminUser(u.uid)
-      loadAdminUsers()
+      loadAdminUsers({ force: true })
     } catch (err) {
       alert(err.message || 'Failed to restore admin')
     }
