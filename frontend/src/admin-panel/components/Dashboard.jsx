@@ -14,6 +14,7 @@ import ManageRegistrations from './tabs/ManageRegistrations'
 import Announcements from './tabs/Announcements'
 import RequestedMembers from './tabs/RequestedMembers'
 import AdminUsers from './tabs/AdminUsers'
+import MirageMoments from './tabs/MirageMoments'
 import './Dashboard.css'
 
 export default function Dashboard() {
@@ -49,6 +50,7 @@ export default function Dashboard() {
             <Route path="manage-registrations" element={canAccess('manageRegistrations') ? <ManageRegistrations /> : <Forbidden />} />
             <Route path="announcements"        element={canAccess('announcements')       ? <Announcements />        : <Forbidden />} />
             <Route path="requested-members"    element={canAccess('requestedMembers')    ? <RequestedMembers />     : <Forbidden />} />
+            <Route path="mirage-moments"       element={canAccess('mirageMoments')        ? <MirageMoments />        : <Forbidden />} />
           </Routes>
         </main>
       </div>

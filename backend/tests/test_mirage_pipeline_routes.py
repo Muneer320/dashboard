@@ -79,6 +79,7 @@ def test_user_mirage_enrollment_routes(monkeypatch, client):
             "approvedAnchorCount": 0,
             "requiredAnchorCount": 6,
             "maxAnchorCount": 10,
+            "anchorRevisionLivesRemaining": 3,
             "readyForSubmission": False,
             "images": [],
         }
@@ -102,6 +103,7 @@ def test_user_mirage_enrollment_routes(monkeypatch, client):
             "approvedAnchorCount": 6,
             "requiredAnchorCount": 6,
             "maxAnchorCount": 10,
+            "anchorRevisionLivesRemaining": 3,
             "readyForSubmission": True,
             "images": [],
         }
@@ -355,6 +357,29 @@ def test_mirage_me_photos_route(monkeypatch, client):
     response = client.get("/api/v1/mirage/me/photos", headers=headers)
     assert response.status_code == 200
     assert response.json()[0]["photoId"] == "photo-1"
+
+
+def test_mirage_people_search_route(monkeypatch, client):
+    from app.api.routes import mirage as mirage_routes
+
+    current_user = _make_user(is_attending=True)
+    app.dependency_overrides[get_current_user] = lambda: current_user
+
+    async def fake_search(*args, **kwargs):
+        return {"query": "ab", "people": []}
+
+    monkeypatch.setattr(
+        mirage_routes.mirage_pipeline_service,
+        "search_mirage_people",
+        fake_search,
+    )
+
+    headers = {"Authorization": f"Bearer {_user_token(current_user)}"}
+    response = client.get("/api/v1/mirage/people/search?q=ab", headers=headers)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["query"] == "ab"
+    assert payload["people"] == []
 
 
 def test_mirage_file_route_requires_valid_signature(monkeypatch, client):

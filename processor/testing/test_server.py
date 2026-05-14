@@ -1,12 +1,18 @@
 import unittest
 import time
+import threading
 from pathlib import Path
 from unittest.mock import patch, Mock
 
 from fastapi.testclient import TestClient
 
 from processor.mirage_processor.config import Settings
-from processor.mirage_processor.server import create_app
+from processor.mirage_processor.server import (
+    AUTO_ANCHOR_INTERVAL_SECONDS,
+    ProcessorRunState,
+    _run_auto_anchor_scheduler_tick,
+    create_app,
+)
 
 
 class FakeWorker:
@@ -75,6 +81,90 @@ def make_settings() -> Settings:
 
 
 class ProcessorServerTests(unittest.TestCase):
+    def test_auto_anchor_interval_is_short_for_local_testing(self):
+        self.assertEqual(AUTO_ANCHOR_INTERVAL_SECONDS, 10)
+
+    def test_auto_anchor_tick_processes_pending_anchors_in_one_batch(self):
+        worker = FakeWorker()
+        run_state = ProcessorRunState()
+        auto_status = {
+            "enabled": True,
+            "intervalSeconds": AUTO_ANCHOR_INTERVAL_SECONDS,
+            "lastAttemptAt": None,
+            "lastStartedAt": None,
+            "lastCompletedAt": None,
+            "lastSkippedReason": None,
+            "lastError": None,
+            "lastResult": None,
+        }
+        lock = threading.Lock()
+
+        processed = _run_auto_anchor_scheduler_tick(
+            settings=make_settings(),
+            worker_factory=lambda: worker,
+            lock=lock,
+            run_state=run_state,
+            auto_status=auto_status,
+            latency_sink=Mock(),
+        )
+
+        self.assertTrue(processed)
+        self.assertEqual(worker.calls, [("anchors", 12, None)])
+        self.assertIsNone(auto_status["lastSkippedReason"])
+        self.assertIsNone(auto_status["lastError"])
+        self.assertEqual(auto_status["lastResult"]["approved"], 1)
+        self.assertFalse(run_state.snapshot()["running"])
+        self.assertEqual(run_state.snapshot()["kind"], "auto-anchors")
+
+    def test_auto_anchor_tick_skips_when_processor_is_busy(self):
+        worker = FakeWorker()
+        run_state = ProcessorRunState()
+        auto_status = {
+            "enabled": True,
+            "intervalSeconds": AUTO_ANCHOR_INTERVAL_SECONDS,
+            "lastAttemptAt": None,
+            "lastStartedAt": None,
+            "lastCompletedAt": None,
+            "lastSkippedReason": None,
+            "lastError": None,
+            "lastResult": None,
+        }
+        lock = threading.Lock()
+        self.assertTrue(lock.acquire(blocking=False))
+
+        try:
+            processed = _run_auto_anchor_scheduler_tick(
+                settings=make_settings(),
+                worker_factory=lambda: worker,
+                lock=lock,
+                run_state=run_state,
+                auto_status=auto_status,
+                latency_sink=Mock(),
+            )
+        finally:
+            lock.release()
+
+        self.assertFalse(processed)
+        self.assertEqual(worker.calls, [])
+        self.assertEqual(auto_status["lastSkippedReason"], "busy")
+
+    def test_auto_anchor_scheduler_runs_once_on_startup(self):
+        worker = FakeWorker()
+        app = create_app(settings=make_settings(), worker_factory=lambda: worker)
+
+        with TestClient(app) as client:
+            deadline = time.time() + 2.0
+            payload = {}
+            while time.time() < deadline:
+                payload = client.get("/health").json()
+                if payload.get("autoAnchor", {}).get("lastCompletedAt") is not None:
+                    break
+                time.sleep(0.05)
+
+        self.assertTrue(worker.calls)
+        self.assertEqual(worker.calls[0], ("anchors", 12, None))
+        self.assertIsNotNone(payload["autoAnchor"]["lastCompletedAt"])
+
     def test_optimize_assets_endpoint_runs_optimizer(self):
         app = create_app(settings=make_settings(), worker_factory=lambda: FakeWorker())
         client = TestClient(app)
@@ -213,6 +303,7 @@ class ProcessorServerTests(unittest.TestCase):
         self.assertTrue(payload["backendDatabaseConnected"])
         self.assertFalse(payload["localDatabaseConnected"])
         self.assertIsNone(payload["backendDatabaseError"])
+        self.assertGreater(payload["autoAnchor"]["nextRunAt"], 0)
 
     def test_unpublish_job_endpoint_calls_database(self):
         app = create_app(settings=make_settings(), worker_factory=lambda: FakeWorker())

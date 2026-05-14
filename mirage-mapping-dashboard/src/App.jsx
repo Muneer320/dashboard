@@ -26,6 +26,13 @@ function normalizeBackendUrl(value) {
   return `https://${trimmed}`;
 }
 
+function formatCountdown(seconds) {
+  const safeSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+  return `${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
 function loadStoredState() {
   return {
     backendUrl: normalizeBackendUrl(localStorage.getItem(STORAGE_KEYS.backendUrl) || DEFAULT_BACKEND_URL),
@@ -48,6 +55,7 @@ function useMirageOps() {
   const [state, setState] = useState(loadStoredState);
   const [connectionHealth, setConnectionHealth] = useState({ text: 'checking backend', kind: 'pending' });
   const [processorHealth, setProcessorHealth] = useState({ text: 'checking', kind: 'pending' });
+  const [processorSnapshot, setProcessorSnapshot] = useState(null);
   const [authStatus, setAuthStatus] = useState('Checking saved local connection...');
 
   useEffect(() => {
@@ -140,9 +148,11 @@ function useMirageOps() {
           : `processor online | ${data.modelVersion} | ${databaseConnected ? 'db online' : 'db offline'}`,
         kind: running ? 'processing' : (databaseConnected ? 'ok' : 'failed'),
       });
+      setProcessorSnapshot(data);
       return data;
     } catch {
       setProcessorHealth({ text: 'processor offline', kind: 'failed' });
+      setProcessorSnapshot(null);
       return null;
     }
   }
@@ -181,6 +191,7 @@ function useMirageOps() {
     setState,
     connectionHealth,
     processorHealth,
+    processorSnapshot,
     authStatus,
     setAuthStatus,
     backendRequest,
@@ -326,6 +337,15 @@ function UsersPage({ ops }) {
   const [users, setUsers] = useState([]);
   const [status, setStatus] = useState('Loading pending anchor verifications...');
   const [busyUserId, setBusyUserId] = useState(null);
+  const [nowMs, setNowMs] = useState(Date.now());
+  const autoAnchor = ops.processorSnapshot?.autoAnchor || null;
+  const autoAnchorCompletedAt = autoAnchor?.lastCompletedAt || null;
+  const autoAnchorRunning = ops.processorSnapshot?.runState?.kind === 'auto-anchors' && ops.processorSnapshot?.runState?.running;
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   async function loadUsers() {
     setStatus('Loading pending anchor verifications...');
@@ -341,6 +361,11 @@ function UsersPage({ ops }) {
   useEffect(() => {
     loadUsers();
   }, []);
+
+  useEffect(() => {
+    if (!autoAnchorCompletedAt || busyUserId) return;
+    loadUsers();
+  }, [autoAnchorCompletedAt]);
 
   async function verifyPendingAnchors(userId = null) {
     setBusyUserId(userId || '__all__');
@@ -365,12 +390,23 @@ function UsersPage({ ops }) {
     }
   }
 
+  const nextRunAtMs = Number(autoAnchor?.nextRunAt || 0) * 1000;
+  const countdownSeconds = nextRunAtMs > 0 ? Math.max(0, Math.ceil((nextRunAtMs - nowMs) / 1000)) : null;
+  const countdownLabel = countdownSeconds == null ? '--:--' : formatCountdown(countdownSeconds);
+  const autoAnchorStatus = autoAnchorRunning
+    ? 'Auto batch is running now.'
+    : autoAnchor?.lastSkippedReason === 'busy'
+      ? 'Next auto batch was deferred because the processor was busy.'
+      : 'Next full auto batch countdown.';
+
   return (
     <>
       <section className="hero compact">
         <p className="eyebrow">User verification queue</p>
         <h1>Verify pending anchor images before they join Mirage mappings.</h1>
         <p>Uploaded anchor images are already stored in S3 and the main Mirage database. This queue runs the local verification pipeline so approved anchors become ready for matching.</p>
+        <p className="muted">Auto-verification also sweeps all pending anchor users every 10 seconds while this local processor and dashboard are open.</p>
+        <p className="muted">Next batch in <strong>{countdownLabel}</strong>. {autoAnchorStatus}</p>
         <div className="row">
           <button className="good" disabled={Boolean(busyUserId)} onClick={() => verifyPendingAnchors(null)}>Verify all pending anchors</button>
           <button onClick={loadUsers}>Refresh queue</button>

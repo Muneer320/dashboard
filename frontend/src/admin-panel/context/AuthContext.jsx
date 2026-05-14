@@ -58,6 +58,7 @@ export function AuthProvider({ children }) {
       manageRegistrations: ['admin'],
       announcements:       ['admin'],
       requestedMembers:    ['admin'],
+      mirageMoments:       ['admin'],
     }
     return (matrix[feature] || []).includes(user.role)
   }

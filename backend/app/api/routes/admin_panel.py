@@ -47,6 +47,11 @@ from app.schemas.mirage import (
     MirageJobImageReviewResponse,
     MirageJobListItem,
     MirageJobStatusResponse,
+    MirageMomentAdminResponse,
+    MirageMomentCreateRequest,
+    MirageMomentPatchRequest,
+    MirageMomentImagePatchRequest,
+    MirageMomentImageParticipantsRequest,
 )
 from app.services.admin_panel_service import (
     create_admin_user,
@@ -85,6 +90,7 @@ from app.services.credentials_service import (
     list_requested_members,
     update_requested_member_status,
 )
+from app.services import mirage_pipeline_service as mirage_pipeline_service
 from app.services.mirage_pipeline_service import (
     approve_mirage_job,
     create_mirage_job,
@@ -834,3 +840,124 @@ async def admin_publish_mirage_job(
 ) -> MirageJobStatusResponse:
     item = await publish_mirage_job(supabase, job_id)
     return MirageJobStatusResponse(**item)
+
+
+@router.get("/mirage/moments", response_model=list[MirageMomentAdminResponse])
+async def admin_list_mirage_moments(
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> list[MirageMomentAdminResponse]:
+    items = await mirage_pipeline_service.list_mirage_moments(supabase)
+    return [MirageMomentAdminResponse(**item) for item in items]
+
+
+@router.post("/mirage/moments", response_model=MirageMomentAdminResponse, status_code=201)
+async def admin_create_mirage_moment(
+    body: MirageMomentCreateRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    payload = body.model_dump(exclude_none=True)
+    item = await mirage_pipeline_service.create_mirage_moment(supabase, admin, payload)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.get("/mirage/moments/{moment_id}", response_model=MirageMomentAdminResponse)
+async def admin_get_mirage_moment_detail(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.get_mirage_moment_detail(supabase, moment_id)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.patch("/mirage/moments/{moment_id}", response_model=MirageMomentAdminResponse)
+async def admin_patch_mirage_moment(
+    moment_id: str,
+    body: MirageMomentPatchRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    raw = body.model_dump(exclude_unset=True)
+    item = await mirage_pipeline_service.patch_mirage_moment(supabase, admin, moment_id, raw)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.post("/mirage/moments/{moment_id}/images", response_model=MirageMomentAdminResponse)
+async def admin_add_mirage_moment_images(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+    images: list[UploadFile] = File(..., description="One or more images for this moment"),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.add_mirage_moment_images(supabase, admin, moment_id, images)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.patch("/mirage/moment-images/{image_id}", response_model=MirageMomentAdminResponse)
+async def admin_patch_mirage_moment_image(
+    image_id: str,
+    body: MirageMomentImagePatchRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    raw = body.model_dump(exclude_unset=True)
+    item = await mirage_pipeline_service.patch_mirage_moment_image(supabase, admin, image_id, raw)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.delete("/mirage/moment-images/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_mirage_moment_image(
+    image_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> Response:
+    await mirage_pipeline_service.delete_mirage_moment_image(supabase, admin, image_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/mirage/moment-images/{image_id}/participants", response_model=MirageMomentAdminResponse)
+async def admin_put_mirage_moment_image_participants(
+    image_id: str,
+    body: MirageMomentImageParticipantsRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.replace_mirage_moment_image_participants(
+        supabase,
+        admin,
+        image_id,
+        body.participantUserIds,
+    )
+    return MirageMomentAdminResponse(**item)
+
+
+@router.post("/mirage/moments/{moment_id}/publish", response_model=MirageMomentAdminResponse)
+async def admin_publish_mirage_moment(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.publish_mirage_moment(supabase, admin, moment_id)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.post("/mirage/moments/{moment_id}/unpublish", response_model=MirageMomentAdminResponse)
+async def admin_unpublish_mirage_moment(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.unpublish_mirage_moment(supabase, admin, moment_id)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.delete("/mirage/moments/{moment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_mirage_moment(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> Response:
+    await mirage_pipeline_service.delete_mirage_moment(supabase, admin, moment_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

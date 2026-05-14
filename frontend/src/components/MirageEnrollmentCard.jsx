@@ -6,11 +6,11 @@ import { useUserAuth } from '../lib/UserAuthContext';
 import { NavBar, PageBackground, useMobile } from './shared';
 
 const STATUS_COPY = {
-  draft: 'Upload 6-10 anchor photos to start your Mirage enrollment.',
-  processing: 'Your anchor photos are in the face pipeline right now.',
+  draft: 'Add 6–10 photos to start your Mirage enrollment.',
+  processing: 'Your photos are in the face pipeline right now.',
   ready: 'Your Mirage enrollment is ready and will be used for event matching.',
   needs_more_images: 'Add more clear angles so Mirage can build a stronger profile.',
-  failed: 'Some anchor processing failed. Replace the rejected images and try again.',
+  failed: 'Some processing failed. Replace the rejected photos and try again.',
 };
 
 function toneForStatus(status) {
@@ -84,11 +84,11 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
   }
 
   async function handleDelete(imageId) {
-    if (!window.confirm('Remove this Mirage anchor image?')) return;
+    if (!window.confirm('Remove this photo?')) return;
     setError('');
     try {
       await users.deleteMirageImage(imageId);
-      setNotice('Anchor image removed.');
+      setNotice('Photo removed.');
       await loadProfile();
     } catch (err) {
       setError(err.message || 'Could not remove this image.');
@@ -204,6 +204,34 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
         <StatPill label="Consent" value={consentEnabled ? 'enabled' : 'required'} />
       </div>
 
+      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, opacity: 0.55 }}>Revision chances</span>
+        {[0, 1, 2].map((i) => {
+          const remaining = Math.min(
+            3,
+            Math.max(0, profile?.anchorRevisionLivesRemaining ?? 3),
+          );
+          const filled = i < remaining;
+          return (
+            <span
+              key={i}
+              title={`${remaining} chance${remaining === 1 ? '' : 's'} left to revise your photos after mistaken approvals`}
+              style={{
+                fontSize: 20,
+                lineHeight: 1,
+                color: filled ? '#ff6b8a' : 'rgba(255,255,255,0.22)',
+              }}
+              aria-hidden
+            >
+              {filled ? '♥' : '♡'}
+            </span>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ink-mute)', maxWidth: 620, lineHeight: 1.55 }}>
+        Three revision chances: after your enrollment is live, each additional photo that gets approved consumes one heart so you can replace mistaken uploads.
+      </div>
+
       <div
         style={{
           marginTop: 18,
@@ -218,34 +246,42 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
         {STATUS_COPY[status] || STATUS_COPY.draft}
       </div>
 
-      <div style={{ marginTop: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <label
-          className="btn primary"
-          style={{
-            display: canUploadMore ? 'inline-flex' : 'none',
-            cursor: uploading ? 'wait' : 'pointer',
-            opacity: uploading ? 0.65 : 1,
-          }}
-        >
-          {uploading ? 'Uploading...' : 'Add Mirage Anchors'}
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleUpload}
-            disabled={uploading}
-            style={{ display: 'none' }}
-          />
-        </label>
-        {!canUploadMore && (
-          <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
-            You have reached the {maxAnchorCount}-image anchor limit.
+      <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label
+            className="btn primary"
+            style={{
+              display: canUploadMore ? 'inline-flex' : 'none',
+              cursor: uploading ? 'wait' : 'pointer',
+              opacity: uploading ? 0.65 : 1,
+            }}
+          >
+            {uploading ? 'Uploading...' : 'Take photo'}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleUpload}
+              disabled={uploading}
+              aria-label="Take a new photo or choose images from your gallery"
+              style={{ display: 'none' }}
+            />
+          </label>
+          {!canUploadMore && (
+            <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
+              You&apos;ve reached the {maxAnchorCount}-photo limit for this enrollment.
+            </div>
+          )}
+          {status === 'ready' && (
+            <button type="button" className="btn sm" onClick={() => navigate('/mirage')}>
+              Open Mirage
+            </button>
+          )}
+        </div>
+        {canUploadMore && (
+          <div style={{ fontSize: 11, color: 'var(--ink-mute)', maxWidth: 420, lineHeight: 1.55 }}>
+            Opens your camera or photo library—pick one shot or select several images at once.
           </div>
-        )}
-        {status === 'ready' && (
-          <button type="button" className="btn sm" onClick={() => navigate('/mirage')}>
-            Open Mirage
-          </button>
         )}
       </div>
 
@@ -271,7 +307,7 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
         <div>
           <div style={{ fontSize: 13, color: 'var(--ink)' }}>I consent to Mirage face matching for event photos.</div>
           <div style={{ marginTop: 4, fontSize: 12, color: 'var(--ink-mute)', lineHeight: 1.6 }}>
-            Your anchors stay private and are only used to match approved event images inside Mirage.
+            Your photos stay private and are only used to match approved event images inside Mirage.
           </div>
         </div>
       </label>
@@ -307,13 +343,13 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
       )}
 
       {loading ? (
-        <div style={{ marginTop: 18, fontSize: 12, color: 'var(--ink-mute)' }}>Loading Mirage anchors...</div>
+        <div style={{ marginTop: 18, fontSize: 12, color: 'var(--ink-mute)' }}>Loading your photos...</div>
       ) : (
         <div style={{ marginTop: 20 }}>
-          <div className="eyebrow">Anchor Images</div>
+          <div className="eyebrow">Your photos</div>
           {images.length === 0 ? (
             <div style={{ marginTop: 12, fontSize: 13, color: 'var(--ink-mute)' }}>
-              No Mirage anchors yet. Upload your best photos to start the enrollment pipeline.
+              No photos yet. Use Take photo to add shots from your camera or gallery.
             </div>
           ) : (
             <div
@@ -424,7 +460,7 @@ export function MirageProfilePage() {
             Build your face profile.
           </h1>
           <p style={{ maxWidth: 720, color: 'var(--ink-dim)', fontSize: 16, lineHeight: 1.7, marginBottom: 28 }}>
-            Upload 6-10 clear anchor photos from different angles. These stay private and are only used to match you in approved Mirage event photos.
+            Upload 6–10 clear selfies from different angles. These stay private and are only used to match you in approved Mirage event photos.
           </p>
           <MirageEnrollmentCard defaultExpanded standalone />
         </div>

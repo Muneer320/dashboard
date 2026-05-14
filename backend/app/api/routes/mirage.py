@@ -9,9 +9,12 @@ from app.schemas.mirage import (
     MirageCollectionDetailResponse,
     MirageGalleryDayItem,
     MirageLikeResponse,
+    MirageMomentResponse,
     MirageOverviewResponse,
+    MiragePeopleSearchResponse,
     MiragePhotoItem,
 )
+from app.services import mirage_pipeline_service as mirage_pipeline_service
 from app.services.mirage_pipeline_service import (
     get_collection_detail,
     get_drive_file_payload,
@@ -41,6 +44,24 @@ async def get_overview(
 ) -> MirageOverviewResponse:
     payload = await get_overview_payload(supabase, user)
     return MirageOverviewResponse(**payload)
+
+
+@router.get("/people/search", response_model=MiragePeopleSearchResponse)
+async def search_mirage_people_route(
+    q: str = Query("", max_length=160),
+    supabase: AsyncClient = Depends(get_supabase),
+    user: User = Depends(get_current_user),
+) -> MiragePeopleSearchResponse:
+    payload = await mirage_pipeline_service.search_mirage_people(supabase, user, q)
+    return MiragePeopleSearchResponse(**payload)
+
+
+@router.get("/moment", response_model=MirageMomentResponse | None)
+async def get_moment(
+    supabase: AsyncClient = Depends(get_supabase),
+) -> MirageMomentResponse | None:
+    payload = await mirage_pipeline_service.get_public_mirage_moment(supabase)
+    return MirageMomentResponse(**payload) if payload else None
 
 
 @router.get("/collections/{collection_id}", response_model=MirageCollectionDetailResponse)

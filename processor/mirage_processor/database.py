@@ -13,7 +13,10 @@ from typing import Any, Iterator
 from urllib.parse import quote
 from urllib.request import urlopen
 
-import asyncpg
+try:
+    import asyncpg
+except ImportError:  # pragma: no cover - local runtime fallback
+    asyncpg = None
 import boto3
 from botocore.config import Config as BotoConfig
 from supabase import Client, create_client
@@ -24,7 +27,7 @@ from .normalize import normalize_identifier
 
 
 def is_undefined_column_error(error: Exception) -> bool:
-    return isinstance(error, asyncpg.UndefinedColumnError) or getattr(error, "sqlstate", None) == "42703"
+    return bool(asyncpg is not None and isinstance(error, asyncpg.UndefinedColumnError)) or getattr(error, "sqlstate", None) == "42703"
 
 
 def utc_now() -> str:
@@ -124,7 +127,7 @@ class MirageDatabase:
     def __init__(self, settings: Settings, telemetry: Any | None = None) -> None:
         self.settings = settings
         self.telemetry = telemetry
-        self.database_url = settings.mirage_database_url
+        self.database_url = settings.mirage_database_url if asyncpg is not None else None
         self.client: Client | None = None
         self.bucket = None
         if settings.supabase_url and settings.supabase_service_role_key:

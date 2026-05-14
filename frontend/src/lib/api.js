@@ -142,6 +142,9 @@ export const mirage = {
   overview: () => get('/mirage/overview'),
   gallery: () => get('/mirage/gallery'),
   collection: (collectionId) => get(`/mirage/collections/${collectionId}`),
+  momentHero: () => get('/mirage/moment'),
+  searchPeople: (q) =>
+    get(`/mirage/people/search?q=${encodeURIComponent((q || '').trim())}`),
   myPhotos: () => get('/mirage/me/photos'),
   toggleLike: (photoId) => post(`/mirage/photos/${photoId}/like`, {}),
 };
@@ -226,6 +229,42 @@ export const adminPanel = {
     const filename = match ? match[1].trim() : `submissions_${eventId.slice(0, 8)}.csv`;
     return { blobUrl: URL.createObjectURL(blob), filename };
   },
+
+  mirageMomentsList: () => get('/admin-panel/mirage/moments', { adminAuth: true }),
+
+  mirageMomentGet: (momentId) => get(`/admin-panel/mirage/moments/${momentId}`, { adminAuth: true }),
+
+  mirageMomentCreate: (body) =>
+    post('/admin-panel/mirage/moments', body, { adminAuth: true }),
+
+  mirageMomentPatch: (momentId, body) =>
+    patch(`/admin-panel/mirage/moments/${momentId}`, body, { adminAuth: true }),
+
+  mirageMomentUploadImages: (momentId, files) => {
+    const fd = new FormData();
+    for (const f of files) fd.append('images', f);
+    return post(`/admin-panel/mirage/moments/${momentId}/images`, fd, { adminAuth: true });
+  },
+
+  mirageMomentPublish: (momentId) =>
+    post(`/admin-panel/mirage/moments/${momentId}/publish`, {}, { adminAuth: true }),
+
+  mirageMomentUnpublish: (momentId) =>
+    post(`/admin-panel/mirage/moments/${momentId}/unpublish`, {}, { adminAuth: true }),
+
+  mirageMomentDelete: (momentId) =>
+    del(`/admin-panel/mirage/moments/${momentId}`, { adminAuth: true }),
+
+  mirageMomentImagePatch: (imageId, body) =>
+    patch(`/admin-panel/mirage/moment-images/${imageId}`, body, { adminAuth: true }),
+
+  mirageMomentImageDelete: (imageId) =>
+    del(`/admin-panel/mirage/moment-images/${imageId}`, { adminAuth: true }),
+
+  mirageMomentImageParticipants: (imageId, participantUserIds) =>
+    put(`/admin-panel/mirage/moment-images/${imageId}/participants`, { participantUserIds }, {
+      adminAuth: true,
+    }),
 };
 
 export const qr = {

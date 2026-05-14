@@ -18,14 +18,19 @@ from postgrest.exceptions import APIError
 from .config import Settings, load_settings
 from .database import MirageDatabase
 from .assets import JobAssetOptimizer
-from .face import FaceEngine
 from .telemetry import JsonlTelemetrySink, RunTelemetry
-from .worker import AnchorIndexCache, MirageWorker
 
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2] / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+
+AUTO_ANCHOR_INTERVAL_SECONDS = 10
+
+
+def _schedule_next_auto_anchor_run(auto_status: dict[str, Any], *, from_time: float | None = None) -> None:
+    base_time = float(time.time() if from_time is None else from_time)
+    auto_status["nextRunAt"] = base_time + AUTO_ANCHOR_INTERVAL_SECONDS
 
 
 class ProcessJobRequest(BaseModel):
@@ -133,6 +138,92 @@ class ProcessorRunState:
             self.telemetry = None
 
 
+def attach_telemetry(
+    target: Any,
+    telemetry: RunTelemetry,
+    push_progress: Callable[[dict[str, Any] | None, str | None], None] | None = None,
+) -> Any:
+    if hasattr(target, "telemetry"):
+        target.telemetry = telemetry
+    db = getattr(target, "db", None)
+    if db is not None and hasattr(db, "telemetry"):
+        db.telemetry = telemetry
+    if push_progress is not None and hasattr(target, "progress_callback"):
+        target.progress_callback = push_progress
+    return target
+
+
+def _run_anchor_cycle_once(
+    *,
+    settings: Settings,
+    payload: ProcessJobRequest,
+    worker_factory: Callable[[], MirageWorker] | None = None,
+    telemetry: RunTelemetry | None = None,
+    progress_callback: Callable[[dict[str, Any] | None, str | None], None] | None = None,
+) -> dict[str, Any]:
+    worker = worker_factory() if worker_factory is not None else build_worker(settings, payload)
+    if telemetry is not None:
+        attach_telemetry(worker, telemetry, progress_callback)
+    db = getattr(worker, "db", None)
+    if payload.retryRejectedAnchors and db is not None and hasattr(db, "reset_retryable_anchor_images"):
+        db.reset_retryable_anchor_images()
+    if db is not None and hasattr(db, "reset_processing_anchor_images"):
+        db.reset_processing_anchor_images(payload.userId)
+    return worker.run_anchor_cycle(
+        limit=int(payload.anchorLimit or settings.anchor_batch_size),
+        user_id=payload.userId,
+    )
+
+
+def _run_auto_anchor_scheduler_tick(
+    *,
+    settings: Settings,
+    worker_factory: Callable[[], MirageWorker] | None,
+    lock: threading.Lock,
+    run_state: ProcessorRunState,
+    auto_status: dict[str, Any],
+    latency_sink: JsonlTelemetrySink | None = None,
+) -> bool:
+    auto_status["lastAttemptAt"] = time.time()
+    if not lock.acquire(blocking=False):
+        auto_status["lastSkippedReason"] = "busy"
+        return False
+
+    telemetry = RunTelemetry(sink=latency_sink, kind="auto-anchors")
+    payload = ProcessJobRequest(anchorLimit=settings.anchor_batch_size, retryRejectedAnchors=True)
+    run_state.start(
+        kind="auto-anchors",
+        job_id=None,
+        message="Auto-processing pending anchor images.",
+        telemetry=telemetry,
+    )
+    auto_status["lastStartedAt"] = time.time()
+    auto_status["lastSkippedReason"] = None
+    try:
+        anchors = _run_anchor_cycle_once(
+            settings=settings,
+            payload=payload,
+            worker_factory=worker_factory,
+            telemetry=telemetry,
+            progress_callback=lambda progress=None, message=None: run_state.update_progress(progress, message=message),
+        )
+        auto_status["lastCompletedAt"] = time.time()
+        auto_status["lastError"] = None
+        auto_status["lastResult"] = anchors
+        run_state.success(
+            message="Auto anchor processing completed.",
+            result={"anchors": anchors, "source": "auto"},
+        )
+        return True
+    except Exception as exc:  # noqa: BLE001
+        auto_status["lastCompletedAt"] = time.time()
+        auto_status["lastError"] = str(exc)
+        run_state.fail(str(exc))
+        return False
+    finally:
+        lock.release()
+
+
 def _check_database(settings: Settings) -> bool:
     try:
         db = MirageDatabase(settings)
@@ -174,6 +265,20 @@ def create_app(
     run_state = ProcessorRunState()
     backend_token_cache: dict[str, str] = {}
     latency_sink = JsonlTelemetrySink(Path(__file__).resolve().parents[2] / "processor" / "logs" / "mirage-latency.jsonl")
+    auto_anchor_stop = threading.Event()
+    auto_anchor_status = {
+        "enabled": True,
+        "intervalSeconds": AUTO_ANCHOR_INTERVAL_SECONDS,
+        "lastAttemptAt": None,
+        "lastStartedAt": None,
+        "lastCompletedAt": None,
+        "nextRunAt": None,
+        "lastSkippedReason": None,
+        "lastError": None,
+        "lastResult": None,
+    }
+    _schedule_next_auto_anchor_run(auto_anchor_status)
+    app.state.auto_anchor_status = auto_anchor_status
 
     def log_event(event: str, **fields: Any) -> None:
         latency_sink.write({"kind": "control-plane", "event": event, **fields})
@@ -309,6 +414,7 @@ def create_app(
             "backendDatabaseError": backend_db_error,
             "localDatabaseConnected": local_db_connected,
             "runState": run_state.snapshot(),
+            "autoAnchor": auto_anchor_status,
             "opsBackendUrl": settings.ops_backend_url,
             "autoAdminConfigured": bool(settings.ops_admin_username and settings.ops_admin_password),
         }
@@ -415,15 +521,40 @@ def create_app(
             "runState": run_state.snapshot(),
         }
 
-    def attach_telemetry(target: Any, telemetry: RunTelemetry, push_progress: Callable[[dict[str, Any] | None, str | None], None] | None = None) -> Any:
-        if hasattr(target, "telemetry"):
-            target.telemetry = telemetry
-        db = getattr(target, "db", None)
-        if db is not None and hasattr(db, "telemetry"):
-            db.telemetry = telemetry
-        if push_progress is not None and hasattr(target, "progress_callback"):
-            target.progress_callback = push_progress
-        return target
+    @app.on_event("startup")
+    def start_auto_anchor_scheduler() -> None:
+        def loop() -> None:
+            _run_auto_anchor_scheduler_tick(
+                settings=settings,
+                worker_factory=worker_factory,
+                lock=lock,
+                run_state=run_state,
+                auto_status=auto_anchor_status,
+                latency_sink=latency_sink,
+            )
+            _schedule_next_auto_anchor_run(auto_anchor_status)
+
+            while not auto_anchor_stop.wait(AUTO_ANCHOR_INTERVAL_SECONDS):
+                _run_auto_anchor_scheduler_tick(
+                    settings=settings,
+                    worker_factory=worker_factory,
+                    lock=lock,
+                    run_state=run_state,
+                    auto_status=auto_anchor_status,
+                    latency_sink=latency_sink,
+                )
+                _schedule_next_auto_anchor_run(auto_anchor_status)
+
+        thread = threading.Thread(name="mirage-auto-anchors", target=loop, daemon=True)
+        thread.start()
+        app.state.auto_anchor_thread = thread
+
+    @app.on_event("shutdown")
+    def stop_auto_anchor_scheduler() -> None:
+        auto_anchor_stop.set()
+        thread = getattr(app.state, "auto_anchor_thread", None)
+        if thread is not None:
+            thread.join(timeout=1.0)
 
     @app.get("/runs/current")
     def current_run() -> dict[str, Any]:
@@ -483,9 +614,11 @@ def create_app(
                             status_code=400,
                             detail="Wait for image optimization to finish for this job before starting local mapping.",
                         )
-                anchors = worker.run_anchor_cycle(
-                    limit=int(payload.anchorLimit or settings.anchor_batch_size),
-                    user_id=payload.userId,
+                anchors = _run_anchor_cycle_once(
+                    settings=settings,
+                    payload=payload,
+                    worker_factory=lambda: worker,
+                    telemetry=telemetry,
                 )
                 batch_size = int(payload.batchSize or settings.job_batch_size)
                 stats = worker.run_job_by_id(job_id, batch_size)
@@ -517,8 +650,6 @@ def create_app(
             worker = worker_factory() if worker_factory is not None else build_worker(settings, payload)
             attach_telemetry(worker, telemetry, push_progress)
             db = getattr(worker, "db", None)
-            if payload.retryRejectedAnchors and db is not None and hasattr(db, "reset_retryable_anchor_images"):
-                db.reset_retryable_anchor_images()
             if db is not None and hasattr(db, "get_job_asset_counts"):
                 asset_counts = db.get_job_asset_counts(job_id)
                 total_assets = int(asset_counts.get("total", 0))
@@ -528,7 +659,13 @@ def create_app(
                     raise RuntimeError("Optimize images first. No ready optimized inference assets were found for this job.")
                 if total_assets > 0 and ready_assets + failed_assets < total_assets:
                     raise RuntimeError("Wait for image optimization to finish for this job before starting local mapping.")
-            anchors = worker.run_anchor_cycle(limit=int(payload.anchorLimit or settings.anchor_batch_size))
+            anchors = _run_anchor_cycle_once(
+                settings=settings,
+                payload=payload,
+                worker_factory=lambda: worker,
+                telemetry=telemetry,
+                progress_callback=push_progress,
+            )
             push_progress(
                 {
                     "stage": "mapping",
@@ -696,25 +833,18 @@ def create_app(
         try:
             with log_span("anchors.process_sync", userId=payload.userId, anchorLimit=int(payload.anchorLimit or settings.anchor_batch_size)):
                 worker = worker_factory() if worker_factory is not None else build_worker(settings, payload)
-                attach_telemetry(
-                    worker,
-                    telemetry,
-                    lambda progress=None, message=None: telemetry.record_progress(
+                anchors = _run_anchor_cycle_once(
+                    settings=settings,
+                    payload=payload,
+                    worker_factory=lambda: worker,
+                    telemetry=telemetry,
+                    progress_callback=lambda progress=None, message=None: telemetry.record_progress(
                         stage=str((progress or {}).get("stage") or "anchor-verification"),
                         current=int((progress or {}).get("current", 0)),
                         total=int((progress or {}).get("total", 0)),
                         percent=(progress or {}).get("percent"),
                         message=message,
                     ),
-                )
-                db = getattr(worker, "db", None)
-                if payload.retryRejectedAnchors and db is not None and hasattr(db, "reset_retryable_anchor_images"):
-                    db.reset_retryable_anchor_images()
-                if db is not None and hasattr(db, "reset_processing_anchor_images"):
-                    db.reset_processing_anchor_images(payload.userId)
-                anchors = worker.run_anchor_cycle(
-                    limit=int(payload.anchorLimit or settings.anchor_batch_size),
-                    user_id=payload.userId,
                 )
                 success = True
         finally:

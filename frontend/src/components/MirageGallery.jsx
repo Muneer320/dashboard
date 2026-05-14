@@ -1,9 +1,211 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { mirage as mirageApi } from '../lib/api';
 import { useUserAuth } from '../lib/UserAuthContext';
 import { MirageEnrollmentCard } from './MirageEnrollmentCard';
+import { MirageMomentHero } from './MirageMomentHero';
 import { NavBar, PageBackground, useMobile } from './shared';
+
+const SEARCH_PHOTOS_PAGE_SIZE = 12;
+
+function MirageEmptyPublishedState({ isMobile }) {
+  const navigate = useNavigate();
+  return (
+    <section
+      className="glass"
+      aria-labelledby="mirage-empty-title"
+      style={{
+        marginTop: isMobile ? 28 : 36,
+        position: 'relative',
+        overflow: 'hidden',
+        borderRadius: 26,
+        padding: isMobile ? '48px 22px 52px' : '72px 48px 80px',
+        border: '1px solid rgba(255,255,255,0.09)',
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          width: 'min(92vw, 520px)',
+          height: 'min(92vw, 520px)',
+          left: '50%',
+          top: '42%',
+          transform: 'translate(-50%, -50%)',
+          background:
+            'radial-gradient(circle at 50% 45%, rgba(127,119,221,0.22) 0%, rgba(127,119,221,0.06) 38%, transparent 62%)',
+          pointerEvents: 'none',
+        }}
+      />
+      <div style={{ position: 'relative', textAlign: 'center', maxWidth: 540, margin: '0 auto' }}>
+        <div
+          aria-hidden
+          style={{
+            position: 'relative',
+            width: isMobile ? 168 : 200,
+            height: isMobile ? 148 : 172,
+            margin: '0 auto 40px',
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              width: isMobile ? 108 : 124,
+              height: isMobile ? 126 : 142,
+              left: isMobile ? 4 : 8,
+              top: isMobile ? 18 : 22,
+              borderRadius: 18,
+              border: '1px solid rgba(255,255,255,0.07)',
+              background: 'linear-gradient(145deg, rgba(127,119,221,0.12), rgba(8,12,28,0.5))',
+              transform: 'rotate(-10deg)',
+              boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              width: isMobile ? 108 : 124,
+              height: isMobile ? 126 : 142,
+              right: isMobile ? 2 : 6,
+              top: isMobile ? 14 : 18,
+              borderRadius: 18,
+              border: '1px solid rgba(255,255,255,0.07)',
+              background: 'linear-gradient(145deg, rgba(255,255,255,0.06), rgba(8,12,28,0.55))',
+              transform: 'rotate(11deg)',
+              boxShadow: '0 18px 40px rgba(0,0,0,0.35)',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: 0,
+              transform: 'translateX(-50%)',
+              width: isMobile ? 118 : 134,
+              height: isMobile ? 138 : 154,
+              borderRadius: 20,
+              border: '1px solid rgba(127,119,221,0.35)',
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(10,14,36,0.65) 100%)',
+              boxShadow: '0 22px 56px rgba(0,0,0,0.45)',
+              display: 'grid',
+              placeItems: 'center',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+            }}
+          >
+            <svg width="42" height="42" viewBox="0 0 24 24" fill="none" aria-hidden style={{ opacity: 0.85 }}>
+              <path
+                d="M4 7a2 2 0 012-2h2l1-2h6l1 2h2a2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"
+                stroke="rgba(241,239,232,0.55)"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              <circle cx="12" cy="13" r="3.25" stroke="rgba(127,119,221,0.75)" strokeWidth="1.5" />
+            </svg>
+          </div>
+        </div>
+
+        <div className="eyebrow" style={{ letterSpacing: '0.28em', opacity: 0.65 }}>
+          Mirage archive
+        </div>
+        <h2
+          id="mirage-empty-title"
+          style={{
+            marginTop: 14,
+            fontFamily: 'var(--f-display)',
+            fontSize: isMobile ? 30 : 40,
+            lineHeight: 1.08,
+            letterSpacing: '-0.03em',
+            color: 'var(--ink)',
+          }}
+        >
+          Your gallery opens here
+        </h2>
+        <p
+          style={{
+            marginTop: 18,
+            fontSize: isMobile ? 15 : 16,
+            lineHeight: 1.75,
+            color: 'var(--ink-dim)',
+          }}
+        >
+          When organizers publish event folders to Mirage, collections and previews appear automatically.
+          Build your face profile so approved matches surface under{' '}
+          <span style={{ color: 'var(--ink)', opacity: 0.92 }}>Matched for you</span>.
+        </p>
+        <div
+          style={{
+            marginTop: 36,
+            display: 'flex',
+            gap: 12,
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+          }}
+        >
+          <button type="button" className="btn primary" onClick={() => navigate('/mirage/profile')}>
+            Build face profile
+          </button>
+          <button
+            type="button"
+            className="btn sm ghost"
+            onClick={() => {
+              const el = document.querySelector('[aria-label="Search Mirage photos by name or email"]');
+              el?.focus?.();
+              el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+            }}
+          >
+            Search people
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MiragePaginationControls({
+  page,
+  totalPages,
+  onPrev,
+  onNext,
+  disabled,
+}) {
+  if (totalPages <= 1) return null;
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        display: 'flex',
+        justifyContent: 'center',
+        gap: 12,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+      }}
+    >
+      <button
+        type="button"
+        className="chip"
+        style={{ cursor: 'pointer' }}
+        disabled={disabled || page <= 0}
+        onClick={onPrev}
+      >
+        Previous
+      </button>
+      <span style={{ fontFamily: 'var(--f-mono)', fontSize: 11, opacity: 0.7 }}>
+        Page {page + 1} / {totalPages}
+      </span>
+      <button
+        type="button"
+        className="chip"
+        style={{ cursor: 'pointer' }}
+        disabled={disabled || page >= totalPages - 1}
+        onClick={onNext}
+      >
+        Next
+      </button>
+    </div>
+  );
+}
 
 export function MirageGallery() {
   const isMobile = useMobile();
@@ -28,6 +230,45 @@ export function MirageGallery() {
   const [collectionDetail, setCollectionDetail] = React.useState(null);
   const [lightbox, setLightbox] = React.useState(null);
   const [notice, setNotice] = React.useState('');
+  const [heroMoment, setHeroMoment] = React.useState(null);
+  const [gallerySearchInput, setGallerySearchInput] = React.useState('');
+  const [gallerySearchDebounced, setGallerySearchDebounced] = React.useState('');
+  const [peopleSearchResult, setPeopleSearchResult] = React.useState(null);
+  const [peopleSearchLoading, setPeopleSearchLoading] = React.useState(false);
+  const [searchPhotoPage, setSearchPhotoPage] = React.useState(0);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => {
+      setGallerySearchDebounced(gallerySearchInput.trim());
+    }, 380);
+    return () => window.clearTimeout(id);
+  }, [gallerySearchInput]);
+
+  React.useEffect(() => {
+    setSearchPhotoPage(0);
+  }, [gallerySearchDebounced]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (locked || gallerySearchDebounced.length < 2) {
+      setPeopleSearchResult(null);
+      setPeopleSearchLoading(false);
+      return () => { cancelled = true; };
+    }
+    setPeopleSearchLoading(true);
+    mirageApi
+      .searchPeople(gallerySearchDebounced)
+      .then((data) => {
+        if (!cancelled) setPeopleSearchResult(data && typeof data === 'object' ? data : null);
+      })
+      .catch(() => {
+        if (!cancelled) setPeopleSearchResult(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPeopleSearchLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [gallerySearchDebounced, locked]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -80,6 +321,30 @@ export function MirageGallery() {
         if (!cancelled) setLoading(false);
       });
 
+    return () => { cancelled = true; };
+  }, [locked, user?.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (locked) {
+      setHeroMoment(null);
+      return () => { cancelled = true; };
+    }
+    mirageApi
+      .momentHero()
+      .then((data) => {
+        if (cancelled) return;
+        const ok =
+          data
+          && typeof data === 'object'
+          && data.momentId
+          && Array.isArray(data.images)
+          && data.images.length > 0;
+        setHeroMoment(ok ? data : null);
+      })
+      .catch(() => {
+        if (!cancelled) setHeroMoment(null);
+      });
     return () => { cancelled = true; };
   }, [locked, user?.id]);
 
@@ -147,10 +412,117 @@ export function MirageGallery() {
   }, [notice]);
 
   const totalPhotos = overview.totalPhotos || 0;
+
+  const editorialMoment =
+    heroMoment != null
+    && Array.isArray(heroMoment.images)
+    && heroMoment.images.length > 0
+      ? heroMoment
+      : null;
+
+  const fallbackGallerySlides = React.useMemo(() => {
+    const featured = overview.featuredCollections || [];
+    const byDay = (overview.collectionsByDay || []).flatMap((group) => group.collections || []);
+    const seenIds = new Set(featured.map((c) => c.id));
+    const ordered = [...featured, ...byDay.filter((c) => c?.id && !seenIds.has(c.id))];
+
+    const seen = new Set();
+    const out = [];
+    for (const collection of ordered) {
+      if (!collection) continue;
+      const pools = [
+        ...(collection.highlightImages || []),
+        ...(collection.previewImages || []),
+        ...(collection.coverImage ? [collection.coverImage] : []),
+      ];
+      for (const photo of pools) {
+        if (!photo?.photoId || seen.has(photo.photoId)) continue;
+        seen.add(photo.photoId);
+        const imageUrl = photo.url || photo.thumbnailUrl;
+        const thumbnailUrl = photo.thumbnailUrl || photo.url;
+        if (!imageUrl && !thumbnailUrl) continue;
+        out.push({
+          imageId: photo.photoId,
+          displayOrder: out.length + 1,
+          storagePath: '',
+          filename: photo.name || String(photo.photoId),
+          mimeType: 'image/jpeg',
+          isCover: false,
+          imageUrl,
+          thumbnailUrl,
+          slideTitle: photo.eventName || photo.name || null,
+          participants: [],
+        });
+        if (out.length >= 10) break;
+      }
+      if (out.length >= 10) break;
+    }
+    return out;
+  }, [overview.collectionsByDay, overview.featuredCollections]);
+
+  const fallbackMoment = React.useMemo(() => {
+    if (!fallbackGallerySlides.length) return null;
+    return {
+      momentId: '__mirage_gallery_fallback',
+      title: 'The weekend, as seen.',
+      images: fallbackGallerySlides,
+    };
+  }, [fallbackGallerySlides]);
+
+  const heroMomentResolved = editorialMoment ?? fallbackMoment;
+
+  const showMomentHero =
+    !locked
+    && heroMomentResolved != null
+    && (heroMomentResolved.images?.length ?? 0) > 0
+    && (!!editorialMoment || !loading);
+
+  const heroEyebrow = editorialMoment ? 'Moment of the day' : 'Mirage spotlight';
+
+  const resolveCollectionForPhoto = React.useCallback(
+    (photo) => {
+      const cols = (overview.collectionsByDay || []).flatMap((group) => group.collections || []);
+      return cols.find((item) => item.id === photo.jobId || item.eventId === photo.eventId);
+    },
+    [overview.collectionsByDay],
+  );
+
+  const searchPhotosFlat = React.useMemo(() => {
+    const people = peopleSearchResult?.people;
+    if (!Array.isArray(people) || !people.length) return [];
+    const seen = new Set();
+    const out = [];
+    people.forEach((person) => {
+      (person.photos || []).forEach((ph) => {
+        if (!ph?.photoId || seen.has(ph.photoId)) return;
+        seen.add(ph.photoId);
+        out.push({
+          ...ph,
+          _matchLabel: [person.name, person.email].filter(Boolean).join(' · '),
+        });
+      });
+    });
+    return out;
+  }, [peopleSearchResult]);
+
+  const gallerySearchActive = gallerySearchDebounced.length >= 2;
+
+  const searchPhotoTotalPages = Math.max(
+    1,
+    Math.ceil(searchPhotosFlat.length / SEARCH_PHOTOS_PAGE_SIZE) || 1,
+  );
+  const safeSearchPhotoPage = Math.min(Math.max(0, searchPhotoPage), searchPhotoTotalPages - 1);
+  const paginatedSearchPhotos = searchPhotosFlat.slice(
+    safeSearchPhotoPage * SEARCH_PHOTOS_PAGE_SIZE,
+    safeSearchPhotoPage * SEARCH_PHOTOS_PAGE_SIZE + SEARCH_PHOTOS_PAGE_SIZE,
+  );
+
   const dayOptions = ['All', ...(overview.dayLabels || [])];
   const visibleDayGroups = selectedDay === 'All'
     ? (overview.collectionsByDay || [])
     : (overview.collectionsByDay || []).filter((day) => day.dayLabel === selectedDay);
+  const noPublishedMirage =
+    !locked && !loading && !error && visibleDayGroups.length === 0;
   const selectedCollection = collectionDetail?.collection || null;
   const allCollections = (overview.collectionsByDay || []).flatMap((group) => group.collections || []);
 
@@ -315,135 +687,225 @@ export function MirageGallery() {
       )}
 
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
-        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: 12 }}>
-          <div>
-            <div className="eyebrow">Mirage · Photo Archive</div>
-            <h1 className="display" style={{ fontSize: isMobile ? 40 : 72, marginTop: 14, letterSpacing: '-0.03em' }}>The weekend, as seen.</h1>
-            <div style={{ marginTop: 10, maxWidth: 700, color: 'var(--ink-dim)', fontSize: 14, lineHeight: 1.65 }}>
-              A polished event gallery for every student: trending frames, event-wise highlights, curated collections, and shareable moments pulled straight from Mirage.
+        {showMomentHero ? (
+          <>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: isMobile ? 'column' : 'row',
+                justifyContent: 'space-between',
+                alignItems: isMobile ? 'flex-start' : 'flex-end',
+                gap: 12,
+              }}
+            >
+              <div className="eyebrow">Mirage · Photo Archive</div>
+              <div
+                style={{
+                  fontFamily: 'var(--f-mono)',
+                  fontSize: 11,
+                  color: 'var(--ink-mute)',
+                  letterSpacing: '0.1em',
+                }}
+              >
+                {totalPhotos} PHOTOS · {overview.totalCollections || 0} COLLECTIONS
+              </div>
             </div>
+            <MirageMomentHero
+              moment={heroMomentResolved}
+              isMobile={isMobile}
+              eyebrowLabel={heroEyebrow}
+            />
+          </>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              justifyContent: 'space-between',
+              alignItems: isMobile ? 'flex-start' : 'flex-end',
+              gap: 12,
+            }}
+          >
+            <div>
+              <div className="eyebrow">Mirage · Photo Archive</div>
+              <h1
+                className="display"
+                style={{
+                  fontSize: isMobile ? 40 : 72,
+                  marginTop: 14,
+                  letterSpacing: '-0.03em',
+                }}
+              >
+                The weekend, as seen.
+              </h1>
+              <div
+                style={{
+                  marginTop: 10,
+                  maxWidth: 700,
+                  color: 'var(--ink-dim)',
+                  fontSize: 14,
+                  lineHeight: 1.65,
+                }}
+              >
+                A polished event gallery for every student: curated collections and shareable moments pulled straight from Mirage.
+              </div>
+            </div>
+            {!isMobile && (
+              <div
+                style={{
+                  fontFamily: 'var(--f-mono)',
+                  fontSize: 11,
+                  color: 'var(--ink-mute)',
+                  letterSpacing: '0.1em',
+                }}
+              >
+                {totalPhotos} PHOTOS · {overview.totalCollections || 0} COLLECTIONS
+              </div>
+            )}
           </div>
-          {!isMobile && (
-            <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.1em' }}>
-              {totalPhotos} PHOTOS · {overview.totalCollections || 0} COLLECTIONS
-            </div>
-          )}
-        </div>
+        )}
 
         {!locked && user?.id && (
-          <div style={{ marginTop: 24 }}>
+          <div style={{ marginTop: noPublishedMirage ? (isMobile ? 28 : 36) : 24 }}>
             <MirageEnrollmentCard />
           </div>
         )}
 
-        <div style={{
-          marginTop: 26,
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '1.25fr 0.75fr',
-          gap: 16,
-        }}>
-          <div className="glass" style={{ padding: isMobile ? 18 : 22 }}>
-            <div className="eyebrow">Highlights</div>
-            <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.1fr 0.9fr', gap: 12 }}>
-              {(overview.highlights || []).slice(0, 3).map((photo, index) => {
-                const collection = (overview.collectionsByDay || [])
-                  .flatMap((group) => group.collections || [])
-                  .find((item) => item.eventId === photo.eventId || item.eventName === photo.eventName)
-                  || selectedCollection
-                  || overview.featuredCollections?.[0];
-                return (
-                  <button
-                    key={photo.photoId}
-                    type="button"
-                    onClick={() => collection && handleOpenPhoto(photo, collection)}
-                    style={{
-                      padding: 0,
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: 18,
-                      overflow: 'hidden',
-                      background: 'rgba(255,255,255,0.03)',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      minHeight: index === 0 && !isMobile ? 360 : 180,
-                    }}
-                  >
-                    <div style={{ aspectRatio: index === 0 && !isMobile ? '16 / 10' : '1 / 1.02', background: 'rgba(255,255,255,0.04)' }}>
-                      <img
-                        src={index === 0 && !isMobile ? imageSrc(photo, 'preview') : imageSrc(photo, 'thumb')}
-                        alt={photo.name}
-                        loading={index === 0 ? 'eager' : 'lazy'}
-                        decoding="async"
-                        fetchpriority={index === 0 ? 'high' : 'auto'}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      />
-                    </div>
-                    <div style={{ padding: 14 }}>
-                      <div style={{ fontFamily: 'var(--f-display)', fontSize: index === 0 ? 22 : 16, color: 'var(--ink)' }}>
-                        {photo.eventName || photo.name}
-                      </div>
-                      <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ink-dim)' }}>
-                        {photo.dayLabel || 'Mirage'} · {photo.likeCount} likes
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+        {!locked && (
+          <div
+            className="glass"
+            style={{
+              marginTop: noPublishedMirage ? (isMobile ? 28 : 34) : 22,
+              padding: noPublishedMirage
+                ? (isMobile ? '22px 20px 26px' : '26px 32px 30px')
+                : (isMobile ? '14px 16px' : '16px 20px'),
+              borderRadius: 18,
+            }}
+          >
+            <div className="eyebrow">Find people</div>
+            <input
+              type="search"
+              value={gallerySearchInput}
+              onChange={(e) => setGallerySearchInput(e.target.value)}
+              placeholder="Search by student name or email…"
+              aria-label="Search Mirage photos by name or email"
+              style={{
+                marginTop: 12,
+                width: '100%',
+                maxWidth: 520,
+                padding: '12px 14px',
+                borderRadius: 12,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(0,0,0,0.25)',
+                color: 'var(--ink)',
+                fontSize: 14,
+              }}
+            />
+            <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ink-mute)', lineHeight: 1.5 }}>
+              Enter at least 2 characters. Shows photos linked to matching students in published Mirage galleries.
             </div>
           </div>
+        )}
 
-          <div className="glass" style={{ padding: isMobile ? 18 : 22 }}>
-            <div className="eyebrow">Trending Now</div>
-            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {(overview.trending || []).slice(0, 5).map((photo, index) => {
-                const collection = (overview.collectionsByDay || [])
-                  .flatMap((group) => group.collections || [])
-                  .find((item) => item.eventId === photo.eventId || item.eventName === photo.eventName);
-                return (
-                  <button
-                    key={photo.photoId}
-                    type="button"
-                    onClick={() => collection && handleSelectCollection(collection)}
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: '72px 1fr auto',
-                      gap: 12,
-                      alignItems: 'center',
-                      padding: 0,
-                      border: '1px solid rgba(255,255,255,0.06)',
-                      borderRadius: 14,
-                      overflow: 'hidden',
-                      background: 'rgba(255,255,255,0.025)',
-                      cursor: collection ? 'pointer' : 'default',
-                      textAlign: 'left',
-                    }}
-                  >
-                    <div style={{ width: 72, height: 72, background: 'rgba(255,255,255,0.04)' }}>
-                      <img
-                        src={imageSrc(photo, 'thumb')}
-                        alt={photo.name}
-                        loading={index < 2 ? 'eager' : 'lazy'}
-                        decoding="async"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                      />
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {photo.eventName || photo.name}
-                      </div>
-                      <div style={{ marginTop: 4, fontSize: 11, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)' }}>
-                        {photo.likeCount} likes · trend {photo.trendScore || 0}
-                      </div>
-                    </div>
-                    <div style={{ paddingRight: 14, fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)' }}>
-                      #{index + 1}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+        {gallerySearchActive ? (
+          <div className="glass" style={{ marginTop: 26, padding: isMobile ? 18 : 22 }}>
+            <div className="eyebrow">Search results</div>
+            {peopleSearchLoading ? (
+              <div style={{ marginTop: 14, fontSize: 13, color: 'var(--ink-mute)' }}>Searching…</div>
+            ) : searchPhotosFlat.length === 0 ? (
+              <div
+                style={{
+                  marginTop: 28,
+                  padding: isMobile ? '44px 20px 48px' : '56px 36px 60px',
+                  textAlign: 'center',
+                  borderRadius: 22,
+                  border: '1px dashed rgba(255,255,255,0.1)',
+                  background: 'rgba(255,255,255,0.02)',
+                }}
+              >
+                <div style={{ fontFamily: 'var(--f-display)', fontSize: isMobile ? 24 : 28, color: 'var(--ink)' }}>
+                  No photos matched
+                </div>
+                <div style={{ marginTop: 14, fontSize: 14, color: 'var(--ink-mute)', lineHeight: 1.7, maxWidth: 420, marginLeft: 'auto', marginRight: 'auto' }}>
+                  Try another name or email fragment. Only students with published Mirage links appear here.
+                </div>
+              </div>
+            ) : (
+              <>
+                <div
+                  style={{
+                    marginTop: 14,
+                    display: 'grid',
+                    gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fill, minmax(200px, 1fr))',
+                    gap: 12,
+                  }}
+                >
+                  {paginatedSearchPhotos.map((photo) => {
+                    const collection = resolveCollectionForPhoto(photo);
+                    return (
+                      <button
+                        key={photo.photoId}
+                        type="button"
+                        disabled={!collection}
+                        onClick={() => collection && handleOpenPhoto(photo, collection)}
+                        style={{
+                          padding: 0,
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: 16,
+                          overflow: 'hidden',
+                          background: 'rgba(255,255,255,0.03)',
+                          cursor: collection ? 'pointer' : 'default',
+                          textAlign: 'left',
+                        }}
+                      >
+                        <div style={{ aspectRatio: '1 / 1', background: 'rgba(255,255,255,0.04)' }}>
+                          <img
+                            src={imageSrc(photo, 'thumb')}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          />
+                        </div>
+                        {photo._matchLabel ? (
+                          <div
+                            style={{
+                              padding: '8px 10px',
+                              fontSize: 11,
+                              color: 'var(--ink-dim)',
+                              lineHeight: 1.35,
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {photo._matchLabel}
+                          </div>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                <MiragePaginationControls
+                  page={safeSearchPhotoPage}
+                  totalPages={searchPhotoTotalPages}
+                  disabled={peopleSearchLoading}
+                  onPrev={() => setSearchPhotoPage((p) => Math.max(0, p - 1))}
+                  onNext={() =>
+                    setSearchPhotoPage((p) => Math.min(searchPhotoTotalPages - 1, p + 1))}
+                />
+              </>
+            )}
           </div>
-        </div>
+        ) : noPublishedMirage ? (
+          <MirageEmptyPublishedState isMobile={isMobile} />
+        ) : !locked && !loading ? (
+          <div style={{ marginTop: isMobile ? 32 : 44 }}>
+            <p style={{ fontSize: 14, color: 'var(--ink-mute)', maxWidth: 560, lineHeight: 1.65 }}>
+              Tip: search finds photos linked to a student once live galleries are published.
+            </p>
+          </div>
+        ) : null}
 
+        {!noPublishedMirage && (
         <div style={{ marginTop: 24, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {dayOptions.map((day) => (
             <div key={day} onClick={() => setSelectedDay(day)} className="chip" style={{
@@ -454,10 +916,23 @@ export function MirageGallery() {
             }}>{day}</div>
           ))}
         </div>
+        )}
 
         {loading && (
-          <div style={{ marginTop: 28, color: 'var(--ink-mute)', fontFamily: 'var(--f-mono)', fontSize: 12 }}>
-            Building Mirage collections...
+          <div
+            style={{
+              marginTop: isMobile ? 40 : 52,
+              minHeight: noPublishedMirage ? '28vh' : '22vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--ink-mute)',
+              fontFamily: 'var(--f-mono)',
+              fontSize: 12,
+              letterSpacing: '0.1em',
+            }}
+          >
+            Loading Mirage…
           </div>
         )}
 
@@ -475,13 +950,7 @@ export function MirageGallery() {
           </div>
         )}
 
-        {!loading && !error && visibleDayGroups.length === 0 && !locked && (
-          <div style={{ marginTop: 28, color: 'var(--ink-mute)', fontSize: 14 }}>
-            No Mirage folders are published yet.
-          </div>
-        )}
-
-        {!loading && !error && (
+        {!loading && !error && !noPublishedMirage && (
           <>
             <div style={{ marginTop: 28 }} className="glass">
               <div style={{ padding: isMobile ? 16 : 20 }}>

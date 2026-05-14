@@ -1,8 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import hmac
 import io
+import logging
 import tempfile
 from pathlib import Path
 import uuid
@@ -40,6 +41,8 @@ from app.services.mirage_storage import (
     mirage_public_url,
     save_mirage_image,
 )
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_ANCHOR_COUNT = settings.MIRAGE_REQUIRED_ANCHOR_COUNT
 MAX_ANCHOR_COUNT = settings.MIRAGE_MAX_ANCHOR_COUNT
@@ -2217,3 +2220,818 @@ async def publish_mirage_job(supabase: AsyncClient, job_id: str) -> dict:
         .execute()
     )
     return {"jobId": job_uuid, "status": "live"}
+
+
+def _raise_mirage_unconfigured() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Mirage database is not configured yet.",
+    )
+
+
+async def _load_mirage_moment_images(
+    supabase: AsyncClient,
+    moment_ids: list[str],
+) -> dict[str, list[dict]]:
+    if not moment_ids:
+        return {}
+
+    image_response = await (
+        supabase.table("mirage_moment_images")
+        .select("*")
+        .in_("moment_id", moment_ids)
+        .order("display_order")
+        .execute()
+    )
+    image_rows = rows(image_response)
+    if not image_rows:
+        return {moment_id: [] for moment_id in moment_ids}
+
+    image_ids = [str(image["id"]) for image in image_rows]
+    mapping_response = await (
+        supabase.table("mirage_moment_image_users")
+        .select("*")
+        .in_("moment_image_id", image_ids)
+        .execute()
+    )
+    mapping_rows = rows(mapping_response)
+    user_ids = sorted({str(row["user_id"]) for row in mapping_rows if row.get("user_id")})
+    users_by_id: dict[str, dict] = {}
+    if user_ids:
+        user_response = await (
+            supabase.table("users")
+            .select("id, name, username")
+            .in_("id", user_ids)
+            .execute()
+        )
+        users_by_id = {str(user["id"]): user for user in rows(user_response)}
+
+    participants_by_image: dict[str, list[dict]] = {}
+    for mapping in mapping_rows:
+        image_id = str(mapping["moment_image_id"])
+        user_id = str(mapping["user_id"])
+        user = users_by_id.get(user_id, {})
+        participants_by_image.setdefault(image_id, []).append(
+            {
+                "userId": user_id,
+                "name": user.get("name"),
+                "username": user.get("username"),
+            }
+        )
+
+    images_by_moment: dict[str, list[dict]] = {moment_id: [] for moment_id in moment_ids}
+    for image in image_rows:
+        image_id = str(image["id"])
+        storage_path = image.get("storage_path") or ""
+        try:
+            url_via_storage = mirage_public_url(storage_path) if storage_path else None
+        except Exception:
+            url_via_storage = None
+        image_url_cell = image.get("image_url")
+        thumb_cell = image.get("thumbnail_url")
+        primary_url = image_url_cell or url_via_storage
+        thumb_url_out = thumb_cell or primary_url
+        images_by_moment.setdefault(str(image["moment_id"]), []).append(
+            {
+                "imageId": image_id,
+                "displayOrder": int(image.get("display_order") or 0),
+                "storagePath": storage_path,
+                "filename": image.get("filename") or image_id,
+                "mimeType": image.get("mime_type") or "image/jpeg",
+                "isCover": bool(image.get("is_cover", False)),
+                "imageUrl": primary_url,
+                "thumbnailUrl": thumb_url_out,
+                "slideTitle": image.get("slide_title"),
+                "width": image.get("width"),
+                "height": image.get("height"),
+                "participants": participants_by_image.get(image_id, []),
+            }
+        )
+    return images_by_moment
+
+
+def _serialize_mirage_moment_row(
+    moment: dict,
+    *,
+    images: list[dict] | None = None,
+    include_admin_fields: bool = False,
+) -> dict:
+    payload = {
+        "momentId": str(moment["id"]),
+        "title": moment.get("title") or "",
+        "subtitle": moment.get("subtitle"),
+        "dayLabel": moment.get("day_label") or "",
+        "status": moment.get("status") or "draft",
+        "publishedAt": _to_iso_or_none(moment.get("published_at")),
+        "images": images or [],
+    }
+    if include_admin_fields:
+        payload.update(
+            {
+                "createdByAdminId": moment.get("created_by_admin_id"),
+                "updatedByAdminId": moment.get("updated_by_admin_id"),
+                "createdAt": _to_iso_or_none(moment.get("created_at")),
+                "updatedAt": _to_iso_or_none(moment.get("updated_at")),
+            }
+        )
+    return payload
+
+
+async def get_public_mirage_moment(supabase: AsyncClient) -> dict | None:
+    """Return serialized published moment payload, or None when unavailable."""
+    try:
+        response = await (
+            supabase.table("mirage_moments")
+            .select("*")
+            .eq("status", "published")
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            return None
+        raise
+
+    moment = first_row(response)
+    if moment is None:
+        return None
+
+    images_by_moment = await _load_mirage_moment_images(supabase, [str(moment["id"])])
+    return _serialize_mirage_moment_row(
+        moment,
+        images=images_by_moment.get(str(moment["id"]), []),
+        include_admin_fields=False,
+    )
+
+
+async def list_mirage_moments(supabase: AsyncClient) -> list[dict]:
+    try:
+        response = await (
+            supabase.table("mirage_moments")
+            .select("*")
+            .order("updated_at", desc=True)
+            .execute()
+        )
+        moment_rows = rows(response)
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            return []
+        raise
+
+    moment_ids = [str(moment["id"]) for moment in moment_rows]
+    images_by_moment = await _load_mirage_moment_images(supabase, moment_ids)
+    return [
+        _serialize_mirage_moment_row(
+            moment,
+            images=images_by_moment.get(str(moment["id"]), []),
+            include_admin_fields=True,
+        )
+        for moment in moment_rows
+    ]
+
+
+async def create_mirage_moment(
+    supabase: AsyncClient,
+    admin: Admin,
+    payload: dict,
+) -> dict:
+    title = (payload.get("title") or "").strip()
+    day_label_raw = payload.get("dayLabel")
+    day_label = (
+        day_label_raw.strip()
+        if isinstance(day_label_raw, str) and day_label_raw.strip()
+        else ""
+    )
+    if not day_label:
+        day_label = "Moment"
+    subtitle = payload.get("subtitle")
+    subtitle = subtitle.strip() if isinstance(subtitle, str) else subtitle
+    subtitle = subtitle or None
+    if not title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="title is required.",
+        )
+
+    now = _utcnow_iso()
+    record = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "subtitle": subtitle,
+        "day_label": day_label,
+        "status": "draft",
+        "published_at": None,
+        "created_by_admin_id": admin.uid,
+        "updated_by_admin_id": admin.uid,
+        "created_at": now,
+        "updated_at": now,
+    }
+    try:
+        response = await supabase.table("mirage_moments").insert(record).execute()
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            _raise_mirage_unconfigured()
+        raise
+
+    created = first_row(response)
+    if created is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not create Mirage moment.",
+        )
+    return _serialize_mirage_moment_row(created, images=[], include_admin_fields=True)
+
+
+async def publish_mirage_moment(
+    supabase: AsyncClient,
+    admin: Admin,
+    moment_id: str,
+) -> dict:
+    moment_uuid = _ensure_uuid(moment_id, detail="Invalid Mirage moment ID.")
+    try:
+        response = await (
+            supabase.table("mirage_moments")
+            .select("*")
+            .eq("id", moment_uuid)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            _raise_mirage_unconfigured()
+        raise
+
+    moment = first_row(response)
+    if moment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirage moment not found.")
+
+    now = _utcnow_iso()
+    await (
+        supabase.table("mirage_moments")
+        .update(
+            {
+                "status": "unpublished",
+                "published_at": None,
+                "updated_by_admin_id": admin.uid,
+                "updated_at": now,
+            }
+        )
+        .eq("status", "published")
+        .neq("id", moment_uuid)
+        .execute()
+    )
+    updated_response = await (
+        supabase.table("mirage_moments")
+        .update(
+            {
+                "status": "published",
+                "published_at": now,
+                "updated_by_admin_id": admin.uid,
+                "updated_at": now,
+            }
+        )
+        .eq("id", moment_uuid)
+        .execute()
+    )
+    updated = first_row(updated_response) or {**moment, "status": "published", "published_at": now}
+    images_by_moment = await _load_mirage_moment_images(supabase, [moment_uuid])
+    return _serialize_mirage_moment_row(
+        updated,
+        images=images_by_moment.get(moment_uuid, []),
+        include_admin_fields=True,
+    )
+
+
+async def unpublish_mirage_moment(
+    supabase: AsyncClient,
+    admin: Admin,
+    moment_id: str,
+) -> dict:
+    moment_uuid = _ensure_uuid(moment_id, detail="Invalid Mirage moment ID.")
+    try:
+        response = await (
+            supabase.table("mirage_moments")
+            .select("*")
+            .eq("id", moment_uuid)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            _raise_mirage_unconfigured()
+        raise
+
+    moment = first_row(response)
+    if moment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirage moment not found.")
+
+    if moment.get("status") != "published":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mirage moment is not published.",
+        )
+
+    now = _utcnow_iso()
+    updated_response = await (
+        supabase.table("mirage_moments")
+        .update(
+            {
+                "status": "unpublished",
+                "published_at": None,
+                "updated_by_admin_id": admin.uid,
+                "updated_at": now,
+            }
+        )
+        .eq("id", moment_uuid)
+        .execute()
+    )
+    updated = first_row(updated_response) or {**moment, "status": "unpublished", "published_at": None}
+    images_by_moment = await _load_mirage_moment_images(supabase, [moment_uuid])
+    return _serialize_mirage_moment_row(
+        updated,
+        images=images_by_moment.get(moment_uuid, []),
+        include_admin_fields=True,
+    )
+
+
+async def delete_mirage_moment(
+    supabase: AsyncClient,
+    admin: Admin,
+    moment_id: str,
+) -> None:
+    del admin
+    moment_uuid = _ensure_uuid(moment_id, detail="Invalid Mirage moment ID.")
+    try:
+        response = await (
+            supabase.table("mirage_moments")
+            .select("id, status")
+            .eq("id", moment_uuid)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            _raise_mirage_unconfigured()
+        raise
+
+    moment_row = first_row(response)
+    if moment_row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirage moment not found.")
+    if moment_row.get("status") == "published":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Unpublish this Mirage moment before deleting it.",
+        )
+
+    path_response = await (
+        supabase.table("mirage_moment_images")
+        .select("storage_path")
+        .eq("moment_id", moment_uuid)
+        .execute()
+    )
+    for row in rows(path_response):
+        storage_path = row.get("storage_path")
+        if storage_path:
+            try:
+                delete_mirage_image(storage_path)
+            except Exception:
+                logger.warning("Mirage moment image delete skipped for missing object %s", storage_path)
+
+    await supabase.table("mirage_moments").delete().eq("id", moment_uuid).execute()
+
+
+_MIRAGE_MOMENT_IMAGE_MIME_TYPES = frozenset(
+    {"image/jpeg", "image/png", "image/webp", "image/gif"},
+)
+_TMP_MIRAGE_MOMENT_ORDER_BASE = 9_450_000
+
+
+async def _fetch_mirage_moment_columns(
+    supabase: AsyncClient,
+    moment_uuid: str,
+    *,
+    columns: str = "*",
+) -> dict:
+    try:
+        response = await (
+            supabase.table("mirage_moments").select(columns).eq("id", moment_uuid).limit(1).execute()
+        )
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            _raise_mirage_unconfigured()
+        raise
+    moment = first_row(response)
+    if moment is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirage moment not found.")
+    return moment
+
+
+async def get_mirage_moment_detail(
+    supabase: AsyncClient,
+    moment_id: str,
+) -> dict:
+    moment_uuid = str(_ensure_uuid(moment_id, detail="Invalid Mirage moment ID."))
+    moment = await _fetch_mirage_moment_columns(supabase, moment_uuid)
+    images_by_moment = await _load_mirage_moment_images(supabase, [moment_uuid])
+    return _serialize_mirage_moment_row(
+        moment,
+        images=images_by_moment.get(moment_uuid, []),
+        include_admin_fields=True,
+    )
+
+
+async def patch_mirage_moment(
+    supabase: AsyncClient,
+    admin: Admin,
+    moment_id: str,
+    payload: dict,
+) -> dict:
+    moment_uuid = str(_ensure_uuid(moment_id, detail="Invalid Mirage moment ID."))
+    await _fetch_mirage_moment_columns(supabase, moment_uuid)
+    updates: dict = {"updated_by_admin_id": admin.uid, "updated_at": _utcnow_iso()}
+    if "title" in payload and payload["title"] is not None:
+        updates["title"] = payload["title"]
+    if "subtitle" in payload:
+        updates["subtitle"] = payload["subtitle"]
+    if "dayLabel" in payload and payload["dayLabel"] is not None:
+        updates["day_label"] = payload["dayLabel"]
+    mutable = {column: value for column, value in updates.items() if column not in {"updated_at", "updated_by_admin_id"}}
+    if not mutable:
+        moment = await _fetch_mirage_moment_columns(supabase, moment_uuid)
+        images_by_moment = await _load_mirage_moment_images(supabase, [moment_uuid])
+        return _serialize_mirage_moment_row(
+            moment,
+            images=images_by_moment.get(moment_uuid, []),
+            include_admin_fields=True,
+        )
+
+    try:
+        updated_response = await (
+            supabase.table("mirage_moments").update(updates).eq("id", moment_uuid).execute()
+        )
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            _raise_mirage_unconfigured()
+        raise
+    updated = first_row(updated_response) or await _fetch_mirage_moment_columns(supabase, moment_uuid)
+    images_by_moment = await _load_mirage_moment_images(supabase, [moment_uuid])
+    return _serialize_mirage_moment_row(
+        updated,
+        images=images_by_moment.get(moment_uuid, []),
+        include_admin_fields=True,
+    )
+
+
+async def _resequence_moment_image_orders(
+    supabase: AsyncClient,
+    *,
+    ordered_image_ids: list[str],
+) -> None:
+    """Two-phase reorder to avoid violating (moment_id, display_order) uniqueness."""
+    for index, image_id in enumerate(ordered_image_ids):
+        await (
+            supabase.table("mirage_moment_images")
+            .update({"display_order": _TMP_MIRAGE_MOMENT_ORDER_BASE + index})
+            .eq("id", image_id)
+            .execute()
+        )
+    for index, image_id in enumerate(ordered_image_ids):
+        await (
+            supabase.table("mirage_moment_images")
+            .update({"display_order": index + 1})
+            .eq("id", image_id)
+            .execute()
+        )
+
+
+async def _hydrate_signed_urls_for_moment_images(
+    supabase: AsyncClient,
+    *,
+    rows_to_update: list[dict[str, object]],
+) -> None:
+    for row in rows_to_update:
+        path = row.get("storage_path")
+        if not path:
+            continue
+        resolved = mirage_public_url(path)
+        if resolved is None:
+            continue
+        await (
+            supabase.table("mirage_moment_images")
+            .update({"image_url": resolved, "thumbnail_url": resolved})
+            .eq("id", row["id"])
+            .execute()
+        )
+
+
+async def add_mirage_moment_images(
+    supabase: AsyncClient,
+    admin: Admin,
+    moment_id: str,
+    uploads: list[UploadFile],
+) -> dict:
+    if not uploads:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least one image file is required.",
+        )
+    moment_uuid = str(_ensure_uuid(moment_id, detail="Invalid Mirage moment ID."))
+    await _fetch_mirage_moment_columns(supabase, moment_uuid)
+
+    existing_resp = await (
+        supabase.table("mirage_moment_images")
+        .select("display_order,is_cover,id")
+        .eq("moment_id", moment_uuid)
+        .execute()
+    )
+    existing_rows = rows(existing_resp)
+    max_order = max((int(r.get("display_order") or 0) for r in existing_rows), default=0)
+    has_cover = any(bool(r.get("is_cover")) for r in existing_rows)
+    inserts: list[dict] = []
+    storage_rows: list[dict[str, object]] = []
+    now = _utcnow_iso()
+
+    prefix = f"{settings.MIRAGE_STORAGE_PREFIX}/moments/{moment_uuid}"
+    for offset, upload in enumerate(uploads, start=1):
+        mime_type = upload.content_type or "application/octet-stream"
+        if mime_type.lower() not in _MIRAGE_MOMENT_IMAGE_MIME_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "Unsupported Mirage moment image format. "
+                    "Use JPEG, PNG, WEBP, or GIF uploads."
+                ),
+            )
+        stored = await save_mirage_image(prefix, upload)
+        display_order = max_order + offset
+        image_row_id = str(uuid.uuid4())
+        resolved_url = mirage_public_url(stored.object_key)
+        inserts.append(
+            {
+                "id": image_row_id,
+                "moment_id": moment_uuid,
+                "is_cover": (not has_cover) and offset == 1,
+                "storage_path": stored.object_key,
+                "filename": stored.filename,
+                "mime_type": mime_type.lower(),
+                "slide_title": None,
+                "display_order": display_order,
+                "width": None,
+                "height": None,
+                "image_url": resolved_url,
+                "thumbnail_url": resolved_url,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        storage_rows.append({"id": image_row_id, "storage_path": stored.object_key})
+        has_cover = has_cover or inserts[-1]["is_cover"]
+
+    await supabase.table("mirage_moment_images").insert(inserts).execute()
+    await _hydrate_signed_urls_for_moment_images(supabase, rows_to_update=storage_rows)
+
+    bump = {"updated_at": now, "updated_by_admin_id": admin.uid}
+    await supabase.table("mirage_moments").update(bump).eq("id", moment_uuid).execute()
+    refreshed = await _fetch_mirage_moment_columns(supabase, moment_uuid)
+    images_by_moment = await _load_mirage_moment_images(supabase, [moment_uuid])
+    return _serialize_mirage_moment_row(
+        refreshed,
+        images=images_by_moment.get(moment_uuid, []),
+        include_admin_fields=True,
+    )
+
+
+async def patch_mirage_moment_image(
+    supabase: AsyncClient,
+    admin: Admin,
+    moment_image_id: str,
+    payload: dict,
+) -> dict:
+    image_uuid = str(_ensure_uuid(moment_image_id, detail="Invalid Mirage moment image ID."))
+    try:
+        image_response = await (
+            supabase.table("mirage_moment_images")
+            .select("*")
+            .eq("id", image_uuid)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            _raise_mirage_unconfigured()
+        raise
+
+    row = first_row(image_response)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirage moment image not found.")
+
+    moment_uuid = str(row["moment_id"])
+    await _fetch_mirage_moment_columns(supabase, moment_uuid)
+
+    if "slideTitle" in payload:
+        await (
+            supabase.table("mirage_moment_images")
+            .update({"slide_title": payload["slideTitle"]})
+            .eq("id", image_uuid)
+            .execute()
+        )
+
+    if payload.get("isCover") is True:
+        await (
+            supabase.table("mirage_moment_images")
+            .update({"is_cover": False})
+            .eq("moment_id", moment_uuid)
+            .execute()
+        )
+        await (
+            supabase.table("mirage_moment_images").update({"is_cover": True}).eq("id", image_uuid).execute()
+        )
+
+    if "displayOrder" in payload:
+        display_target = payload["displayOrder"]
+        if display_target is not None:
+            all_resp = await (
+                supabase.table("mirage_moment_images")
+                .select("id, display_order")
+                .eq("moment_id", moment_uuid)
+                .order("display_order")
+                .execute()
+            )
+            grouped = rows(all_resp)
+            ordered_ids = [
+                str(entry["id"]) for entry in sorted(grouped, key=lambda entry: entry.get("display_order") or 0)
+            ]
+            if image_uuid not in ordered_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Unable to reorder this Mirage moment image.",
+                )
+            target_slot = max(1, min(int(display_target), len(ordered_ids))) - 1
+            trimmed = [i for i in ordered_ids if i != image_uuid]
+            trimmed.insert(target_slot, image_uuid)
+            await _resequence_moment_image_orders(supabase, ordered_image_ids=trimmed)
+
+    now = _utcnow_iso()
+    await (
+        supabase.table("mirage_moment_images")
+        .update({"updated_at": now})
+        .eq("id", image_uuid)
+        .execute()
+    )
+    await (
+        supabase.table("mirage_moments")
+        .update({"updated_at": now, "updated_by_admin_id": admin.uid})
+        .eq("id", moment_uuid)
+        .execute()
+    )
+
+    images_by_moment = await _load_mirage_moment_images(supabase, [moment_uuid])
+    latest_moment = await _fetch_mirage_moment_columns(supabase, moment_uuid)
+    return _serialize_mirage_moment_row(
+        latest_moment,
+        images=images_by_moment.get(moment_uuid, []),
+        include_admin_fields=True,
+    )
+
+
+async def delete_mirage_moment_image(
+    supabase: AsyncClient,
+    admin: Admin,
+    moment_image_id: str,
+) -> None:
+    image_uuid = str(_ensure_uuid(moment_image_id, detail="Invalid Mirage moment image ID."))
+    try:
+        image_response = await (
+            supabase.table("mirage_moment_images")
+            .select("id,moment_id,storage_path,is_cover")
+            .eq("id", image_uuid)
+            .limit(1)
+            .execute()
+        )
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            _raise_mirage_unconfigured()
+        raise
+
+    row = first_row(image_response)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirage moment image not found.")
+
+    moment_uuid = str(row["moment_id"])
+    storage_path = row.get("storage_path")
+    removed_cover = bool(row.get("is_cover"))
+
+    if storage_path:
+        try:
+            delete_mirage_image(storage_path)
+        except Exception:
+            logger.warning("Mirage moment image delete skipped for missing object %s", storage_path)
+
+    await supabase.table("mirage_moment_images").delete().eq("id", image_uuid).execute()
+
+    remainder_resp = await (
+        supabase.table("mirage_moment_images")
+        .select("id, display_order,is_cover")
+        .eq("moment_id", moment_uuid)
+        .execute()
+    )
+    remaining = rows(remainder_resp)
+    if remaining and removed_cover:
+        promoted = sorted(remaining, key=lambda item: item.get("display_order") or 0)[0]["id"]
+        await (
+            supabase.table("mirage_moment_images")
+            .update({"is_cover": True})
+            .eq("id", promoted)
+            .execute()
+        )
+    refreshed_rows = sorted(remaining, key=lambda item: item.get("display_order") or 0)
+    ordered = [str(item["id"]) for item in refreshed_rows]
+    if ordered:
+        await _resequence_moment_image_orders(supabase, ordered_image_ids=ordered)
+
+    now = _utcnow_iso()
+    await (
+        supabase.table("mirage_moments")
+        .update({"updated_at": now, "updated_by_admin_id": admin.uid})
+        .eq("id", moment_uuid)
+        .execute()
+    )
+
+
+async def replace_mirage_moment_image_participants(
+    supabase: AsyncClient,
+    admin: Admin,
+    moment_image_id: str,
+    user_ids: list[str],
+) -> dict:
+    image_uuid = str(_ensure_uuid(moment_image_id, detail="Invalid Mirage moment image ID."))
+    normalized_ids = sorted(
+        {_ensure_uuid(uid, detail="Invalid participant user ID.") for uid in user_ids}
+    )
+    user_ids_normalized = normalized_ids
+
+    try:
+        image_response = await (
+            supabase.table("mirage_moment_images").select("id,moment_id").eq("id", image_uuid).limit(1).execute()
+        )
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            _raise_mirage_unconfigured()
+        raise
+
+    row = first_row(image_response)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mirage moment image not found.")
+
+    moment_uuid = str(row["moment_id"])
+    await _fetch_mirage_moment_columns(supabase, moment_uuid)
+
+    if user_ids_normalized:
+        user_response = await (
+            supabase.table("users")
+            .select("id")
+            .in_("id", user_ids_normalized)
+            .execute()
+        )
+        found = {str(u["id"]) for u in rows(user_response)}
+        missing = sorted(set(user_ids_normalized) - found)
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"invalidUserIds": missing},
+            )
+
+    await supabase.table("mirage_moment_image_users").delete().eq("moment_image_id", image_uuid).execute()
+    now = _utcnow_iso()
+    inserts = [
+        {
+            "moment_image_id": image_uuid,
+            "user_id": uid,
+            "created_at": now,
+            "updated_at": now,
+        }
+        for uid in user_ids_normalized
+    ]
+    if inserts:
+        await supabase.table("mirage_moment_image_users").insert(inserts).execute()
+
+    await (
+        supabase.table("mirage_moment_images")
+        .update({"updated_at": now})
+        .eq("id", image_uuid)
+        .execute()
+    )
+    await (
+        supabase.table("mirage_moments")
+        .update({"updated_at": now, "updated_by_admin_id": admin.uid})
+        .eq("id", moment_uuid)
+        .execute()
+    )
+
+    latest_moment = await _fetch_mirage_moment_columns(supabase, moment_uuid)
+    images_by_moment = await _load_mirage_moment_images(supabase, [moment_uuid])
+    return _serialize_mirage_moment_row(
+        latest_moment,
+        images=images_by_moment.get(moment_uuid, []),
+        include_admin_fields=True,
+    )
