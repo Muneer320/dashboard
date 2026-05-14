@@ -248,6 +248,81 @@ async def manual_registration(
     return ManualEnrollResponse(**data)
 
 
+# ── Select Participants (phase = 1) ───────────────────────────────────────────
+
+class _SelectPhaseBody(BaseModel):
+    event_id: str
+    emails: list[str]
+
+
+@router.post("/registrations/select-phase")
+async def select_phase(
+    body: _SelectPhaseBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    """
+    Given a list of emails and an event_id, set phase = 1 inside
+    ``users.events[event_id]`` for each user found and registered.
+
+    Returns:
+        {
+          "updated":    <int>,
+          "edge_cases": [{"email": ..., "reason": ...}, ...]
+        }
+
+    Edge-case reasons:
+      - "User not found"
+      - "Not registered for this event"
+    """
+    updated    = 0
+    edge_cases = []
+
+    # Normalise emails once
+    normalised = [e.strip().lower() for e in body.emails if e.strip()]
+
+    if not normalised:
+        return {"updated": 0, "edge_cases": []}
+
+    # Fetch all matching users in one query (username = email in this system)
+    resp = await (
+        supabase.table("users")
+        .select("id, username, events")
+        .in_("username", normalised)
+        .execute()
+    )
+    rows = resp.data or []
+
+    # Index by normalised username for O(1) lookup
+    found = {r["username"].strip().lower(): r for r in rows}
+
+    for email in normalised:
+        row = found.get(email)
+        if not row:
+            edge_cases.append({"email": email, "reason": "User not found"})
+            continue
+
+        events: dict = row.get("events") or {}
+        if body.event_id not in events:
+            edge_cases.append({"email": email, "reason": "Not registered for this event"})
+            continue
+
+        # Set phase = 1 for this event
+        event_entry = dict(events[body.event_id])
+        event_entry["phase"] = 1
+        events[body.event_id] = event_entry
+
+        await (
+            supabase.table("users")
+            .update({"events": events})
+            .eq("id", row["id"])
+            .execute()
+        )
+        updated += 1
+
+    return {"updated": updated, "edge_cases": edge_cases}
+
+
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)

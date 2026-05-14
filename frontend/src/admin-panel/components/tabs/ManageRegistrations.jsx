@@ -731,6 +731,9 @@ export default function ManageRegistrations() {
       {/* ── Add Participant Manually ─────────────────────────── */}
       <ManualEntryCard events={events} onCredentialEmailed={sendCredentialEmails} />
 
+      {/* ── Select Participants (Phase 1) ────────────────────── */}
+      <SelectPhaseCard events={events} />
+
       {/* ── Find users missing from your credentials CSV ────────────────── */}
       <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
         <h3 style={{ marginBottom: 6 }}>Find Users Missing From Your CSV</h3>
@@ -896,6 +899,183 @@ export default function ManageRegistrations() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─── SelectPhaseCard ──────────────────────────────────────────────────────────
+
+function SelectPhaseCard({ events }) {
+  const [selectedEvent, setSelectedEvent] = useState('')
+  const [file,          setFile]          = useState(null)
+  const [loading,       setLoading]       = useState(false)
+  const [result,        setResult]        = useState(null) // { updated, edge_cases }
+  const fileRef = React.useRef(null)
+
+  async function handleSubmit() {
+    if (!selectedEvent) { alert('Please select an event.'); return }
+    if (!file)          { alert('Please choose a CSV file.'); return }
+
+    setLoading(true)
+    setResult(null)
+
+    try {
+      const text = await file.text()
+      const { header, rows } = parseCSVRows(text)
+
+      if (!header.length || !rows.length)
+        throw new Error('CSV is empty or missing a header row.')
+
+      const lower    = header.map(h => h.trim().toLowerCase())
+      const emailIdx = lower.findIndex(h => h === 'email' || h === 'mail' || h === 'username')
+      if (emailIdx < 0)
+        throw new Error('CSV is missing an "email" column.')
+
+      const emails = rows
+        .map(r => (r[emailIdx] || '').trim().toLowerCase())
+        .filter(e => e && e.includes('@'))
+
+      if (!emails.length)
+        throw new Error('No valid email addresses found in the CSV.')
+
+      const data = await adminPanel.selectPhase(selectedEvent, emails)
+      setResult(data)
+      setFile(null)
+      if (fileRef.current) fileRef.current.value = ''
+    } catch (e) {
+      console.error(e)
+      alert(e.message || 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function downloadEdgeCases() {
+    if (!result?.edge_cases?.length) return
+    const csv = 'email,reason\r\n' +
+      result.edge_cases.map(ec => `${csvCell(ec.email)},${csvCell(ec.reason)}`).join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = 'select_phase_edge_cases.csv'
+    document.body.appendChild(a)
+    a.click()
+    URL.revokeObjectURL(url)
+    a.remove()
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
+      <h3 style={{ marginBottom: 6 }}>Select Participants (Phase 1)</h3>
+      <p style={{ marginBottom: 20, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
+        Upload a CSV with a single <strong>email</strong> column. All matched participants
+        registered for the selected event will have their <code>phase</code> set to{' '}
+        <strong>1</strong> (selected / cleared Round 1). Unrecognised emails or users not
+        registered for the event are collected as edge cases.
+      </p>
+
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <label style={labelStyle}>1. Select Event</label>
+          <select
+            className="input-field"
+            value={selectedEvent}
+            onChange={e => setSelectedEvent(e.target.value)}
+            disabled={loading}
+          >
+            <option value="">— Choose an Event —</option>
+            {events.map(ev => (
+              <option key={ev.eventId || ev.id} value={ev.eventId || ev.id}>
+                {ev.name || ev.eventName}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <label style={labelStyle}>2. Upload CSV (email column)</label>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv"
+            className="input-field"
+            style={{ paddingTop: 8, paddingBottom: 8 }}
+            onChange={e => setFile(e.target.files?.[0] || null)}
+            disabled={loading}
+          />
+        </div>
+
+        <button
+          className="btn btn-primary"
+          onClick={handleSubmit}
+          disabled={loading || !selectedEvent || !file}
+          style={{ height: 42, minWidth: 180 }}
+        >
+          {loading ? 'Processing…' : 'Mark as Selected'}
+        </button>
+      </div>
+
+      {/* Results */}
+      {result && (
+        <div style={{ marginTop: 24 }}>
+          {/* Summary strip */}
+          <div style={{
+            display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16,
+          }}>
+            {[
+              { label: 'Phase set to 1', value: result.updated,            color: '#10b981' },
+              { label: 'Edge Cases',     value: result.edge_cases?.length ?? 0, color: '#f59e0b' },
+            ].map(s => (
+              <div key={s.label} style={{
+                flex: 1, minWidth: 120, padding: '12px 16px',
+                background: 'var(--bg-card)', borderRadius: 8,
+                borderLeft: `3px solid ${s.color}`,
+              }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  {s.label}
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Edge cases table */}
+          {result.edge_cases?.length > 0 && (
+            <div style={{
+              padding: '12px 16px',
+              background: 'rgba(245,158,11,0.08)',
+              border: '1px solid rgba(245,158,11,0.25)',
+              borderRadius: 10,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontWeight: 600, fontSize: 13, color: '#fbbf24' }}>
+                  ⚠️ {result.edge_cases.length} edge case{result.edge_cases.length !== 1 ? 's' : ''}
+                </span>
+                <button
+                  className="btn btn-secondary"
+                  onClick={downloadEdgeCases}
+                  style={{ fontSize: 12, padding: '4px 12px', height: 30 }}
+                >
+                  ↓ Download CSV
+                </button>
+              </div>
+              <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                {result.edge_cases.map((ec, i) => (
+                  <div key={i} style={{
+                    display: 'flex', gap: 12, padding: '6px 0',
+                    borderBottom: i < result.edge_cases.length - 1 ? '1px solid rgba(245,158,11,0.15)' : 'none',
+                    fontSize: 12, fontFamily: 'monospace',
+                  }}>
+                    <span style={{ color: '#fde68a', minWidth: 220, wordBreak: 'break-all' }}>{ec.email}</span>
+                    <span style={{ color: '#fca5a5' }}>— {ec.reason}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
