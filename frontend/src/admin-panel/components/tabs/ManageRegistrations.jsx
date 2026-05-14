@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useData } from '../../context/DataContext'
-import { adminPanel as adminApi } from '../../../lib/api'
+import { adminPanel as adminApi, adminPanel } from '../../../lib/api'
 import Pagination from '../Pagination'
 import './ManageRegistrations.css'
 
