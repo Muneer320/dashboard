@@ -35,6 +35,12 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     SMTP_FROM_EMAIL: str | None = None
 
+    # AWS S3 — UGC proof image storage
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_S3_REGION: str = "ap-south-1"
+    AWS_S3_UGC_BUCKET: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

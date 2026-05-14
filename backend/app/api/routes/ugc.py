@@ -145,32 +145,31 @@ async def get_eligibility(
 
 _ALLOWED_SCREENSHOT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
-_UGC_BUCKET = "ugc_proofs"
 
 
 @router.post("/upload-proof")
 async def upload_proof_image(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
-    supabase: AsyncClient = Depends(get_supabase),
 ) -> dict[str, str]:
-    """Accept an image screenshot, store in Supabase Storage, return its public URL.
-    Bucket 'ugc-proofs' must exist in Supabase with public read access."""
+    """Accept an image screenshot, store in AWS S3, return its public URL.
+    Bucket name comes from the AWS_S3_UGC_BUCKET env var."""
+    from app.services.s3_service import upload_ugc_proof
+
     if file.content_type not in _ALLOWED_SCREENSHOT_TYPES:
         raise HTTPException(400, "Only JPEG, PNG, or WebP images accepted")
     file_bytes = await file.read()
     if len(file_bytes) > _MAX_UPLOAD_BYTES:
         raise HTTPException(400, "File too large (max 10 MB)")
     ext = file.content_type.split("/")[1]
-    path = f"{user.id}/{_uuid.uuid4()}.{ext}"
+    key = f"{user.id}/{_uuid.uuid4()}.{ext}"
 
     try:
-        await supabase.storage.from_(_UGC_BUCKET).upload(
-            path, file_bytes, {"content-type": file.content_type, "upsert": False}
+        public_url = await upload_ugc_proof(
+            key=key, body=file_bytes, content_type=file.content_type,
         )
-        public_url = await supabase.storage.from_(_UGC_BUCKET).get_public_url(path)
-    except Exception as exc:
-        raise HTTPException(500, f"Storage upload failed: {exc}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(500, str(exc)) from exc
 
     return {"url": public_url}
 
