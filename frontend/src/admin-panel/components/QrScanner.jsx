@@ -1,61 +1,55 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/browser'
+import QrScannerLib from 'qr-scanner'
 import './QrScanner.css'
 
 /**
- * Simulated QR Scanner UI.
+ * QR Scanner — uses `qr-scanner` for camera scanning + manual text input fallback.
  *
  * Props:
- *   participants   — all participants (used for lookup/search)
- *   scopeParticipants — optional subset of participants to display
- *                       (e.g., event-filtered for food tab)
- *   onScan(p)      — called when a matching participant is found. May return
- *                    a Promise resolving to `{ status, message }` from the
- *                    backend. The overlay shown on the QR frame reflects this
- *                    server result (green for accepted, red for rejected /
- *                    error).
- *   alreadyField   — optional client-side flag to short-circuit with a warn
- *                    state before calling onScan (e.g. 'entryScanned').
- *   actionLabel    — human label for the action (e.g. 'Food', 'Entry').
- *   trustServer    — if true, skip the local alreadyField check and rely on
- *                    the server response (recommended for food scans where
- *                    the backend auto-assigns the next slot).
+ *   participants  — all participants (for local lookup / display)
+ *   onScan(p)     — called with matched participant (or { id: uuid } if not in local list).
+ *                   Should return Promise<{ status, message }> from the backend.
+ *   alreadyField  — optional client-side flag to short-circuit (e.g. 'entryScanned').
+ *   actionLabel   — human label for the action (e.g. 'Food', 'Entry').
+ *   trustServer   — if true, skip alreadyField check and rely solely on server response.
  */
 export default function QrScanner({
   participants,
-  scopeParticipants,
   onScan,
   alreadyField,
   actionLabel = 'Scan',
   trustServer = false,
 }) {
-  const [input,       setInput]       = useState('')
-  const [result,      setResult]      = useState(null) // { type: 'success'|'warn'|'error', msg, participant }
-  const [scanning,    setScanning]    = useState(false)
-  const [animate,     setAnimate]     = useState(false)
-  const [cameraReady, setCameraReady] = useState(false)
-  const [cameraError, setCameraError] = useState(null)
+  const [input,         setInput]         = useState('')
+  const [result,        setResult]        = useState(null)
+  const [scanning,      setScanning]      = useState(false)
+  const [cameraActive,  setCameraActive]  = useState(false)
+  const [cameraError,   setCameraError]   = useState(null)
+  const [cameraLoading, setCameraLoading] = useState(false)
 
-  const videoRef = useRef(null)
-  const readerRef = useRef(null)
-  const controlsRef = useRef(null)
-  const lastScanRef = useRef(0)
-  const processingRef = useRef(false)
-  const cameraReadyRef = useRef(false)
-
+  // Refs
   const participantsRef = useRef(participants)
-  const displayParticipants = scopeParticipants || participants
-  const onScanRef = useRef(onScan)
+  const onScanRef       = useRef(onScan)
   const alreadyFieldRef = useRef(alreadyField)
-  const trustServerRef = useRef(trustServer)
-  const actionLabelRef = useRef(actionLabel)
-  const inputRef = useRef()
+  const trustServerRef  = useRef(trustServer)
+  const actionLabelRef  = useRef(actionLabel)
+  const inputRef        = useRef()
+  const videoRef        = useRef()
+  const scannerRef      = useRef(null)  // qr-scanner instance
+  const processingRef   = useRef(false)
+  const lastScanRef     = useRef(0)
 
+  // Keep refs in sync with props
   useEffect(() => { participantsRef.current = participants }, [participants])
   useEffect(() => { onScanRef.current = onScan }, [onScan])
   useEffect(() => { alreadyFieldRef.current = alreadyField }, [alreadyField])
   useEffect(() => { trustServerRef.current = trustServer }, [trustServer])
   useEffect(() => { actionLabelRef.current = actionLabel }, [actionLabel])
+
+  // Cleanup on unmount
+  useEffect(() => () => stopCamera(), [])
+
+  // ─── Helpers ──────────────────────────────────────────────────────────────
 
   function normalisePayload(raw) {
     const cleaned = String(raw || '').trim()
@@ -68,48 +62,116 @@ export default function QrScanner({
 
   function findParticipant(query) {
     const q = query.trim().toLowerCase()
-    const list = participantsRef.current || []
-    return list.find(pt => {
-      const id = String(pt.id || '').toLowerCase()
-      const name = String(pt.name || '').toLowerCase()
+    return (participantsRef.current || []).find(pt => {
+      const id       = String(pt.id       || '').toLowerCase()
+      const name     = String(pt.name     || '').toLowerCase()
       const username = String(pt.username || '').toLowerCase()
       return id === q || name === q || username === q
     })
   }
 
+  // ─── Camera ───────────────────────────────────────────────────────────────
+
+  async function startCamera() {
+    setCameraError(null)
+    setCameraLoading(true)
+    setResult(null)
+
+    try {
+      // qr-scanner needs the <video> element to exist first
+      if (!videoRef.current) throw new Error('Video element not ready')
+
+      const scanner = new QrScannerLib(
+        videoRef.current,
+        (result) => {
+          // ── DEBUG ── raw QR content printed on every successful decode
+          console.log('%c[QR SCAN] Raw decoded:', 'color:#a78bfa;font-weight:bold', result.data)
+          handleCameraDecode(result.data)
+        },
+        {
+          preferredCamera: 'environment',
+          highlightScanRegion: true,
+          highlightCodeOutline: true,
+          maxScansPerSecond: 5,
+          returnDetailedScanResult: true,
+        }
+      )
+
+      scannerRef.current = scanner
+      await scanner.start()
+
+      setCameraActive(true)
+      console.log('[QR SCAN] Camera started successfully')
+    } catch (err) {
+      console.error('[QR SCAN] Camera start failed:', err)
+      const msg = String(err?.message || err || '')
+      if (msg.toLowerCase().includes('permission') || msg.toLowerCase().includes('denied') || msg.toLowerCase().includes('notallowed')) {
+        setCameraError('Camera permission denied — allow access in your browser settings and try again.')
+      } else if (!navigator.mediaDevices) {
+        setCameraError('Camera API unavailable — use localhost or HTTPS. Manual input works anywhere.')
+      } else {
+        setCameraError(msg || 'Could not start camera.')
+      }
+    } finally {
+      setCameraLoading(false)
+    }
+  }
+
+  function stopCamera() {
+    const scanner = scannerRef.current
+    if (!scanner) return
+    try {
+      scanner.stop()
+      scanner.destroy()
+    } catch (_) {}
+    scannerRef.current = null
+    setCameraActive(false)
+  }
+
+  function toggleCamera() {
+    cameraActive ? stopCamera() : startCamera()
+  }
+
+  // ─── Scan flow ────────────────────────────────────────────────────────────
+
+  function handleCameraDecode(rawValue) {
+    // 1.5 s debounce so a single QR doesn't fire multiple backend calls
+    const now = Date.now()
+    if (now - lastScanRef.current < 1500) return
+    if (processingRef.current) return
+    lastScanRef.current = now
+    processScanValue(rawValue)
+  }
+
   async function processScanValue(rawValue) {
     const raw = String(rawValue || '').trim()
-    if (!raw) return
-    if (processingRef.current) return
-
-    const now = Date.now()
-    if (now - lastScanRef.current < 600) return
-    lastScanRef.current = now
+    if (!raw || processingRef.current) return
 
     processingRef.current = true
     setScanning(true)
     setResult(null)
 
     try {
-      // Small delay for the scan animation — keeps the UX feeling like the real thing.
-      await new Promise(r => setTimeout(r, 350))
+      await new Promise(r => setTimeout(r, 200))
 
       const normalized = normalisePayload(raw)
-      const lookup = normalized || raw
-      
-      // DEBUG: Log what was scanned and participants available
-      console.log('QR Scanned:', { raw, normalized, lookup })
-      console.log('Available participants:', participantsRef.current?.map(p => ({ id: p.id, name: p.name, username: p.username })))
-      
+      const lookup     = normalized || raw
+
+      console.log('%c[QR SCAN] Processing:', 'color:#34d399;font-weight:bold',
+        { raw, normalized, lookup })
+
       const p = findParticipant(lookup)
+      console.log('[QR SCAN] Local match:', p ? p.name : '(none — sending UUID to backend)')
 
       if (!p) {
-        setResult({ type: 'error', msg: `No participant found for "${lookup}"` })
-        console.warn('Participant not found:', lookup)
+        // Not in local list — pass UUID straight to backend
+        const server = await safeScan({ id: lookup })
+        showServerResult(server, lookup)
         return
       }
+
       if (p.status === 'restricted') {
-        setResult({ type: 'error', msg: `${p.name} is restricted and cannot be processed.`, participant: p })
+        setResult({ type: 'error', msg: `${p.name} is restricted.`, participant: p })
         return
       }
       if (!trustServerRef.current && alreadyFieldRef.current && p[alreadyFieldRef.current]) {
@@ -121,38 +183,45 @@ export default function QrScanner({
         return
       }
 
-      // Fire the scan — wait for the server so the overlay reflects reality.
-      let server = null
-      try {
-        server = await onScanRef.current?.(p)
-      } catch (e) {
-        server = { status: 'error', message: e?.message || 'Scan failed' }
-      }
-      const status = server?.status || 'accepted'
-      const serverMsg = server?.message
-      if (status === 'accepted') {
-        setResult({
-          type: 'success',
-          msg: serverMsg || `${p.name} — ${actionLabelRef.current} recorded successfully!`,
-          participant: p,
-        })
-      } else if (status === 'rejected') {
-        setResult({
-          type: 'warn',
-          msg: serverMsg || `${p.name} — already processed.`,
-          participant: p,
-        })
-      } else {
-        setResult({
-          type: 'error',
-          msg: serverMsg || `${p.name} — scan failed.`,
-          participant: p,
-        })
-      }
+      const server = await safeScan(p)
+      showServerResult(server, null, p)
     } finally {
       setScanning(false)
       processingRef.current = false
-      triggerAnimate()
+    }
+  }
+
+  async function safeScan(arg) {
+    try {
+      return await onScanRef.current?.(arg)
+    } catch (e) {
+      return { status: 'error', message: e?.message || 'Scan failed' }
+    }
+  }
+
+  function showServerResult(server, lookupId, participant) {
+    const status = server?.status || 'accepted'
+    const msg    = server?.message
+    const shortId = lookupId ? `${lookupId.slice(0, 8)}…` : null
+
+    if (status === 'accepted') {
+      setResult({
+        type: 'success',
+        msg: msg || (participant ? `${participant.name} — ${actionLabelRef.current} recorded!` : `Scan recorded (${shortId})`),
+        participant,
+      })
+    } else if (status === 'rejected') {
+      setResult({
+        type: 'warn',
+        msg: msg || (participant ? `${participant.name} — already processed.` : 'Already processed.'),
+        participant,
+      })
+    } else {
+      setResult({
+        type: 'error',
+        msg: msg || (participant ? `${participant.name} — scan failed.` : `Participant not found (${shortId})`),
+        participant,
+      })
     }
   }
 
@@ -163,135 +232,75 @@ export default function QrScanner({
     inputRef.current?.focus()
   }
 
-  function triggerAnimate() {
-    setAnimate(true)
-    setTimeout(() => setAnimate(false), 1000)
-  }
-
   function handleKey(e) {
     if (e.key === 'Enter') simulateScan()
   }
 
-  useEffect(() => {
-    let active = true
-    const reader = new BrowserMultiFormatReader()
-    readerRef.current = reader
-    setCameraError(null)
-    setCameraReady(false)
-    cameraReadyRef.current = false
-
-    const start = async () => {
-      if (!videoRef.current) return
-      try {
-        const controls = await reader.decodeFromVideoDevice(
-          null,
-          videoRef.current,
-          (result, err) => {
-            if (!active) return
-            if (!cameraReadyRef.current && (result || err)) {
-              cameraReadyRef.current = true
-              setCameraReady(true)
-            }
-            if (result) {
-              processScanValue(result.getText())
-            }
-          }
-        ).catch(e => {
-          // Suppress zxing video playback errors - they're harmless
-          if (!String(e?.message || '').includes('play()')) {
-            console.error('zxing error:', e)
-          }
-        })
-        controlsRef.current = controls
-      } catch (e) {
-        if (!active) return
-        // Suppress zxing internal video errors
-        if (!String(e?.message || '').includes('play()')) {
-          setCameraError(e?.message || 'Camera access failed')
-        }
-      }
-    }
-
-    start()
-
-    return () => {
-      active = false
-      try { controlsRef.current?.stop() } catch {}
-      try { readerRef.current?.reset() } catch {}
-    }
-  }, [])
-
-  // Outcome drives the big overlay on top of the QR frame.
-  const overlay = result && (result.type === 'success'
-    ? { tone: 'success', label: 'Accepted' }
-    : result.type === 'warn'
-      ? { tone: 'warn',  label: 'Rejected' }
-      : { tone: 'error', label: 'Rejected' })
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="qr-scanner">
-      {/* Camera frame simulation */}
-      <div className={`qr-frame ${animate ? 'animate' : ''} ${result?.type || ''}`}>
-        <video ref={videoRef} className="qr-video" autoPlay playsInline muted />
-        <div className="qr-corners">
-          <span className="corner tl" /><span className="corner tr" />
-          <span className="corner bl" /><span className="corner br" />
-        </div>
-        <div className="scan-line" />
-        {(!cameraReady || cameraError) && (
-          <div className="qr-placeholder">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.25">
-              <polyline points="23 7 23 1 17 1"/><line x1="16" y1="8" x2="23" y2="1"/>
-              <polyline points="1 7 1 1 7 1"/><line x1="8" y1="8" x2="1" y2="1"/>
-              <polyline points="23 17 23 23 17 23"/><line x1="16" y1="16" x2="23" y2="23"/>
-              <polyline points="1 17 1 23 7 23"/><line x1="8" y1="16" x2="1" y2="23"/>
-            </svg>
-            {cameraError ? (
-              <>
-                <p>Camera unavailable</p>
-                <p className="qr-placeholder-sub">{cameraError}</p>
-              </>
-            ) : (
-              <p>Starting camera…</p>
-            )}
-          </div>
-        )}
 
-        {/* Big success/fail overlay on the QR frame */}
-        {overlay && (
-          <div
-            key={result.msg /* forces re-mount so the pop animation fires every scan */}
-            className={`qr-outcome qr-outcome-${overlay.tone} fade-in`}
-            role="status"
-            aria-live="polite"
-          >
-            {overlay.tone === 'success' ? (
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="8 12 11 15 16 9" />
+      {/* Camera */}
+      <div className="qr-camera-section">
+        <div className={`qr-video-wrapper${cameraActive ? ' active' : ''}`}>
+          {/* qr-scanner controls this <video> element directly */}
+          <video ref={videoRef} className="qr-video" />
+
+          {!cameraActive && (
+            <div className="qr-camera-placeholder">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="1.5" opacity="0.3">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
               </svg>
-            ) : (
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="15" y1="9" x2="9" y2="15" />
-                <line x1="9" y1="9" x2="15" y2="15" />
+              {cameraError
+                ? <p className="qr-camera-error">{cameraError}</p>
+                : <p className="qr-camera-hint">Click Start Camera to scan QR codes</p>
+              }
+            </div>
+          )}
+        </div>
+
+        <button
+          id="scanner-camera-toggle"
+          className={`btn ${cameraActive ? 'btn-secondary' : 'btn-primary'} qr-camera-toggle`}
+          onClick={toggleCamera}
+          disabled={cameraLoading || scanning}
+        >
+          {cameraLoading ? (
+            <><span className="spinner" /> Starting…</>
+          ) : cameraActive ? (
+            <>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
               </svg>
-            )}
-            <p className="qr-outcome-label">{overlay.label}</p>
-          </div>
-        )}
+              Stop Camera
+            </>
+          ) : (
+            <>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              Start Camera
+            </>
+          )}
+        </button>
       </div>
 
-      {/* Manual input fallback */}
+      {/* Divider */}
+      <div className="qr-divider"><span>or enter manually</span></div>
+
+      {/* Manual input */}
       <div className="qr-input-section">
-        <p className="qr-label">Or enter Participant ID / Name / Email manually</p>
         <div className="qr-input-row">
           <input
             ref={inputRef}
             id="scanner-manual-input"
             className="input-field"
             type="text"
-            placeholder="e.g. p1 or archived-008018836c@example.invalid or Ravi Kumar"
+            placeholder="UUID, email, or name…"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKey}
@@ -303,38 +312,28 @@ export default function QrScanner({
             onClick={simulateScan}
             disabled={scanning || !input.trim()}
           >
-            {scanning ? <span className="spinner" /> : (
-              <>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <polyline points="23 7 23 1 17 1"/><line x1="16" y1="8" x2="23" y2="1"/>
-                  <polyline points="1 7 1 1 7 1"/><line x1="8" y1="8" x2="1" y2="1"/>
-                  <polyline points="23 17 23 23 17 23"/><line x1="16" y1="16" x2="23" y2="23"/>
-                  <polyline points="1 17 1 23 7 23"/><line x1="8" y1="16" x2="1" y2="23"/>
-                </svg>
-                Scan
-              </>
-            )}
+            {scanning ? <span className="spinner" /> : 'Scan'}
           </button>
         </div>
       </div>
 
       {/* Result */}
       {result && (
-        <div className={`qr-result qr-result-${result.type} fade-in`}>
+        <div className={`qr-result qr-result-${result.type}`}>
           <div className="result-icon">
             {result.type === 'success' && (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
             )}
             {result.type === 'warn' && (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                 <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
               </svg>
             )}
             {result.type === 'error' && (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10"/>
                 <line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
               </svg>
@@ -343,18 +342,20 @@ export default function QrScanner({
           <div>
             <p className="result-msg">{result.msg}</p>
             {result.participant && (
-              <p className="result-sub">{result.participant.eventName} · {result.participant.teamId || 'No team'}</p>
+              <p className="result-sub">
+                {result.participant.eventName} · {result.participant.teamId || 'No team'}
+              </p>
             )}
           </div>
         </div>
       )}
 
-      {/* Quick reference */}
       <div className="qr-tip">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
         </svg>
-        Enter participant ID or name to scan manually
+        Camera requires HTTPS or localhost · Manual input works everywhere
       </div>
     </div>
   )

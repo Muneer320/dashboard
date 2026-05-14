@@ -2,109 +2,107 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
   max-width: 480px;
   margin: 0 auto;
 }
 
-/* Camera frame */
-.qr-frame {
-  width: 260px; height: 260px;
+/* ── Camera section ─────────────────────────────────────────────────────── */
+
+.qr-camera-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+/* qr-scanner renders into this wrapper around the <video> element */
+.qr-video-wrapper {
+  width: 100%;
   position: relative;
   border-radius: var(--radius-lg);
-  background: var(--bg-card);
-  border: 1px solid var(--border);
   overflow: hidden;
-  transition: border-color 0.3s, box-shadow 0.3s;
+  border: 1px solid var(--border);
+  background: #0b0b0f;
+  min-height: 160px;
+}
+.qr-video-wrapper.active {
+  min-height: 280px;
 }
 .qr-video {
-  position: absolute;
-  inset: 0;
   width: 100%;
   height: 100%;
+  display: block;
   object-fit: cover;
-  background: #0b0b0f;
-}
-.qr-frame.animate {
-  animation: pulse-glow 1s ease;
-}
-.qr-frame.success {
-  border-color: var(--success);
-  box-shadow: 0 0 20px rgba(16,185,129,0.25);
-}
-.qr-frame.warn {
-  border-color: var(--warning);
-  box-shadow: 0 0 20px rgba(245,158,11,0.25);
-}
-.qr-frame.error {
-  border-color: var(--danger);
-  box-shadow: 0 0 20px rgba(239,68,68,0.25);
 }
 
-/* Corner markers */
-.qr-corners { position: absolute; inset: 10px; }
-.corner {
-  position: absolute;
-  width: 20px; height: 20px;
-  border-color: var(--accent);
-  border-style: solid;
-}
-.corner.tl { top: 0; left: 0; border-width: 2px 0 0 2px; border-radius: 2px 0 0 0; }
-.corner.tr { top: 0; right: 0; border-width: 2px 2px 0 0; border-radius: 0 2px 0 0; }
-.corner.bl { bottom: 0; left: 0; border-width: 0 0 2px 2px; border-radius: 0 0 0 2px; }
-.corner.br { bottom: 0; right: 0; border-width: 0 2px 2px 0; border-radius: 0 0 2px 0; }
-
-/* Scan line */
-.scan-line {
-  position: absolute;
-  top: 0; left: 5%; right: 5%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--accent-light), transparent);
-  animation: scan 2.5s ease-in-out infinite;
-  box-shadow: 0 0 8px var(--accent-glow);
-}
-@keyframes scan {
-  0%   { top: 10%; opacity: 1; }
-  50%  { top: 85%; opacity: 1; }
-  100% { top: 10%; opacity: 1; }
-}
-
-.qr-placeholder {
-  position: absolute;
-  inset: 0;
+.qr-camera-placeholder {
+  width: 100%;
+  min-height: 160px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: var(--text-muted);
-  font-size: 0.78rem;
+  background: var(--bg-card);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px 16px;
   text-align: center;
-  padding: 0 16px;
-}
-.qr-placeholder-sub {
-  font-size: 0.7rem;
-  opacity: 0.8;
-  margin-top: -6px;
 }
 
-/* Input section */
+.qr-camera-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.qr-camera-error {
+  font-size: 0.78rem;
+  color: var(--danger, #ef4444);
+  margin: 0;
+  max-width: 320px;
+}
+
+.qr-camera-toggle {
+  width: 100%;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* ── Divider ─────────────────────────────────────────────────────────────── */
+
+.qr-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 0.73rem;
+}
+.qr-divider::before,
+.qr-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Manual input ────────────────────────────────────────────────────────── */
+
 .qr-input-section {
   width: 100%;
 }
-.qr-label {
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-  text-align: center;
-}
+
 .qr-input-row {
   display: flex;
   gap: 8px;
 }
 .qr-input-row .input-field { flex: 1; }
 
-/* Result */
+/* ── Result card ─────────────────────────────────────────────────────────── */
+
 .qr-result {
   width: 100%;
   display: flex;
@@ -113,58 +111,29 @@
   padding: 14px 16px;
   border-radius: var(--radius-md);
   border: 1px solid;
+  animation: qr-fade-in 0.25s ease;
 }
 .qr-result-success { background: var(--success-dim); border-color: rgba(16,185,129,0.3); color: var(--success); }
 .qr-result-warn    { background: var(--warning-dim); border-color: rgba(245,158,11,0.3); color: var(--warning); }
 .qr-result-error   { background: var(--danger-dim);  border-color: rgba(239,68,68,0.3);  color: var(--danger);  }
 
 .result-icon { flex-shrink: 0; }
-.result-msg  { font-size: 0.87rem; font-weight: 500; }
-.result-sub  { font-size: 0.75rem; opacity: 0.75; margin-top: 2px; }
+.result-msg  { font-size: 0.87rem; font-weight: 500; margin: 0; }
+.result-sub  { font-size: 0.75rem; opacity: 0.75; margin: 2px 0 0; }
 
-/* Tip */
+/* ── Tip ─────────────────────────────────────────────────────────────────── */
+
 .qr-tip {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.73rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
+  opacity: 0.7;
+  text-align: center;
 }
 
-/* Big success/fail overlay on the QR frame */
-.qr-outcome {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  backdrop-filter: blur(2px);
-  animation: qr-outcome-pop 0.35s ease-out;
-  z-index: 2;
-}
-.qr-outcome-success {
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--success, #10b981);
-}
-.qr-outcome-warn {
-  background: rgba(245, 158, 11, 0.15);
-  color: var(--warning, #f59e0b);
-}
-.qr-outcome-error {
-  background: rgba(239, 68, 68, 0.15);
-  color: var(--danger, #ef4444);
-}
-.qr-outcome-label {
-  font-size: 1rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin: 0;
-}
-@keyframes qr-outcome-pop {
-  0%   { transform: scale(0.7); opacity: 0; }
-  60%  { transform: scale(1.08); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+@keyframes qr-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
