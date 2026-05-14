@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     SMTP_FROM_EMAIL: str | None = None
 
+    # AWS S3 — UGC proof image storage
+    AWS_S3_REGION: str = "ap-south-1"
+    AWS_S3_UGC_BUCKET: str | None = None
+
     @field_validator("DEBUG", mode="before")
     @classmethod
     def _parse_debug(cls, value):  # type: ignore[no-untyped-def]

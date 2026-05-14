@@ -1,9 +1,25 @@
 // Ascent — Shared UI components
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useNavigate } from "react-router-dom";
 import { useUserAuth } from "../lib/UserAuthContext";
-import { users } from "../lib/api";
+import { notifications as notificationsApi, coins as coinsApi, users } from "../lib/api";
+import ascentCoinImg from "../assets/ascent-coin.png";
+
+let _navCoinStyleInjected = false;
+function injectNavCoinStyles() {
+  if (_navCoinStyleInjected) return;
+  _navCoinStyleInjected = true;
+  const el = document.createElement("style");
+  el.textContent = `
+    @keyframes navCoinFlip { 0%{transform:rotateY(0deg)} 100%{transform:rotateY(360deg)} }
+    .nav-coin-wrap { perspective:500px; display:inline-flex; align-items:center; }
+    .nav-coin-inner { border-radius:50%; transform-style:preserve-3d; }
+    .nav-coin-wrap:hover .nav-coin-inner { animation:navCoinFlip 0.55s cubic-bezier(0.4,0,0.2,1) both; }
+    .nav-coin-inner img { display:block; border-radius:50%; pointer-events:none; user-select:none; }
+  `;
+  document.head.appendChild(el);
+}
 
 // ─────────────────────────────────────────────────────────────
 // Profile Popover
@@ -195,22 +211,113 @@ export function AscentLogo({ size = 22, withMark = true }) {
 // Sticky Navbar used across all app-internal pages
 // ─────────────────────────────────────────────────────────────
 export function NavBar({ active, variant = "app" }) {
+  useEffect(() => { injectNavCoinStyles(); }, []);
   const isMobile = useMobile();
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
+  const [bellOpen, setBellOpen] = useState(false);
+  const bellRef = useRef(null);
+  const [notifs, setNotifs] = useState({ items: [], unread: 0 });
+  const [coinBalance, setCoinBalance] = useState(() => {
+    const cached = localStorage.getItem("ascentCoinBalance");
+    return cached !== null ? Number(cached) : null;
+  });
   const navigate = useNavigate();
-  const { user, logout } = useUserAuth() || {};
+  const { user, logout, setUser } = useUserAuth() || {};
 
+  // Close popovers on outside click
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (profileRef.current && !profileRef.current.contains(event.target)) {
+    if (!profileOpen) return;
+    const onDoc = (e) => {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
         setProfileOpen(false);
       }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [profileOpen]);
+
+  useEffect(() => {
+    if (!bellOpen) return;
+    const onDoc = (e) => {
+      if (bellRef.current && !bellRef.current.contains(e.target)) setBellOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [bellOpen]);
+
+  // Poll notifications every 15s — only when there is a logged-in user.
+  const loadNotifs = useCallback(() => {
+    if (!user) return;
+    notificationsApi.list(20).then(setNotifs).catch((e) => {
+      if (e?.status === 401) logout?.();
+    });
+  }, [user, logout]);
+  useEffect(() => { loadNotifs(); }, [loadNotifs]);
+  useEffect(() => {
+    if (!user) return;
+    // Poll every 15s so an admin approval/rejection shows up in the bell
+    // within ~15s without manually reloading. Also re-fetch when the tab
+    // regains focus so a returning user gets the latest state immediately.
+    const id = setInterval(loadNotifs, 15000);
+    const onFocus = () => loadNotifs();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadNotifs, user]);
+
+  // Coin balance — pulled into the topbar chip. Only meaningful when the
+  // user is logged in; backend returns 401/403 otherwise.
+  const loadCoins = useCallback(() => {
+    if (!user) return;
+    coinsApi.balance()
+      .then((b) => {
+        const val = typeof b?.balance === "number" ? b.balance : null;
+        setCoinBalance(val);
+        if (val !== null) localStorage.setItem("ascentCoinBalance", String(val));
+      })
+      .catch((e) => {
+        if (e?.status === 401) logout?.();
+      });
+  }, [user, logout]);
+  useEffect(() => { loadCoins(); }, [loadCoins]);
+  useEffect(() => {
+    if (!user) return;
+    const id = setInterval(loadCoins, 30000);
+    const onFocus = () => loadCoins();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [loadCoins, user]);
+
+  const onBellOpen = () => {
+    setBellOpen((v) => {
+      const next = !v;
+      if (next && notifs.unread > 0) {
+        notificationsApi.markAllRead()
+          .then(() => setNotifs((n) => ({
+            ...n, unread: 0,
+            items: n.items.map(it => ({ ...it, read_at: it.read_at || new Date().toISOString() })),
+          })))
+          .catch(() => {});
+      }
+      return next;
+    });
+  };
+
+  function relTimeShort(iso) {
+    if (!iso) return "";
+    const d = (Date.now() - new Date(iso)) / 1000;
+    if (d < 60) return `${Math.floor(d)}s`;
+    if (d < 3600) return `${Math.floor(d / 60)}m`;
+    if (d < 86400) return `${Math.floor(d / 3600)}h`;
+    return `${Math.floor(d / 86400)}d`;
+  }
 
   const handleLogout = () => {
     if (logout) logout();
@@ -231,6 +338,7 @@ export function NavBar({ active, variant = "app" }) {
     "Schedule",
     "Explore",
     "Leaderboard",
+    ...(user?.is_attending ? ["My Coins"] : []),
     "Mirage",
     "Announcements",
     "Merch",
@@ -244,6 +352,7 @@ export function NavBar({ active, variant = "app" }) {
       schedule: "/schedule",
       explore: "/explore",
       leaderboard: "/leaderboard",
+      "my coins": "/coins",
       mirage: "/mirage",
       announcements: "/announcements",
       landing: "/",
@@ -349,11 +458,132 @@ export function NavBar({ active, variant = "app" }) {
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {variant === "app" ? (
-              <div
-                style={{ position: "relative" }}
-                ref={profileRef}
-              >
-                <div
+              <>
+              {/* Bell */}
+              <div ref={bellRef} style={{ position: "relative" }}>
+                <button
+                  onClick={onBellOpen}
+                  aria-label="Notifications"
+                  style={{
+                    background: "transparent", border: 0, color: "var(--ink-dim)",
+                    cursor: "pointer", padding: 6, position: "relative",
+                  }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                  </svg>
+                  {notifs.unread > 0 && (
+                    <span style={{
+                      position: "absolute", top: 0, right: 0,
+                      minWidth: 16, height: 16, borderRadius: 999, padding: "0 4px",
+                      background: "var(--violet)", color: "#fff",
+                      fontSize: 9, fontFamily: "var(--f-mono)", fontWeight: 600,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      boxShadow: "0 0 0 2px var(--bg)",
+                    }}>{notifs.unread > 9 ? "9+" : notifs.unread}</span>
+                  )}
+                </button>
+
+                {bellOpen && (
+                  <div className="fade-up" style={{
+                    position: "absolute", top: "calc(100% + 10px)", right: 0,
+                    width: 360, maxHeight: 480, overflowY: "auto",
+                    padding: 14, zIndex: 50,
+                    background: "rgba(15, 15, 22, 0.97)",
+                    border: "1px solid var(--glass-border-strong)",
+                    borderRadius: "var(--r-lg)",
+                    backdropFilter: "blur(28px) saturate(140%)",
+                    WebkitBackdropFilter: "blur(28px) saturate(140%)",
+                    boxShadow: "0 30px 80px -30px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04)",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px 8px" }}>
+                      <div className="eyebrow">§ NOTIFICATIONS</div>
+                      <span className="mono" style={{ fontSize: 10, color: "var(--ink-mute)" }}>
+                        {notifs.items.length} TOTAL
+                      </span>
+                    </div>
+                    {notifs.items.length === 0 ? (
+                      <div style={{ padding: 24, textAlign: "center", color: "var(--ink-mute)", fontSize: 12.5 }}>
+                        No notifications yet.
+                      </div>
+                    ) : notifs.items.map((n) => {
+                      const tone =
+                        n.template_key === "ugc_rejected" ? "var(--amber)" :
+                        n.template_key === "ugc_approved" ? "var(--teal)" :
+                        n.template_key === "post_deleted_reversal" ? "var(--amber)" :
+                        "var(--violet)";
+                      return (
+                        <div key={n.id} style={{
+                          padding: "12px 4px",
+                          borderBottom: "1px solid var(--glass-border)",
+                          opacity: n.read_at ? 0.7 : 1,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: tone, flexShrink: 0 }} />
+                              <span style={{
+                                fontSize: 13, color: "var(--ink)", fontWeight: 500,
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              }}>
+                                {n.title}
+                              </span>
+                            </div>
+                            <span className="mono" style={{ fontSize: 9.5, color: "var(--ink-mute)", flexShrink: 0 }}>
+                              {relTimeShort(n.created_at)}
+                            </span>
+                          </div>
+                          <div style={{
+                            fontSize: 12, color: "var(--ink-dim)", marginTop: 6,
+                            marginLeft: 14, lineHeight: 1.45,
+                          }}>
+                            {n.body}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Coin balance chip — only shown to attending users */}
+              {coinBalance != null && user?.is_attending && (
+                <button
+                  onClick={() => navigate("/coins/rewards")}
+                  aria-label={`Coin balance ${coinBalance.toLocaleString()}`}
+                  className="mono"
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 7,
+                    padding: "6px 11px", height: 30, borderRadius: 999,
+                    background: "linear-gradient(135deg, rgba(127,119,221,0.18), rgba(64,212,196,0.12))",
+                    border: "1px solid var(--violet-dim)",
+                    color: "var(--ink)", fontSize: 12, letterSpacing: "0.06em",
+                    cursor: "pointer",
+                    boxShadow: "0 0 0 0 var(--violet-glow)",
+                    transition: "box-shadow .2s, transform .15s, border-color .2s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.boxShadow = "0 0 14px var(--violet-glow)";
+                    e.currentTarget.style.borderColor = "var(--violet)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.boxShadow = "0 0 0 0 var(--violet-glow)";
+                    e.currentTarget.style.borderColor = "var(--violet-dim)";
+                  }}
+                >
+                  <div className="nav-coin-wrap">
+                    <div className="nav-coin-inner">
+                      <img src={ascentCoinImg} alt="" width={18} height={18} />
+                    </div>
+                  </div>
+                  <span style={{ fontWeight: 600 }}>{coinBalance.toLocaleString()}</span>
+                </button>
+              )}
+
+              <div ref={profileRef} style={{ position: "relative" }}>
+                <button
+                  onClick={() => setProfileOpen((v) => !v)}
+                  aria-label="Profile menu"
                   style={{
                     width: 30,
                     height: 30,
@@ -365,32 +595,50 @@ export function NavBar({ active, variant = "app" }) {
                     fontFamily: "var(--f-mono)",
                     fontSize: 11,
                     color: "#fff",
-                    border: "1px solid rgba(255,255,255,0.2)",
+                    border: profileOpen
+                      ? "2px solid var(--violet)"
+                      : "1px solid rgba(255,255,255,0.2)",
                     cursor: "pointer",
+                    padding: 0,
+                    boxShadow: profileOpen
+                      ? "0 0 0 3px rgba(127,119,221,0.18)"
+                      : "none",
+                    transition: "box-shadow .2s, border-color .2s",
                   }}
-                  onClick={() => setProfileOpen(v => !v)}
                 >
                   {initials}
-                </div>
+                </button>
 
                 {profileOpen && (
                   <div
+                    className="fade-up"
                     style={{
                       position: "absolute",
-                      top: "100%",
+                      top: "calc(100% + 10px)",
                       right: 0,
                       paddingTop: 12,
                       zIndex: 50,
+                      background: "rgba(15, 15, 22, 0.97)",
+                      border: "1px solid var(--glass-border-strong)",
+                      borderRadius: "var(--r-lg)",
+                      backdropFilter: "blur(28px) saturate(140%)",
+                      WebkitBackdropFilter: "blur(28px) saturate(140%)",
+                      boxShadow:
+                        "0 30px 80px -30px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04)",
                     }}
                   >
-                    <ProfilePopover 
-                      user={user} 
-                      setUser={useUserAuth()?.setUser} 
-                      logout={handleLogout} 
+                    <ProfilePopover
+                      user={user}
+                      setUser={setUser}
+                      logout={() => {
+                        setProfileOpen(false);
+                        handleLogout();
+                      }}
                     />
                   </div>
                 )}
               </div>
+              </>
             ) : (
               <>
                 <a onClick={() => navClick("login")} className="btn ghost sm">

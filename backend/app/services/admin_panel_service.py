@@ -20,11 +20,38 @@ import uuid
 from fastapi import HTTPException, status
 from supabase import AsyncClient
 
+from app.api.routes.booth import BOOTH_SOURCE_MAP
 from app.core.security import get_password_hash
 from app.db.supabase_client import first_row, rows
 from app.models.admin import Admin, AdminRole
 from app.models.event import DEFAULT_EVENT_MEALS_COUNT, Event
 from app.models.user import User
+
+
+def _validate_booth_assignment(role: str | None, booth_id: str | None) -> str | None:
+    """
+    Validate booth_id for the given role.
+
+    - booth_volunteer: booth_id is required and must be a known booth.
+    - any other role: booth_id is forced to None (we don't store stale
+      assignments on accounts that were demoted to non-booth roles).
+    """
+    if role == AdminRole.BOOTH_VOLUNTEER.value:
+        if not booth_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="booth_id is required when role is 'booth_volunteer'",
+            )
+        if booth_id not in BOOTH_SOURCE_MAP:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"booth_id '{booth_id}' is not a known booth. "
+                    f"Valid options: {sorted(BOOTH_SOURCE_MAP.keys())}"
+                ),
+            )
+        return booth_id
+    return None
 
 
 _MEAL_KEY_RE = re.compile(r"^meal(\d+)$")
@@ -622,15 +649,16 @@ async def get_my_events(supabase: AsyncClient, admin: Admin) -> list[dict]:
 
 
 async def get_admin_users(supabase: AsyncClient) -> list[dict]:
-    """All admin rows -- admin-only Admins tab."""
+    """All admin rows (active + inactive) for the Admins tab."""
     resp = await (
         supabase.table("admins")
         .select("*")
         .execute()
     )
-    managers = [Admin.from_row(r) for r in rows(resp)]
-    return [
-        {
+    result = []
+    for r in rows(resp):
+        m = Admin.from_row(r)
+        result.append({
             "uid": m.uid,
             "username": m.username,
             "name": m.name,
@@ -638,9 +666,10 @@ async def get_admin_users(supabase: AsyncClient) -> list[dict]:
             "phone": m.phone,
             "mail": m.mail,
             "events": m.events or [],
-        }
-        for m in managers
-    ]
+            "booth_id": m.booth_id,
+            "deleted_at": r.get("deleted_at"),
+        })
+    return result
 
 
 async def create_admin_user(
@@ -652,6 +681,7 @@ async def create_admin_user(
     mail: str | None,
     phone: str | None,
     events: list[str],
+    booth_id: str | None = None,
 ) -> dict:
     """
     Create a new Admin row.
@@ -684,6 +714,8 @@ async def create_admin_user(
                 detail=f"Email '{mail}' is already registered",
             )
 
+    resolved_booth_id = _validate_booth_assignment(role, booth_id)
+
     payload = {
         "role": role,
         "username": username,
@@ -692,6 +724,7 @@ async def create_admin_user(
         "mail": mail,
         "phone": phone,
         "events": events,
+        "booth_id": resolved_booth_id,
     }
     insert_resp = await (
         supabase.table("admins")
@@ -708,6 +741,7 @@ async def create_admin_user(
         "phone": row.get("phone"),
         "mail": row["mail"],
         "events": row.get("events") or [],
+        "booth_id": row.get("booth_id"),
         "message": "Admin created successfully",
     }
 
@@ -721,6 +755,8 @@ async def update_admin_user(
     mail: str | None,
     phone: str | None,
     events: list[str] | None,
+    booth_id: str | None = None,
+    booth_id_provided: bool = False,
 ) -> dict:
     """
     Update an admin's profile fields.
@@ -768,6 +804,13 @@ async def update_admin_user(
     if events is not None:
         patch["events"] = events
 
+    # Re-validate booth assignment when role or booth_id is in flight.
+    # If the admin is being moved off booth_volunteer, clear any stale booth_id.
+    if role is not None or booth_id_provided:
+        effective_role = role if role is not None else row.get("role")
+        effective_booth = booth_id if booth_id_provided else row.get("booth_id")
+        patch["booth_id"] = _validate_booth_assignment(effective_role, effective_booth)
+
     if patch:
         update_resp = await (
             supabase.table("admins")
@@ -787,12 +830,14 @@ async def update_admin_user(
         "phone": updated.get("phone"),
         "mail": updated["mail"],
         "events": updated.get("events") or [],
+        "booth_id": updated.get("booth_id"),
         "message": "Admin updated successfully",
     }
 
 async def delete_admin_user(supabase: AsyncClient, uid: int, current_admin_uid: int) -> dict:
     """
-    Remove an admin account.
+    Soft-delete an admin account — sets deleted_at instead of removing the row.
+    Preserves audit trails (redemption history, booth awards, etc.).
     """
     if uid == current_admin_uid:
         raise HTTPException(status_code=409, detail="Cannot delete your own account")
@@ -801,21 +846,34 @@ async def delete_admin_user(supabase: AsyncClient, uid: int, current_admin_uid: 
         supabase.table("admins")
         .select("*")
         .eq("uid", uid)
+        .is_("deleted_at", "null")
         .limit(1)
         .execute()
     )
     row = first_row(resp)
     if row is None:
         raise HTTPException(status_code=404, detail="Admin not found")
-        
-    # Prevent deleting the last admin
-    if row["role"] == AdminRole.ADMIN.value:
-        admins_resp = await supabase.table("admins").select("uid").eq("role", AdminRole.ADMIN.value).execute()
-        if len(rows(admins_resp)) <= 1:
-            raise HTTPException(status_code=409, detail="Cannot delete the last super admin")
 
-    await supabase.table("admins").delete().eq("uid", uid).execute()
-    
+    # Prevent deactivating the last active super admin
+    if row["role"] == AdminRole.ADMIN.value:
+        admins_resp = await (
+            supabase.table("admins")
+            .select("uid")
+            .eq("role", AdminRole.ADMIN.value)
+            .is_("deleted_at", "null")
+            .execute()
+        )
+        if len(rows(admins_resp)) <= 1:
+            raise HTTPException(status_code=409, detail="Cannot deactivate the last super admin")
+
+    from datetime import datetime, timezone
+    await (
+        supabase.table("admins")
+        .update({"deleted_at": datetime.now(timezone.utc).isoformat()})
+        .eq("uid", uid)
+        .execute()
+    )
+
     return {
         "uid": row["uid"],
         "username": row["username"],
@@ -824,7 +882,7 @@ async def delete_admin_user(supabase: AsyncClient, uid: int, current_admin_uid: 
         "phone": row.get("phone"),
         "mail": row["mail"],
         "events": row.get("events") or [],
-        "message": "Admin deleted successfully",
+        "message": "Admin deactivated successfully",
     }
 
 

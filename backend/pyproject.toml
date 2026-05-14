@@ -13,6 +13,7 @@ dependencies = [
     "google-auth-httplib2>=0.3.0",
     "google-auth-oauthlib>=1.2.3",
     "greenlet<3.4",
+    "gspread>=6.2.1",
     "jinja2>=3.1.6",
     "openpyxl>=3.1.5",
     "passlib[bcrypt]>=1.7.4",
@@ -39,3 +40,11 @@ dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.23,<1",
 ]
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+packages = ["app"]
+
+

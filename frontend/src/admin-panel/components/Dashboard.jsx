@@ -14,6 +14,10 @@ import ManageRegistrations from './tabs/ManageRegistrations'
 import Announcements from './tabs/Announcements'
 import RequestedMembers from './tabs/RequestedMembers'
 import AdminUsers from './tabs/AdminUsers'
+import {
+  UGCQueue, BoothMonitor,
+  Engagement, Disputes, Inventory, AuditLog, CoinsOverview,
+} from './tabs/sidequest/Sidequest'
 import './Dashboard.css'
 
 export default function Dashboard() {
@@ -49,6 +53,15 @@ export default function Dashboard() {
             <Route path="manage-registrations" element={canAccess('manageRegistrations') ? <ManageRegistrations /> : <Forbidden />} />
             <Route path="announcements"        element={canAccess('announcements')       ? <Announcements />        : <Forbidden />} />
             <Route path="requested-members"    element={canAccess('requestedMembers')    ? <RequestedMembers />     : <Forbidden />} />
+
+            {/* Sidequest tabs */}
+            <Route path="ugc-queue"     element={canAccess('ugcQueue')     ? <UGCQueue />     : <Forbidden />} />
+            <Route path="booth-monitor" element={canAccess('boothMonitor') ? <BoothMonitor /> : <Forbidden />} />
+            <Route path="engagement"    element={canAccess('engagement')   ? <Engagement />   : <Forbidden />} />
+            <Route path="disputes"      element={canAccess('disputes')     ? <Disputes />     : <Forbidden />} />
+            <Route path="inventory"     element={canAccess('inventory')    ? <Inventory />    : <Forbidden />} />
+            <Route path="audit-log"     element={canAccess('auditLog')     ? <AuditLog />     : <Forbidden />} />
+            <Route path="coins-overview" element={canAccess('coinsOverview') ? <CoinsOverview /> : <Forbidden />} />
           </Routes>
         </main>
       </div>

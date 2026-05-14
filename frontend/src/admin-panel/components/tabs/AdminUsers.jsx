@@ -7,6 +7,16 @@ import './AdminUsers.css'
 
 import { useAuth } from '../../context/AuthContext'
 
+// Mirrors backend BOOTH_SOURCE_MAP in routes/booth.py — keep in sync.
+// AR_FILTER removed: now student self-submitted screenshot, not booth-verified.
+const BOOTH_OPTIONS = [
+  { id: 'SCAVENGER',      label: 'Scavenger Hunt' },
+  { id: 'RAZORPAY',       label: 'Razorpay Pitch' },
+  { id: 'ECO_EXCHANGE',   label: 'Eco Exchange' },
+  { id: 'EVENT_WIN',      label: 'Event Win Desk' },
+  { id: 'ECO_DESIGN_WIN', label: 'Eco Design Win Desk' },
+]
+
 export default function AdminUsers() {
   const { user } = useAuth()
   const { adminUsers, events, loadAdminUsers } = useData()
@@ -26,23 +36,37 @@ export default function AdminUsers() {
   const [password, setPassword] = useState('')
   const [phone, setPhone] = useState('')
   const [selectedEvents, setSelectedEvents] = useState([])
+  const [boothId, setBoothId] = useState('')
   
   const [formError, setFormError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [activeTab, setActiveTab] = useState('active')
 
-  // Filtering
-  const filtered = adminUsers.filter(u => {
+  // Split by active / inactive, then filter by search
+  const activeAdmins   = adminUsers.filter(u => !u.deleted_at)
+  const inactiveAdmins = adminUsers.filter(u => !!u.deleted_at)
+  const tabData = activeTab === 'active' ? activeAdmins : inactiveAdmins
+
+  const filtered = tabData.filter(u => {
     const q = searchQuery.toLowerCase()
-    return u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q) || u.mail.toLowerCase().includes(q)
+    return u.name.toLowerCase().includes(q) || u.username.toLowerCase().includes(q) || (u.mail || '').toLowerCase().includes(q)
   })
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage)
   const paginatedData = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
 
-  const roleLabel = { admin: 'Super Admin', eventManager: 'Event Manager', Scanner: 'Scanner' }
-  const roleBadge = { admin: 'badge-accent', eventManager: 'badge-info', Scanner: 'badge-warning' }
+  const roleLabel = {
+    admin: 'Super Admin', eventManager: 'Event Manager', Scanner: 'Scanner',
+    booth_volunteer: 'Booth Volunteer', prm_volunteer: 'PRM Volunteer',
+    prm_lead: 'PRM Lead', ops_lead: 'Ops Lead', redemption_volunteer: 'Redemption Volunteer',
+  }
+  const roleBadge = {
+    admin: 'badge-accent', eventManager: 'badge-info', Scanner: 'badge-warning',
+    booth_volunteer: 'badge-warning', prm_volunteer: 'badge-info',
+    prm_lead: 'badge-accent', ops_lead: 'badge-accent', redemption_volunteer: 'badge-success',
+  }
 
   // Handlers
   function openAdd() {
@@ -54,6 +78,7 @@ export default function AdminUsers() {
     setPassword('')
     setPhone('')
     setSelectedEvents([])
+    setBoothId('')
     setFormError('')
     setIsFormOpen(true)
   }
@@ -67,6 +92,7 @@ export default function AdminUsers() {
     setPassword('') // leave blank to not change
     setPhone(admin.phone || '')
     setSelectedEvents(admin.events || [])
+    setBoothId(admin.booth_id || '')
     setFormError('')
     setIsFormOpen(true)
   }
@@ -85,6 +111,9 @@ export default function AdminUsers() {
     setIsSubmitting(true)
     
     try {
+      // Booth assignment is meaningful only for booth_volunteer; cleared otherwise.
+      const resolvedBoothId = role === 'booth_volunteer' ? (boothId || null) : null
+
       if (editingAdmin) {
         await adminPanel.updateAdminUser(editingAdmin.uid, {
           name,
@@ -92,7 +121,8 @@ export default function AdminUsers() {
           password: password || undefined,
           mail: email || null,
           phone: phone || null,
-          events: role === 'eventManager' ? selectedEvents : []
+          events: role === 'eventManager' ? selectedEvents : [],
+          booth_id: resolvedBoothId,
         })
       } else {
         await adminPanel.addAdminUser({
@@ -102,7 +132,8 @@ export default function AdminUsers() {
           password,
           mail: email || null,
           phone: phone || null,
-          events: role === 'eventManager' ? selectedEvents : []
+          events: role === 'eventManager' ? selectedEvents : [],
+          booth_id: resolvedBoothId,
         })
       }
       setIsFormOpen(false)
@@ -121,8 +152,17 @@ export default function AdminUsers() {
         setDeleteConfirm(null)
         loadAdminUsers()
       } catch (err) {
-        alert(err.message || 'Failed to delete admin')
+        alert(err.message || 'Failed to deactivate admin')
       }
+    }
+  }
+
+  async function handleRestore(u) {
+    try {
+      await adminPanel.restoreAdminUser(u.uid)
+      loadAdminUsers()
+    } catch (err) {
+      alert(err.message || 'Failed to restore admin')
     }
   }
 
@@ -136,6 +176,27 @@ export default function AdminUsers() {
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
           Add Admin
+        </button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <button
+          className={`btn btn-sm ${activeTab === 'active' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => { setActiveTab('active'); setCurrentPage(1); setSearchQuery('') }}
+        >
+          Active
+          <span style={{ marginLeft: 6, background: 'rgba(255,255,255,0.15)', borderRadius: 9999, padding: '1px 7px', fontSize: '0.7rem' }}>
+            {activeAdmins.length}
+          </span>
+        </button>
+        <button
+          className={`btn btn-sm ${activeTab === 'inactive' ? 'btn-primary' : 'btn-ghost'}`}
+          onClick={() => { setActiveTab('inactive'); setCurrentPage(1); setSearchQuery('') }}
+        >
+          Inactive
+          <span style={{ marginLeft: 6, background: 'rgba(255,255,255,0.15)', borderRadius: 9999, padding: '1px 7px', fontSize: '0.7rem' }}>
+            {inactiveAdmins.length}
+          </span>
         </button>
       </div>
 
@@ -175,7 +236,7 @@ export default function AdminUsers() {
                 </thead>
                 <tbody>
                   {paginatedData.map(u => (
-                    <tr key={u.uid}>
+                    <tr key={u.uid} style={activeTab === 'inactive' ? { opacity: 0.5 } : {}}>
                       <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{u.name}</td>
                       <td>@{u.username}</td>
                       <td>
@@ -196,18 +257,35 @@ export default function AdminUsers() {
                             })}
                             {u.events.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>None</span>}
                           </div>
+                        ) : u.role === 'booth_volunteer' ? (
+                          u.booth_id ? (
+                            <span className="badge badge-warning" style={{ fontSize: '0.65rem' }}>
+                              {BOOTH_OPTIONS.find(b => b.id === u.booth_id)?.label || u.booth_id}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>No booth assigned</span>
+                          )
+                        ) : u.role === 'redemption_volunteer' ? (
+                          <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>Redemption Volunteer</span>
                         ) : (
                           <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>All Events</span>
                         )}
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <button className="btn btn-sm btn-ghost" style={{ marginRight: 8 }} onClick={() => openEdit(u)}>Edit</button>
-                        {u.uid !== user?.uid && (
-                          <button className="btn btn-sm btn-danger" onClick={() => setDeleteConfirm(u)}>Delete</button>
+                        {activeTab === 'inactive' ? (
+                          <button className="btn btn-sm btn-ghost" onClick={() => handleRestore(u)}>Restore</button>
+                        ) : (
+                          <>
+                            <button className="btn btn-sm btn-ghost" style={{ marginRight: 8 }} onClick={() => openEdit(u)}>Edit</button>
+                            {u.uid !== user?.uid && (
+                              <button className="btn btn-sm btn-danger" onClick={() => setDeleteConfirm(u)}>Deactivate</button>
+                            )}
+                          </>
                         )}
                       </td>
                     </tr>
                   ))}
+
                 </tbody>
               </table>
             </div>
@@ -245,9 +323,18 @@ export default function AdminUsers() {
                 <div className="form-group">
                   <label>Role</label>
                   <select className="input-field" value={role} onChange={e => setRole(e.target.value)}>
-                    <option value="admin">Super Admin</option>
-                    <option value="eventManager">Event Manager</option>
-                    <option value="Scanner">Scanner</option>
+                    <optgroup label="Core">
+                      <option value="admin">Super Admin</option>
+                      <option value="eventManager">Event Manager</option>
+                      <option value="Scanner">Scanner</option>
+                    </optgroup>
+                    <optgroup label="Sidequest">
+                      <option value="booth_volunteer">Booth Volunteer</option>
+                      <option value="redemption_volunteer">Redemption Volunteer</option>
+                      <option value="prm_volunteer">PRM Volunteer</option>
+                      <option value="prm_lead">PRM Lead</option>
+                      <option value="ops_lead">Ops Lead</option>
+                    </optgroup>
                   </select>
                 </div>
                 <div className="form-group">
@@ -262,14 +349,35 @@ export default function AdminUsers() {
                   <div className="events-multiselect">
                     {events.map(ev => (
                       <label key={ev.id} className="event-checkbox">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={selectedEvents.includes(ev.id)}
                           onChange={() => handleEventToggle(ev.id)}
                         />
                         {ev.name}
                       </label>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {role === 'booth_volunteer' && (
+                <div className="form-group" style={{ marginTop: 16 }}>
+                  <label>Assigned Booth</label>
+                  <select
+                    className="input-field"
+                    required
+                    value={boothId}
+                    onChange={e => setBoothId(e.target.value)}
+                  >
+                    <option value="">— select booth —</option>
+                    {BOOTH_OPTIONS.map(b => (
+                      <option key={b.id} value={b.id}>{b.label}</option>
+                    ))}
+                  </select>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 6 }}>
+                    The volunteer's login token will carry this booth_id; awards from
+                    them are recorded against this booth only.
                   </div>
                 </div>
               )}
@@ -287,9 +395,9 @@ export default function AdminUsers() {
 
       {deleteConfirm && (
         <ConfirmModal
-          title="Delete Admin"
-          message={`Are you sure you want to delete ${deleteConfirm.name} (@${deleteConfirm.username})?`}
-          confirmLabel="Delete"
+          title="Deactivate Admin"
+          message={`Deactivate ${deleteConfirm.name} (@${deleteConfirm.username})? They won't be able to log in, but their activity history is preserved. You can restore them later.`}
+          confirmLabel="Deactivate"
           isDanger={true}
           onConfirm={confirmDelete}
           onCancel={() => setDeleteConfirm(null)}

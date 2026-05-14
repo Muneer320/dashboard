@@ -167,3 +167,104 @@ async def get_admin_or_em(
             detail="Admin or Event Manager role required",
         )
     return admin
+
+
+# ----------------------------- sidequest role deps -----------------------------
+
+# `admin` and `ops_lead` always count as one tier above `prm_lead`, which
+# always counts above `prm_volunteer`. Booth volunteers are isolated.
+_PRM_VOLUNTEER_ROLES = {"prm_volunteer", "prm_lead", "ops_lead", "admin"}
+_PRM_LEAD_ROLES = {"prm_lead", "ops_lead", "admin"}
+_OPS_LEAD_ROLES = {"ops_lead", "admin"}
+
+
+async def get_prm_volunteer_or_above(
+    admin: Admin = Depends(get_current_admin),
+) -> Admin:
+    """UGC queue access — prm_volunteer, prm_lead, ops_lead, admin."""
+    if admin.role.value not in _PRM_VOLUNTEER_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="PRM volunteer or above required",
+        )
+    return admin
+
+
+async def get_prm_lead_or_above(
+    admin: Admin = Depends(get_current_admin),
+) -> Admin:
+    """Snapshot, manual adjust, surprise drop — prm_lead, ops_lead, admin."""
+    if admin.role.value not in _PRM_LEAD_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="PRM lead or above required",
+        )
+    return admin
+
+
+async def get_ops_lead_or_above(
+    admin: Admin = Depends(get_current_admin),
+) -> Admin:
+    """Audit log read — ops_lead, admin."""
+    if admin.role.value not in _OPS_LEAD_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ops lead or above required",
+        )
+    return admin
+
+
+async def get_booth_volunteer(
+    supabase: AsyncClient = Depends(get_supabase),
+    token: str = Depends(oauth2_scheme),
+) -> dict:
+    """
+    Booth volunteer dependency. Returns a dict with `admin` and the
+    `booth_id` claim from the JWT — booth award routes require this
+    claim to scope writes to the volunteer's assigned booth.
+    """
+    try:
+        payload = decode_access_token(token)
+        sub = payload.get("sub", "")
+        booth_id = payload.get("booth_id")
+    except TokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+
+    if not sub.startswith("admin:"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Booth credentials required",
+        )
+    if not booth_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="booth_id missing from token",
+        )
+
+    try:
+        admin_uid = int(sub.split("admin:", 1)[1])
+    except (ValueError, IndexError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+        ) from exc
+
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", admin_uid)
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
+    admin = Admin.from_row(row)
+    if admin.role.value not in {"booth_volunteer", "admin"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Booth volunteer role required",
+        )
+    return {"admin": admin, "booth_id": booth_id}

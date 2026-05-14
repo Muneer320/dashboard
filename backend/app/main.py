@@ -63,7 +63,8 @@ app.add_middleware(AccessControlMiddleware)
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
-def main():
+def main() -> None:
+    """Entrypoint for the `ascent-api` console script declared in pyproject.toml."""
     import uvicorn
     uvicorn.run(
         "app.main:app",

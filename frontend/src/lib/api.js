@@ -189,6 +189,7 @@ export const adminPanel = {
   addAdminUser: (body) => post('/admin-panel/admin-users', body, { adminAuth: true }),
   updateAdminUser: (uid, body) => patch(`/admin-panel/admin-users/${uid}`, body, { adminAuth: true }),
   deleteAdminUser: (uid) => del(`/admin-panel/admin-users/${uid}`, { adminAuth: true }),
+  restoreAdminUser: (uid) => post(`/admin-panel/admin-users/${uid}/restore`, {}, { adminAuth: true }),
 
   getEvent: (eventId) => get(`/admin-panel/events/${eventId}`, { adminAuth: true }),
   updateEvent: (eventId, body) => patch(`/admin-panel/events/${eventId}`, body, { adminAuth: true }),
@@ -231,6 +232,126 @@ export const adminPanel = {
   },
 };
 
+// ─── Notifications (in-app bell) ─────────────────────────────────────────────
+
+export const notifications = {
+  list:        (limit = 50) => get(`/notifications?limit=${limit}`),
+  markRead:    (id) => post(`/notifications/${id}/read`, {}),
+  markAllRead: () => post('/notifications/read-all', {}),
+};
+
+// ─── Sidequest — admin-side ──────────────────────────────────────────────────
+
+export const adminCoins = {
+  // UGC queue
+  ugcQueue:    (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return get(`/admin/ugc/queue${q ? `?${q}` : ''}`, { adminAuth: true });
+  },
+  approveUGC:  (submission_id) => post('/admin/ugc/approve', { submission_id }, { adminAuth: true }),
+  rejectUGC:   (submission_id, reason) => post('/admin/ugc/reject', { submission_id, reason }, { adminAuth: true }),
+  reverificationQueue: (hours = 24) => get(`/admin/ugc/reverification-queue?hours=${hours}`, { adminAuth: true }),
+
+  // Manual / leaderboard / snapshot
+  manualAdjust: (student_id, coins, reason) =>
+    post('/admin/coins/manual-adjust', { student_id, coins, reason }, { adminAuth: true }),
+  leaderboard:  () => get('/admin/leaderboard', { adminAuth: true }),
+  snapshotTake: (snapshot_type, force = false, force_reason = null) =>
+    post('/admin/snapshot/take', { snapshot_type, force, force_reason }, { adminAuth: true }),
+
+  // Surprise drops
+  triggerDrop: (body) => post('/admin/surprise-drop/trigger', body, { adminAuth: true }),
+  cancelDrop:  (drop_id) => post('/admin/surprise-drop/cancel', { drop_id }, { adminAuth: true }),
+
+  // Booth activity, disputes, inventory, engagement, audit
+  boothActivity: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return get(`/admin/booth/activity${q ? `?${q}` : ''}`, { adminAuth: true });
+  },
+  disputes:        (status = 'open') => get(`/admin/disputes?status=${encodeURIComponent(status)}`, { adminAuth: true }),
+  resolveDispute:  (ticket_id, resolution_note, action) =>
+    post('/admin/disputes/resolve', { ticket_id, resolution_note, action }, { adminAuth: true }),
+  inventory:       () => get('/admin/inventory', { adminAuth: true }),
+  engagementSubmit:(body) => post('/admin/engagement/submit', body, { adminAuth: true }),
+  auditLog:        (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return get(`/admin/audit-log${q ? `?${q}` : ''}`, { adminAuth: true });
+  },
+  studentsOverview: (search = '') => {
+    const q = search ? `?search=${encodeURIComponent(search)}` : '';
+    return get(`/admin/coins/students${q}`, { adminAuth: true });
+  },
+};
+
+// ─── Sidequest — booth volunteer ────────────────────────────────────────────
+
+export const boothApi = {
+  // booth_volunteer JWT used as adminAuth
+  me:      () => get('/booth/me', { adminAuth: true }),
+  award:   (student_id, client_uuid) => post('/booth/award', { student_id, client_uuid }, { adminAuth: true }),
+  sync:    (awards) => post('/booth/sync', { awards }, { adminAuth: true }),
+  student: (student_id) => get(`/booth/student/${student_id}`, { adminAuth: true }),
+  search:  (q) => get(`/booth/search?q=${encodeURIComponent(q)}`, { adminAuth: true }),
+  awards:  (todayOnly = true, limit = 50) =>
+    get(`/booth/awards?today_only=${todayOnly}&limit=${limit}`, { adminAuth: true }),
+};
+
+// ─── Sidequest — Ascent Coins (student-facing) ───────────────────────────────
+
+export const coins = {
+  balance:          () => get('/coins/balance'),
+  history:          () => get('/coins/history'),
+  leaderboard:      () => get('/coins/leaderboard'),
+  powerHourStatus:  () => get('/coins/power-hour-status'),
+  dispute:          (ledger_entry_id, description) =>
+    post('/coins/dispute', { ledger_entry_id, description }),
+  redeemSticker:    () => post('/coins/redeem-sticker', {}),
+  reserveReward:    (tier) => post('/coins/reserve-reward', { tier }),
+  myReservations:   () => get('/coins/my-reservations'),
+  activeDrops:      () => get('/coins/surprise-drops/active'),
+  claimDrop:        (drop_id) => post('/coins/surprise-drops/claim', { drop_id }),
+};
+
+// ─── Sidequest — UGC submission (student-facing) ─────────────────────────────
+
+async function uploadFile(path, file) {
+  const tok = token.getUser();
+  const formData = new FormData();
+  formData.append('file', file);
+  const headers = {};
+  if (tok) headers['Authorization'] = `Bearer ${tok}`;
+  const res = await fetch(`${BASE}${path}`, { method: 'POST', headers, body: formData });
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({ detail: res.statusText }));
+  if (!res.ok) throw new ApiError(data?.detail ?? `HTTP ${res.status}`, res.status, data);
+  return data;
+}
+
+export const ugc = {
+  eligibility: () => get('/ugc/eligibility'),
+  uploadProof: (file) => uploadFile('/ugc/upload-proof', file),
+  submit: ({ source_type, url, proof_type = 'url', participant_2_id }) =>
+    post('/ugc/submit', { source_type, url, proof_type, participant_2_id }),
+  confirmCollab:        (collab_id) =>
+    post('/ugc/creator-collab/confirm', { collab_id }),
+  pendingConfirmations: () => get('/ugc/pending-confirmations'),
+};
+
+// ─── Redemption Booth ─────────────────────────────────────────────────────────
+
+export const redemptionApi = {
+  getStudent:  (student_id) => get(`/redemption/student/${student_id}`, { adminAuth: true }),
+  award:       (reservation_id) =>
+    post('/redemption/award', { reservation_id }, { adminAuth: true }),
+  history:     () => get('/redemption/history', { adminAuth: true }),
+};
+
+// ─── QR Scan ──────────────────────────────────────────────────────────────────
+
+// Frontend uses `scan_type` internally (entry / attendance / food). The backend
+// accepts those as aliases and canonicalises to mode = collegeEntry / event / food.
+// Food scans auto-assign the next meal slot on the backend — no meal picker
+// required from the client.
 export const qr = {
   scan: ({ user_id, scan_type, event_id }) =>
     post('/qr/scan', { user_id, mode: scan_type, event_id }, { adminAuth: true }),
