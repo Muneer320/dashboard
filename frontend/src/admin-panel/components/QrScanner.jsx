@@ -26,6 +26,8 @@ export default function QrScanner({
   const [cameraActive,  setCameraActive]  = useState(false)
   const [cameraError,   setCameraError]   = useState(null)
   const [cameraLoading, setCameraLoading] = useState(false)
+  const [toast,         setToast]         = useState(null)  // { name, action }
+  const toastTimerRef = useRef(null)
 
   // Refs
   const participantsRef = useRef(participants)
@@ -205,11 +207,14 @@ export default function QrScanner({
     const shortId = lookupId ? `${lookupId.slice(0, 8)}…` : null
 
     if (status === 'accepted') {
-      setResult({
-        type: 'success',
-        msg: msg || (participant ? `${participant.name} — ${actionLabelRef.current} recorded!` : `Scan recorded (${shortId})`),
-        participant,
-      })
+      const displayName = participant?.name || `ID ${shortId}`
+      const resultMsg   = msg || (participant ? `${participant.name} — ${actionLabelRef.current} recorded!` : `Scan recorded (${shortId})`)
+      setResult({ type: 'success', msg: resultMsg, participant })
+
+      // ── Success popup toast ──
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+      setToast({ name: displayName, action: actionLabelRef.current })
+      toastTimerRef.current = setTimeout(() => setToast(null), 2500)
     } else if (status === 'rejected') {
       setResult({
         type: 'warn',
@@ -240,6 +245,23 @@ export default function QrScanner({
 
   return (
     <div className="qr-scanner">
+
+      {/* ── Success toast popup ───────────────────────────────────────────── */}
+      {toast && (
+        <div className="qr-toast-overlay" onClick={() => setToast(null)} role="dialog" aria-live="assertive">
+          <div className="qr-toast">
+            <div className="qr-toast-icon">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="9 12 11.5 14.5 15.5 10" />
+              </svg>
+            </div>
+            <p className="qr-toast-name">{toast.name}</p>
+            <p className="qr-toast-action">{toast.action} ✓</p>
+            <p className="qr-toast-dismiss">Tap to dismiss</p>
+          </div>
+        </div>
+      )}
 
       {/* Camera */}
       <div className="qr-camera-section">
