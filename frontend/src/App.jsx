@@ -15,7 +15,6 @@ import FAQ from './components/faq';
 import {
   CoinsHomePage,
   UGCSubmitPage,
-  LeaderboardPage as CoinsLeaderboardPage,
   RewardsPage,
   CoinHistoryPage,
   MyQRPage,
@@ -92,7 +91,6 @@ export default function App() {
         {/* Sidequest — Ascent Coins */}
         <Route path="/coins"             element={<RequireAttending><CoinsHomePage /></RequireAttending>} />
         <Route path="/coins/submit"      element={<RequireAttending><UGCSubmitPage /></RequireAttending>} />
-        <Route path="/coins/leaderboard" element={<RequireAttending><CoinsLeaderboardPage /></RequireAttending>} />
         <Route path="/coins/rewards"     element={<RequireAttending><RewardsPage /></RequireAttending>} />
         <Route path="/coins/qr"          element={<RequireAttending><MyQRPage /></RequireAttending>} />
         <Route path="/coins/history"     element={<RequireAttending><CoinHistoryPage /></RequireAttending>} />

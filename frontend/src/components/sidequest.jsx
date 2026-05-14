@@ -208,7 +208,6 @@ const DISPUTE_FORM_URL = "https://example.invalid/archived-form";
 const NAV_ITEMS = [
   { key: "command",      label: "Command Center", to: "/coins",            iconKey: "grid" },
   { key: "verification", label: "Verification",   to: "/coins/submit",     iconKey: "check" },
-  { key: "leaderboard",  label: "Leaderboard",    to: "/coins/leaderboard",iconKey: "bars" },
   { key: "rewards",      label: "Rewards",        to: "/coins/rewards",    iconKey: "box" },
   { key: "qr",           label: "My QR",          to: "/coins/qr",         iconKey: "qr" },
   { key: "history",      label: "History",        to: "/coins/history",    iconKey: "clock" },
@@ -729,7 +728,6 @@ export function CoinsHomePage() {
             <div className="glass" style={{ padding: 22, display: "flex", flexDirection: "column", gap: 10 }}>
               <div className="eyebrow">§ OPERATIONS</div>
               <OpRow label="Submit UGC"   onClick={() => navigate("/coins/submit")} />
-              <OpRow label="Leaderboard"  onClick={() => navigate("/coins/leaderboard")} />
               <OpRow label="Rewards Vault" onClick={() => navigate("/coins/rewards")} />
               <OpRow label="Coin History"  onClick={() => navigate("/coins/history")} />
             </div>
