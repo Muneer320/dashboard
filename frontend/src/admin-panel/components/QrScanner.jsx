@@ -175,7 +175,18 @@ export default function QrScanner({
       if (p.status === 'restricted') {
         setResult({ type: 'error', msg: `${p.name} is restricted.`, participant: p })
         return
+      }5
+
+      // Food gate: participant must have completed main-gate entry first
+      if (actionLabelRef.current === 'Food' && !p.entryScanned) {
+        setResult({
+          type: 'error',
+          msg: `${p.name} has not completed main gate entry. Entry scan required before food can be claimed.`,
+          participant: p,
+        })
+        return
       }
+
       if (!trustServerRef.current && alreadyFieldRef.current && p[alreadyFieldRef.current]) {
         setResult({
           type: 'warn',
@@ -208,12 +219,20 @@ export default function QrScanner({
 
     if (status === 'accepted') {
       const displayName = participant?.name || `ID ${shortId}`
-      const resultMsg   = msg || (participant ? `${participant.name} — ${actionLabelRef.current} recorded!` : `Scan recorded (${shortId})`)
-      setResult({ type: 'success', msg: resultMsg, participant })
+      // Build human-friendly action label
+      const action = actionLabelRef.current
+      const toastLabel =
+        action === 'Food'       ? 'Food Entry Marked' :
+        action === 'Attendance' ? 'Attendance Marked'  :
+        action === 'Entry'      ? 'Entry Marked'       :
+        `${action} Recorded`
+
+      // Show ONLY the toast for success — no inline strip
+      setResult(null)
 
       // ── Success popup toast ──
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-      setToast({ name: displayName, action: actionLabelRef.current })
+      setToast({ label: toastLabel, name: displayName })
       toastTimerRef.current = setTimeout(() => setToast(null), 2500)
     } else if (status === 'rejected') {
       setResult({
@@ -251,13 +270,13 @@ export default function QrScanner({
         <div className="qr-toast-overlay" onClick={() => setToast(null)} role="dialog" aria-live="assertive">
           <div className="qr-toast">
             <div className="qr-toast-icon">
-              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="9 12 11.5 14.5 15.5 10" />
               </svg>
             </div>
-            <p className="qr-toast-name">{toast.name}</p>
-            <p className="qr-toast-action">{toast.action} ✓</p>
+            <p className="qr-toast-label">{toast.label}</p>
+            {toast.name && <p className="qr-toast-name">{toast.name}</p>}
             <p className="qr-toast-dismiss">Tap to dismiss</p>
           </div>
         </div>

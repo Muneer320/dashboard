@@ -43,19 +43,19 @@
   filter: drop-shadow(0 0 12px rgba(16,185,129,0.5));
 }
 
-.qr-toast-name {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--text-primary, #fff);
+.qr-toast-label {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--success, #10b981);
   margin: 0;
+  letter-spacing: 0.02em;
 }
 
-.qr-toast-action {
+.qr-toast-name {
   font-size: 0.95rem;
-  color: var(--success, #10b981);
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--text-muted, #aaa);
   margin: 0;
-  letter-spacing: 0.04em;
 }
 
 .qr-toast-dismiss {
