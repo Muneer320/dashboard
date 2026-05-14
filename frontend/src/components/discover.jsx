@@ -1085,7 +1085,7 @@ export function Leaderboard() {
             marginTop: 2,
           }}
         >
-          @{row.username}
+          {row.username}
         </div>
       </div>
       <div
