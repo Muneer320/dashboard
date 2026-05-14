@@ -40,6 +40,7 @@ PUBLIC_PATHS = {
     # banner and any kiosk/lobby screen can poll it without a token.
     "/api/v1/coins/power-hour-status",
     "/api/v1/coins/power-hour-status/",
+    "/anvil",
 }
 
 

@@ -1,12 +1,13 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI
 from fastapi import Request, status
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.api.router import api_router
 from app.core.config import settings
@@ -69,6 +70,13 @@ async def httpx_request_error_handler(
 
 app.add_middleware(AccessControlMiddleware)
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+ANVIL_HTML = Path(__file__).resolve().parents[1] / "anvil.html"
+
+
+@app.get("/anvil", include_in_schema=False)
+async def anvil_page():
+    return FileResponse(ANVIL_HTML, media_type="text/html")
 
 
 def main() -> None:
