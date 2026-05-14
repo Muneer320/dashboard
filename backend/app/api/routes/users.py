@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi_cache.decorator import cache
 from pydantic import BaseModel
 from supabase import AsyncClient
 
@@ -12,7 +13,13 @@ from app.schemas.mirage import (
 )
 from app.models.user import User
 from app.schemas.meals import MealSlot
-from app.schemas.user import MyEventResponse, UserEventsResponse, UserProfileUpdate, UserResponse
+from app.schemas.user import (
+    MyEventResponse,
+    MyLeaderboardResponse,
+    UserEventsResponse,
+    UserProfileUpdate,
+    UserResponse,
+)
 from app.services.event_service import get_event_registration_counts, list_events
 from app.services.mirage_pipeline_service import (
     delete_mirage_anchor_image,
@@ -22,10 +29,12 @@ from app.services.mirage_pipeline_service import (
 )
 from app.services.qr_service import scan_food
 from app.services.user_service import (
+    build_my_leaderboard_payload,
     get_user_by_id,
     get_user_events_payload,
     update_user_profile,
 )
+from app.services.cache_service import auth_aware_cache_key_builder
 
 router = APIRouter()
 
@@ -53,6 +62,7 @@ def _build_user_response(user: User) -> UserResponse:
 
 
 @router.get("/me/my-events", response_model=list[MyEventResponse])
+@cache(expire=120, key_builder=auth_aware_cache_key_builder)
 async def get_my_events(
     supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
@@ -81,6 +91,34 @@ async def get_my_events(
             user_status=user_status if isinstance(user_status, dict) else {},
         ))
     return results
+
+
+@router.get("/me/leaderboard", response_model=MyLeaderboardResponse)
+async def get_my_leaderboard(
+    top_limit: int = 100,
+    page: int = 1,
+    page_size: int | None = None,
+    search: str | None = None,
+    supabase: AsyncClient = Depends(get_supabase),
+    current_user: User = Depends(get_current_user),
+) -> MyLeaderboardResponse:
+    """
+    Combined leaderboard payload:
+    - Global ranking of all users by cents.
+    - Event-wise rankings for events the current user is enrolled in.
+    """
+    page = max(1, page)
+    effective_page_size = max(1, min(page_size if page_size is not None else top_limit, 200))
+    all_events = await list_events(supabase)
+    payload = await build_my_leaderboard_payload(
+        supabase=supabase,
+        current_user=current_user,
+        all_events=all_events,
+        page=page,
+        page_size=effective_page_size,
+        search=search,
+    )
+    return MyLeaderboardResponse(**payload)
 
 
 @router.get("/me/mirage/profile", response_model=MirageUserProfileResponse)

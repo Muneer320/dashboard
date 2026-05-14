@@ -25,10 +25,10 @@ export function AuthProvider({ children }) {
       token.setAdmin(res.access_token)
       const me = await adminAuthApi.me()
       setUser(me)
-      return true
+      return me.role  // caller uses role to decide where to redirect
     } catch (e) {
       setError(e.message || 'Invalid credentials')
-      return false
+      return null
     }
   }, [])
 
@@ -58,6 +58,15 @@ export function AuthProvider({ children }) {
       manageRegistrations: ['admin'],
       announcements:       ['admin'],
       requestedMembers:    ['admin'],
+
+      // Sidequest features
+      ugcQueue:     ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
+      boothMonitor: ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
+      engagement:   ['admin', 'prm_lead', 'ops_lead'],
+      disputes:     ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
+      inventory:    ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
+      auditLog:      ['admin', 'ops_lead'],
+      coinsOverview: ['admin', 'prm_lead', 'ops_lead'],
     }
     return (matrix[feature] || []).includes(user.role)
   }

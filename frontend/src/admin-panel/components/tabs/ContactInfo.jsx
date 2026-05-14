@@ -1,10 +1,14 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useData } from '../../context/DataContext'
 import './ContactInfo.css'
 
 export default function ContactInfo() {
-  const { events, adminUsers } = useData()
+  const { events, adminUsers, loadAdminUsers } = useData()
   const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    loadAdminUsers()
+  }, [loadAdminUsers])
 
   const eventManagers = adminUsers.filter(u => u.role === 'eventManager')
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useData } from '../../context/DataContext'
 import './Meals.css'
 
@@ -40,6 +40,7 @@ export default function Meals() {
   const {
     eventsMealsCount,
     loading,
+    mealsLoading,
     updateEventMealsCount,
     loadMeals,
   } = useData()
@@ -47,7 +48,11 @@ export default function Meals() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  if (loading) return <MealsSkeleton />
+  useEffect(() => {
+    loadMeals()
+  }, [loadMeals])
+
+  if (loading || mealsLoading) return <MealsSkeleton />
 
   const totalEventsAllowance = useMemo(
     () => eventsMealsCount.reduce((sum, e) => sum + (e.meals_count || 0), 0),
@@ -77,7 +82,7 @@ export default function Meals() {
         <button
           id="meals-refresh"
           className="btn btn-ghost"
-          onClick={loadMeals}
+          onClick={() => loadMeals({ force: true })}
           disabled={busy}
         >
           Refresh

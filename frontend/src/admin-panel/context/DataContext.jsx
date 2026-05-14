@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { adminPanel, events as eventsApi, qr } from '../../lib/api'
 import { useAuth } from './AuthContext'
 
@@ -26,6 +26,12 @@ export function DataProvider({ children }) {
   const [userMeals, setUserMeals]               = useState([])  // UserMealsRow[]
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
+  const [participantsLoading, setParticipantsLoading] = useState(false)
+  const [participantsLoaded, setParticipantsLoaded] = useState(false)
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false)
+  const [adminUsersLoaded, setAdminUsersLoaded] = useState(false)
+  const [mealsLoading, setMealsLoading] = useState(false)
+  const [mealsLoaded, setMealsLoaded] = useState(false)
 
   // ── Fetch helpers ───────────────────────────────────────────────────────────
 
@@ -49,14 +55,23 @@ export function DataProvider({ children }) {
     }
   }, [])
 
-  const loadParticipants = useCallback(async (eventId = null) => {
+  const loadParticipants = useCallback(async (eventId = null, { force = false } = {}) => {
+    if (!force && eventId === null && participantsLoaded) return participants
+    setParticipantsLoading(true)
     try {
       const data = await adminPanel.participants(eventId)
       setParticipants(data ?? [])
+      if (eventId === null) {
+        setParticipantsLoaded(true)
+      }
+      return data ?? []
     } catch (e) {
       console.error('Participants fetch failed:', e.message)
+      return []
+    } finally {
+      setParticipantsLoading(false)
     }
-  }, [])
+  }, [participants, participantsLoaded])
 
   const loadEvents = useCallback(async () => {
     try {
@@ -69,21 +84,40 @@ export function DataProvider({ children }) {
     }
   }, [])
 
-  const loadAdminUsers = useCallback(async () => {
+  const loadAdminUsers = useCallback(async ({ force = false } = {}) => {
     // Only admin can see all admin users — EM and Scanner get empty list
-    if (user?.role !== 'admin') return
+    if (user?.role !== 'admin') {
+      setAdminUsers([])
+      setAdminUsersLoaded(false)
+      return []
+    }
+    if (!force && adminUsersLoaded) return adminUsers
+    setAdminUsersLoading(true)
     try {
       const data = await adminPanel.adminUsers()
       setAdminUsers(data ?? [])
+      setAdminUsersLoaded(true)
+      return data ?? []
     } catch (e) {
       console.error('Admin users fetch failed:', e.message)
+      return []
+    } finally {
+      setAdminUsersLoading(false)
     }
-  }, [user?.role])
+  }, [adminUsers, adminUsersLoaded, user?.role])
 
-  const loadMeals = useCallback(async () => {
+  const loadMeals = useCallback(async ({ force = false } = {}) => {
     // Admin-only endpoints. The scanner auto-assigns slots server-side and
     // doesn't need these reads.
-    if (user?.role !== 'admin') return
+    if (user?.role !== 'admin') {
+      setEventsMealsCount([])
+      setMaxMealsCount(0)
+      setUserMeals([])
+      setMealsLoaded(false)
+      return null
+    }
+    if (!force && mealsLoaded) return { eventsMealsCount, maxMealsCount, userMeals }
+    setMealsLoading(true)
     try {
       const [perEvent, perUser] = await Promise.all([
         adminPanel.eventsMealsCount(),
@@ -92,33 +126,46 @@ export function DataProvider({ children }) {
       setEventsMealsCount(perEvent ?? [])
       setMaxMealsCount(perUser?.max_meals_count ?? 0)
       setUserMeals(perUser?.users ?? [])
+      setMealsLoaded(true)
+      return { perEvent: perEvent ?? [], perUser: perUser ?? { max_meals_count: 0, users: [] } }
     } catch (e) {
       if (e?.status !== 403) {
         console.error('Meals fetch failed:', e.message)
       }
+      return null
+    } finally {
+      setMealsLoading(false)
     }
-  }, [user?.role])
+  }, [eventsMealsCount, maxMealsCount, mealsLoaded, user?.role, userMeals])
 
   const loadAll = useCallback(async () => {
     if (!user) return
     setLoading(true)
     await Promise.all([
       loadStats(),
-      loadParticipants(),
       loadEvents(),
-      loadAdminUsers(),
-      loadMeals(),
     ])
     setLoading(false)
-  }, [user, loadStats, loadParticipants, loadEvents, loadAdminUsers, loadMeals])
+  }, [user, loadStats, loadEvents])
 
   useEffect(() => { loadAll() }, [loadAll])
 
+  useEffect(() => {
+    setParticipants([])
+    setParticipantsLoaded(false)
+    setAdminUsers([])
+    setAdminUsersLoaded(false)
+    setEventsMealsCount([])
+    setMaxMealsCount(0)
+    setUserMeals([])
+    setMealsLoaded(false)
+  }, [user?.username, user?.role])
+
   // Merge meals_count into events for easier access in components
-  const eventsWithMeals = events.map(ev => {
-    const mealData = eventsMealsCount.find(m => m.id === ev.id)
-    return { ...ev, meals_count: mealData?.meals_count || 0 }
-  })
+  const eventsWithMeals = useMemo(() => {
+    const mealMap = new Map(eventsMealsCount.map(item => [item.id, item.meals_count || 0]))
+    return events.map(ev => ({ ...ev, meals_count: mealMap.get(ev.id) || 0 }))
+  }, [events, eventsMealsCount])
 
   // ── Mutations ───────────────────────────────────────────────────────────────
 
@@ -189,7 +236,8 @@ export function DataProvider({ children }) {
       e.id === eventId ? { ...e, meals_count: res?.meals_count ?? count } : e
     ))
     // Re-pull the user matrix so everyone's allowance/columns stay in sync.
-    await loadMeals()
+    setMealsLoaded(false)
+    await loadMeals({ force: true })
   }, [loadMeals])
 
   const _toggleUserMealLocal = (userId, mealId, claimed) =>
@@ -219,6 +267,7 @@ export function DataProvider({ children }) {
       events: eventsWithMeals, adminUsers, participants, stats,
       eventsMealsCount, maxMealsCount, userMeals,
       loading, error,
+      participantsLoading, adminUsersLoading, mealsLoading,
       reload:               loadAll,
       loadParticipants,
       loadAdminUsers,

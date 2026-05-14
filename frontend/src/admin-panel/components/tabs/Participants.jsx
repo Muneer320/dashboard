@@ -37,7 +37,7 @@ function ParticipantsSkeleton() {
 
 export default function Participants() {
   const { user, isAdmin } = useAuth()
-  const { events, participants, loading, updateParticipantStatus } = useData()
+  const { events, participants, loading, participantsLoading, loadParticipants, updateParticipantStatus } = useData()
 
   const [selectedEvent, setSelectedEvent] = useState('all')
   const [searchQuery, setSearchQuery]     = useState('')
@@ -50,7 +50,11 @@ export default function Participants() {
     setCurrentPage(1)
   }, [selectedEvent, searchQuery])
 
-  if (loading) return <ParticipantsSkeleton />
+  useEffect(() => {
+    loadParticipants()
+  }, [loadParticipants])
+
+  if (loading || participantsLoading) return <ParticipantsSkeleton />
 
   // For event manager: only show their events
   const visibleEvents = isAdmin

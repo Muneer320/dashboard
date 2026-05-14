@@ -24,6 +24,7 @@ class MeResponse(BaseModel):
     name: str
     is_attending: bool
     role: str = "participant"
+    details: dict | None = None
 
 
 # ── Internal-only (used by unstop/sync, not exposed to public UI) ─────────────

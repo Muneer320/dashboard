@@ -32,3 +32,41 @@ class MyEventResponse(BaseModel):
     venue: list[str]
     participants_count: int
     user_status: dict  # {isAttending, phase, status, score, ...}
+
+
+class LeaderboardEntry(BaseModel):
+    rank: int
+    user_id: str
+    name: str
+    username: str
+    cents: int
+    is_current_user: bool = False
+
+
+class GlobalLeaderboardResponse(BaseModel):
+    total_users: int
+    filtered_users: int | None = None
+    top: list[LeaderboardEntry]
+    me: LeaderboardEntry | None = None
+    page: int = 1
+    page_size: int = 100
+    total_pages: int = 0
+    search: str | None = None
+
+
+class EventLeaderboardItem(BaseModel):
+    event_id: str
+    event_name: str
+    total_participants: int
+    filtered_participants: int | None = None
+    top: list[LeaderboardEntry]
+    me: LeaderboardEntry | None = None
+    page: int = 1
+    page_size: int = 100
+    total_pages: int = 0
+    search: str | None = None
+
+
+class MyLeaderboardResponse(BaseModel):
+    global_board: GlobalLeaderboardResponse
+    event_boards: list[EventLeaderboardItem]

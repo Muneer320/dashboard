@@ -220,6 +220,24 @@ uv run pytest
 
 The backend talks to Supabase directly through the async Supabase client. Configure `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` for server-side access.
 
+If you are using the AWS migration setup (Postgres + PostgREST), `SUPABASE_URL` should point at the **base** URL that exposes `/rest/v1` (do **not** include `/rest/v1` in the value; the backend will normalize it if present).
+
+#### Local PostgREST bridge (dev/test)
+
+This repo includes a local PostgREST + nginx proxy in `docker-compose.override.yml`.
+
+1. Start the REST bridge:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d postgrest supabase-rest-proxy
+```
+
+2. Set `SUPABASE_URL=http://localhost:54321` (and set `SUPABASE_SERVICE_ROLE_KEY` to a JWT accepted by PostgREST).
+
+3. Optionally set `DATABASE_URL` as a direct Postgres connection string. The auth endpoints will fall back to this when the REST layer is unreachable.
+
+You can verify the REST layer with `GET /api/v1/health?deep=true`.
+
 ### Storage
 
 Submission files are stored in a private Supabase Storage bucket named `submissions` by default.

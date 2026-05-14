@@ -11,3 +11,11 @@ wheels/
 
 # Miscellaneous
 scratch/*
+
+# Environment files — never commit, they hold secrets
+.env
+.env.*
+!.env.example
+
+# Google service account credentials — never commit
+google_service_account.json

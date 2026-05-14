@@ -15,7 +15,7 @@ _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _SAFE_FILENAME_RE = re.compile(r"[^\w\-]")
 
 from app.api.deps import get_admin_only, get_admin_or_em, get_current_admin, get_scanner_or_above
-from app.db.supabase_client import get_supabase
+from app.db.supabase_client import first_row, get_supabase
 from app.models.admin import Admin
 from app.schemas.admin_panel import (
     AdminUserCreate,
@@ -100,6 +100,7 @@ from app.services.mirage_pipeline_service import (
     update_mirage_job_image_review,
 )
 from app.services.announcement_service import list_announcements
+from app.services.cache_service import auth_aware_cache_key_builder
 
 router = APIRouter()
 
@@ -250,7 +251,7 @@ async def manual_registration(
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)
-@cache(expire=60)
+@cache(expire=60, key_builder=auth_aware_cache_key_builder)
 async def overview_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -265,7 +266,7 @@ async def overview_stats(
 
 
 @router.get("/events/stats", response_model=list[EventStatsItem])
-@cache(expire=60)
+@cache(expire=60, key_builder=auth_aware_cache_key_builder)
 async def events_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -599,6 +600,7 @@ async def create_admin(
         mail=body.mail,
         phone=body.phone,
         events=body.events,
+        booth_id=body.booth_id,
     )
     return AdminUserResponse(**data)
 
@@ -623,6 +625,9 @@ async def update_admin(
         mail=body.mail,
         phone=body.phone,
         events=body.events,
+        booth_id=body.booth_id,
+        # Pydantic v2 — distinguish "field omitted" from "explicit null"
+        booth_id_provided="booth_id" in body.model_fields_set,
     )
     return AdminUserResponse(**data)
 
@@ -633,12 +638,35 @@ async def delete_admin(
     supabase: AsyncClient = Depends(get_supabase),
     current_admin: Admin = Depends(get_admin_only),
 ) -> AdminUserResponse:
-    """
-    Remove an admin account.
-    Admin role only.
-    """
+    """Soft-deactivate an admin account. Admin role only."""
     data = await delete_admin_user(supabase, uid, current_admin.uid)
     return AdminUserResponse(**data)
+
+
+@router.post("/admin-users/{uid}/restore", response_model=AdminUserResponse)
+async def restore_admin(
+    uid: int,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> AdminUserResponse:
+    """Reactivate a previously deactivated admin account. Admin role only."""
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", uid)
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
+        raise HTTPException(404, "Admin not found")
+    await supabase.table("admins").update({"deleted_at": None}).eq("uid", uid).execute()
+    return AdminUserResponse(
+        uid=row["uid"], username=row["username"], name=row["name"],
+        role=row["role"], phone=row.get("phone"), mail=row["mail"],
+        events=row.get("events") or [],
+        message="Admin restored successfully",
+    )
 
 
 # ── Meals management ──────────────────────────────────────────────────────────

@@ -4,18 +4,20 @@ import { useMobile, NavBar, PageBackground, Footer } from './shared';
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
+const s3Base = "https://ascent-users.s3.ap-south-1.amazonaws.com/sponsors";
+
 const SPONSORS = [
-  { name: 'Red Bull',              tier: 'ENERGY',    color: '#CC1E10', desc: 'Official Energy Partner of Ascent 2026 — fuelling 48 hours of non-stop building.' },
-  { name: 'Google for Developers', tier: 'GOLD',      color: '#4285F4', desc: 'Empowering developers worldwide with tools, platforms and community.' },
-  { name: 'Meta Cognition',        tier: 'GOLD',      color: '#7C3AED', desc: 'Advancing the frontier of human-AI collaboration and reasoning.' },
-  { name: 'Vorflux.AI',            tier: 'GOLD',      color: '#7F77DD', desc: 'Building next-generation AI infrastructure for the modern web.' },
-  { name: 'Together Fund',         tier: 'SILVER',    color: '#1D9E75', desc: 'Backing the builders of tomorrow through community-led investment.' },
-  { name: 'CodeCrafters',          tier: 'SILVER',    color: '#7F77DD', desc: 'The platform where engineers learn by rebuilding real-world software.' },
-  { name: 'Maximem AI',            tier: 'SILVER',    color: '#818CF8', desc: 'Maximising human potential through applied artificial intelligence.' },
-  { name: 'Omium AI',              tier: 'SILVER',    color: '#1D9E75', desc: 'AI-first solutions for a smarter, more connected world.' },
-  { name: 'Fueler',                tier: 'SILVER',    color: '#E8B974', desc: 'Proof-of-work portfolios for developers, designers, and creators.' },
-  { name: 'Eyecandy Robotics',     tier: 'ROBOTICS',  color: '#EC4899', desc: 'Pushing the edge of embedded systems and autonomous hardware.' },
-  { name: 'CCCL Claude Community', tier: 'COMMUNITY', color: '#D97706', desc: 'A thriving community of builders exploring the limits of large language models.' },
+  { name: 'Red Bull',              logo: `${s3Base}/RedBull.svg`,             tier: 'ENERGY',    color: '#CC1E10', desc: 'Official Energy Partner of Ascent 2026 — fuelling 48 hours of non-stop building.' },
+  { name: 'Google for Developers', logo: `${s3Base}/Google%20for%20Developers.svg`, tier: 'GOLD', color: '#4285F4', desc: 'Empowering developers worldwide with tools, platforms and community.' },
+  { name: 'Meta Cognition',        logo: `${s3Base}/MetaCognition.svg`,       tier: 'GOLD',      color: '#7C3AED', desc: 'Advancing the frontier of human-AI collaboration and reasoning.' },
+  { name: 'Vorflux.AI',            logo: `${s3Base}/Vorflux.svg`,             tier: 'GOLD',      color: '#7F77DD', desc: 'Building next-generation AI infrastructure for the modern web.' },
+  { name: 'Together Fund',         logo: `${s3Base}/TogetherFund.svg`,        tier: 'SILVER',    color: '#1D9E75', desc: 'Backing the builders of tomorrow through community-led investment.' },
+  { name: 'CodeCrafters',          logo: `${s3Base}/CodeCrafters.svg`,        tier: 'SILVER',    color: '#7F77DD', desc: 'The platform where engineers learn by rebuilding real-world software.' },
+  { name: 'Dymension',             logo: `${s3Base}/Dymension.svg`,           tier: 'SILVER',    color: '#818CF8', desc: 'A network of easily deployable and lightning fast modular blockchains.' },
+  { name: 'Omium AI',              logo: `${s3Base}/Omium.svg`,               tier: 'SILVER',    color: '#1D9E75', desc: 'AI-first solutions for a smarter, more connected world.' },
+  { name: 'Fueler',                logo: `${s3Base}/Fueler.svg`,              tier: 'SILVER',    color: '#E8B974', desc: 'Proof-of-work portfolios for developers, designers, and creators.' },
+  { name: 'Eyecandy Robotics',     logo: `${s3Base}/EyeCandy%20Robotics.svg`, tier: 'ROBOTICS',  color: '#EC4899', desc: 'Pushing the edge of embedded systems and autonomous hardware.' },
+  { name: 'CCCL Claude Community', logo: `${s3Base}/CCCL.svg`,                tier: 'COMMUNITY', color: '#D97706', desc: 'A thriving community of builders exploring the limits of large language models.' },
 ];
 
 const TIERS = [
@@ -56,12 +58,14 @@ function SponsorMarquee({ reverse = false }) {
         @keyframes marqR { from { transform: translateX(-33.333%) } to { transform: translateX(0) } }
       `}</style>
       <div style={{
-        display: 'flex', gap: 48, whiteSpace: 'nowrap',
-        animation: `${reverse ? 'marqR' : 'marqL'} 28s linear infinite`,
+        display: 'flex', gap: 64, alignItems: 'center', whiteSpace: 'nowrap',
+        animation: `${reverse ? 'marqR' : 'marqL'} 32s linear infinite`,
       }}>
         {all.map((n, i) => {
           const s = SPONSORS.find(x => x.name === n);
-          return (
+          return s?.logo ? (
+            <img key={i} src={s.logo} alt={n} style={{ height: 28, opacity: 0.7, objectFit: 'contain' }} />
+          ) : (
             <span key={i} style={{
               fontFamily: 'var(--f-display)',
               fontSize: 18, fontWeight: 600,
@@ -145,15 +149,19 @@ function FeaturedCard({ sponsor, wide = false, isMobile }) {
 
       {/* Content */}
       <div style={{ position: 'relative', zIndex: 2 }}>
-        <div style={{
-          fontFamily: 'var(--f-display)',
-          fontSize: wide ? (isMobile ? 28 : 40) : (isMobile ? 22 : 30),
-          fontWeight: 800,
-          letterSpacing: '-0.02em',
-          color: 'var(--ink)',
-          lineHeight: 1.05,
-          marginBottom: 10,
-        }}>{sponsor.name}</div>
+        {sponsor.logo ? (
+          <img src={sponsor.logo} alt={sponsor.name} style={{ height: wide ? 48 : 36, marginBottom: 16, maxWidth: '100%', objectFit: 'contain', objectPosition: 'left' }} />
+        ) : (
+          <div style={{
+            fontFamily: 'var(--f-display)',
+            fontSize: wide ? (isMobile ? 28 : 40) : (isMobile ? 22 : 30),
+            fontWeight: 800,
+            letterSpacing: '-0.02em',
+            color: 'var(--ink)',
+            lineHeight: 1.05,
+            marginBottom: 10,
+          }}>{sponsor.name}</div>
+        )}
         <div style={{
           fontSize: 12.5, color: 'var(--ink-dim)',
           lineHeight: 1.55, maxWidth: wide ? 560 : 320,
