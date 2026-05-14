@@ -71,7 +71,7 @@ async def httpx_request_error_handler(
 app.add_middleware(AccessControlMiddleware)
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
-ANVIL_HTML = Path(__file__).resolve().parents[2] / "anvil.html"
+ANVIL_HTML = Path(__file__).resolve().parents[1] / "anvil.html"
 
 
 @app.get("/anvil", include_in_schema=False)
