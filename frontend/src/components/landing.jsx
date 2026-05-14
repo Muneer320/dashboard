@@ -298,7 +298,7 @@ export default function Landing() {
           }}>
             {[
               { title: 'Anvil', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Anvil_poydj2.png', linkUrl: 'https://unstop.com/hackathons/the-anvil-hackathon-ascent-scaler-school-of-technology-bengaluru-karnataka-1669632' },
-              { title: 'Ship to Scaler', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png', linkUrl: 'https://unstop.com/events/ship-to-scale-build-break-bank-ascent-scaler-school-of-technology-bengaluru-karnataka-1679327' },
+              { title: 'Ship to Scale', imgUrl: 'https://res.cloudinary.com/dt1hemzmb/image/upload/f_auto,q_auto/1000126955_jjytt0', linkUrl: 'https://unstop.com/events/ship-to-scale-build-break-bank-ascent-scaler-school-of-technology-bengaluru-karnataka-1679327' },
               { title: 'Impulse', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Impulse_fhczet.png', linkUrl: 'https://unstop.com/hackathons/impulse-cp-team-contest-ascent-scaler-school-of-technology-bengaluru-karnataka-1669639' },
               { title: 'Launchpad', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Launchpad_dixz7h.png', linkUrl: 'https://unstop.com/events/launchpad-from-idea-to-impact-ascent-scaler-school-of-technology-bengaluru-karnataka-1669644' },
             ].map(({ title, imgUrl, linkUrl }) => (
@@ -365,7 +365,19 @@ function Rings() {
 }
 
 function Marquee() {
-  const items = ['VORFLUX.AI',' ',  '★', ' ', 'Google for Developers', ' ', '★', ' ', 'Slikk', ' ', '★',, ' ',  'Together Fund', ' ', '★', ' '];
+  const items = [
+    'Red Bull', ' ', '★', ' ',
+    'Google for Developers', ' ', '★', ' ',
+    'Meta Cognition', ' ', '★', ' ',
+    'Vorflux.AI', ' ', '★', ' ',
+    'Together Fund', ' ', '★', ' ',
+    'CodeCrafters', ' ', '★', ' ',
+    'Dymension', ' ', '★', ' ',
+    'Omium AI', ' ', '★', ' ',
+    'Fueler', ' ', '★', ' ',
+    'Eyecandy Robotics', ' ', '★', ' ',
+    'CCCL Claude Community', ' ', '★', ' '
+  ];
   return (
     <div style={{ display: 'flex', gap: 48, whiteSpace: 'nowrap', animation: 'marq 20s linear infinite' }}>
       <style>{`@keyframes marq { to { transform: translateX(-50%); } }`}</style>
@@ -383,10 +395,11 @@ function Marquee() {
 
 function SponsorStrip({ isMobile }) {
   const tiers = [
-    { label: 'TITLE', names: ['NIMBUS/AI', 'HELIOS'] },
-    { label: 'PLATINUM', names: ['MONORAIL', 'GRIDLOCK', 'UMBRA'] },
-    { label: 'GOLD', names: ['FORMA', 'KERNEL', 'QUANTA', 'REFRACT', 'SPINDLE'] },
-    { label: 'COMMUNITY', names: ['DEVSTACK', 'LOOPCO', 'MOSAIC', 'PARAGON', 'ATLAS', 'VIREO'] },
+    { label: 'ENERGY', names: ['Red Bull'] },
+    { label: 'GOLD', names: ['Google for Developers', 'Meta Cognition', 'Vorflux.AI'] },
+    { label: 'SILVER', names: ['Together Fund', 'CodeCrafters', 'Dymension', 'Omium AI', 'Fueler'] },
+    { label: 'ROBOTICS', names: ['Eyecandy Robotics'] },
+    { label: 'COMMUNITY', names: ['CCCL Claude Community'] },
   ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -405,14 +418,14 @@ function SponsorStrip({ isMobile }) {
             {tier.names.map(n => (
               <div key={n} style={{
                 fontFamily: 'var(--f-display)',
-                fontSize: tier.label === 'TITLE' ? (isMobile ? 22 : 32) : tier.label === 'PLATINUM' ? (isMobile ? 18 : 24) : (isMobile ? 15 : 18),
+                fontSize: tier.label === 'ENERGY' ? (isMobile ? 22 : 32) : tier.label === 'GOLD' ? (isMobile ? 18 : 24) : (isMobile ? 15 : 18),
                 fontWeight: 600,
-                color: tier.label === 'TITLE' ? 'var(--ink)' : 'var(--ink-dim)',
+                color: (tier.label === 'ENERGY' || tier.label === 'GOLD') ? 'var(--ink)' : 'var(--ink-dim)',
                 letterSpacing: '-0.01em',
                 cursor: 'pointer', transition: 'color .2s, text-shadow .2s',
               }}
               onMouseEnter={e => { e.currentTarget.style.color = 'var(--violet)'; e.currentTarget.style.textShadow = '0 0 24px rgba(127,119,221,0.5)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = tier.label === 'TITLE' ? 'var(--ink)' : 'var(--ink-dim)'; e.currentTarget.style.textShadow = 'none'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = (tier.label === 'ENERGY' || tier.label === 'GOLD') ? 'var(--ink)' : 'var(--ink-dim)'; e.currentTarget.style.textShadow = 'none'; }}
               >
                 {n}
               </div>

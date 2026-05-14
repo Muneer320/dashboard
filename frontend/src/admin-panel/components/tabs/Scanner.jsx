@@ -18,20 +18,20 @@ export default function Scanner() {
   const firstAccessible = SUB_TABS.find(t => canAccess(`scan${t.key.charAt(0).toUpperCase() + t.key.slice(1)}`))
   const [activeTab, setActiveTab] = useState(firstAccessible?.key || 'attendance')
 
-  // For attendance: operator selects the event first. Stores the event ID so
+  // For attendance & food: operator selects the event first. Stores the event ID so
   // we can filter participants unambiguously (names collide).
   const [selectedEventId, setSelectedEventId] = useState(null)
   const selectedEvent = events.find(ev => ev.id === selectedEventId) || null
 
-  // Events the operator can pick for attendance. Admins see all; EMs only theirs.
-  const attendanceEvents = user?.role === 'admin'
+  // Events the operator can pick for attendance & food. Admins see all; EMs only theirs.
+  const selectableEvents = user?.role === 'admin'
     ? events
     : events.filter(ev => (user?.events || []).includes(ev.id))
-  const needsEventPick = activeTab === 'attendance'
+  const needsEventPick = activeTab === 'attendance' || activeTab === 'food'
 
   // Participants in scope for the current tab
   function getScopeParticipants() {
-    if (activeTab === 'attendance') {
+    if (activeTab === 'attendance' || activeTab === 'food') {
       if (!selectedEventId) return []
       return participants.filter(p => p.eventId === selectedEventId)
     }
@@ -43,13 +43,13 @@ export default function Scanner() {
   async function handleScan(participant) {
     if (activeTab === 'entry')      return markEntryScanned(participant.id)
     if (activeTab === 'attendance') return markAttended(participant.id, selectedEventId || participant.eventId)
-    if (activeTab === 'food')       return markFoodClaimed(participant.id)
+    if (activeTab === 'food')       return markFoodClaimed(participant.id, selectedEventId || participant.eventId)
   }
 
   function getAlreadyField() {
     if (activeTab === 'entry')      return 'entryScanned'
-    if (activeTab === 'attendance') return 'isAttending'
-    // Food: backend decides — don't short-circuit on a stale client flag.
+    // Attendance & food: trust server validation, not stale client flags
+    // (DB can change independently; backend knows the real state)
     return null
   }
 
@@ -82,43 +82,46 @@ export default function Scanner() {
 
       {/* Tab content */}
       <div className="scanner-content">
-        {/* Attendance event selector */}
+        {/* Event selector for attendance & food */}
         {needsEventPick && (
           <div className="attendance-event-select fade-in">
-            <p className="select-label">Select the event to mark attendance:</p>
-            {attendanceEvents.length === 0 ? (
+            <p className="select-label">
+              {activeTab === 'attendance' ? 'Select the event to mark attendance:' : 'Select the event for food distribution:'}
+            </p>
+            {selectableEvents.length === 0 ? (
               <div className="em-event-empty">
                 No events assigned to you. Ask an admin to assign events to your account.
               </div>
             ) : (
               <div className="em-event-list">
-                {attendanceEvents.map(ev => {
-                  const evParticipants = participants.filter(p => p.eventId === ev.id)
-                  const attended = evParticipants.filter(p => p.isAttending).length
-                  return (
-                    <button
-                      key={ev.id}
-                      id={`em-event-${ev.id}`}
-                      className={`em-event-btn${selectedEventId === ev.id ? ' active' : ''}`}
-                      onClick={() => setSelectedEventId(ev.id)}
-                    >
-                      <span className="em-event-name">{ev.name}</span>
-                      {ev.date && (
-                        <span className="em-event-date">
-                          {new Date(ev.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                        </span>
-                      )}
-                      <span className="em-event-count">
-                        {attended}/{evParticipants.length} attended
-                      </span>
-                    </button>
-                  )
-                })}
+                {selectableEvents.map(ev => {
+                   const evParticipants = participants.filter(p => p.eventId === ev.id)
+                   const attended = evParticipants.filter(p => p.isAttending).length
+                   return (
+                     <button
+                       key={ev.id}
+                       id={`em-event-${ev.id}`}
+                       className={`em-event-btn${selectedEventId === ev.id ? ' active' : ''}`}
+                       onClick={() => setSelectedEventId(ev.id)}
+                     >
+                       <span className="em-event-name">{ev.name}</span>
+                       <span className="em-event-count">
+                         {activeTab === 'attendance' 
+                           ? `${attended}/${evParticipants.length} attended`
+                           : `${ev.meals_count || 0} meals`
+                         }
+                       </span>
+                     </button>
+                   )
+                 })}
               </div>
             )}
             {selectedEvent && (
               <div className="selected-badge fade-in">
-                Scanning attendance for: <strong>{selectedEvent.name}</strong>
+                {activeTab === 'attendance' 
+                  ? `Scanning attendance for: ${selectedEvent.name}`
+                  : `Distributing meals for: ${selectedEvent.name}`
+                }
                 <button className="change-event-btn" onClick={() => setSelectedEventId(null)}>Change</button>
               </div>
             )}
@@ -126,26 +129,26 @@ export default function Scanner() {
         )}
 
         {/* Show scanner only if ready */}
-        {(activeTab !== 'attendance' || selectedEventId) && (
+        {((activeTab !== 'attendance' && activeTab !== 'food') || selectedEventId) && (
           <div className="scanner-wrapper fade-in">
             <div className="scanner-header">
               <div className="scanner-title-block">
                 <h3 className="scanner-mode-title">
                   {activeTab === 'entry' && 'Entry Check-in'}
                   {activeTab === 'attendance' && `Attendance${selectedEvent ? ` — ${selectedEvent.name}` : ''}`}
-                  {activeTab === 'food' && 'Food Voucher'}
+                  {activeTab === 'food' && `Food${selectedEvent ? ` — ${selectedEvent.name}` : ''}`}
                 </h3>
                 <p className="scanner-mode-sub">
                   {activeTab === 'entry'      && 'Scan participant QR to grant main-gate entry'}
                   {activeTab === 'attendance' && 'Mark participant as attended for this event'}
-                  {activeTab === 'food'       && 'Backend auto-assigns the next meal slot from the user\'s allowance'}
+                  {activeTab === 'food'       && 'Increment meal count for this event (user must be registered)'}
                 </p>
               </div>
               <div className={`scanner-status-dot ${activeTab}`} />
             </div>
 
             <QrScanner
-              participants={getScopeParticipants()}
+              participants={activeTab === 'attendance' || activeTab === 'food' ? getScopeParticipants() : participants}
               onScan={handleScan}
               alreadyField={getAlreadyField()}
               trustServer={activeTab === 'food'}

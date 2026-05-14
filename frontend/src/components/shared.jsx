@@ -1,8 +1,9 @@
 // Ascent — Shared UI components
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { useNavigate } from "react-router-dom";
 import { useUserAuth } from "../lib/UserAuthContext";
-import { notifications as notificationsApi, coins as coinsApi } from "../lib/api";
+import { notifications as notificationsApi, coins as coinsApi, users } from "../lib/api";
 import ascentCoinImg from "../assets/ascent-coin.png";
 
 let _navCoinStyleInjected = false;
@@ -18,6 +19,164 @@ function injectNavCoinStyles() {
     .nav-coin-inner img { display:block; border-radius:50%; pointer-events:none; user-select:none; }
   `;
   document.head.appendChild(el);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Profile Popover
+// ─────────────────────────────────────────────────────────────
+function ProfilePopover({ user, setUser, logout }) {
+  const [editing, setEditing] = useState(false);
+  
+  const details = useMemo(() => {
+    if (!user?.details) return {};
+    try {
+      return typeof user.details === 'string' ? JSON.parse(user.details) : user.details;
+    } catch { return {}; }
+  }, [user]);
+
+  const [form, setForm] = useState({ 
+    name: user?.name || '', 
+    phone: details?.phone || '', 
+    college: details?.college || '',
+    city: details?.city || '',
+    year: details?.year || '',
+    branch: details?.branch || '',
+    gender: details?.gender || '',
+    emergency_contact: details?.emergency_contact || ''
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Stop propagation to prevent closing on hover-out if they are typing
+  const handleInteraction = (e) => e.stopPropagation();
+
+  const editsCount = details?.name_edits || 0;
+  const canEditName = editsCount < 2;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const newDetails = { ...details, phone: form.phone, college: form.college, city: form.city, year: form.year, branch: form.branch, gender: form.gender, emergency_contact: form.emergency_contact };
+      if (form.name !== user?.name) {
+        newDetails.name_edits = editsCount + 1;
+      }
+      const updatedUser = await users.patch('me', { name: form.name, details: newDetails });
+      if (setUser) setUser(updatedUser);
+      setEditing(false);
+    } catch (e) {
+      alert(e.data?.detail || "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!user) return null;
+
+  return (
+    <div 
+      onMouseEnter={handleInteraction}
+      onMouseLeave={e => editing && handleInteraction(e)}
+      style={{
+        width: 320, padding: 20,
+        background: 'rgba(20,20,25,0.95)',
+        backdropFilter: 'blur(24px)',
+        border: '1px solid var(--glass-border-strong)',
+        borderRadius: 16,
+        boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+        display: 'flex', flexDirection: 'column', gap: 16,
+        cursor: 'default',
+        textAlign: 'left'
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ margin: 0, fontSize: 16, fontFamily: 'var(--f-display)', color: 'var(--ink)' }}>Profile</h3>
+        {!editing ? (
+          <button onClick={() => setEditing(true)} style={{ background: 'transparent', border: 'none', color: 'var(--violet)', fontSize: 12, cursor: 'pointer' }}>Edit</button>
+        ) : (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setEditing(false)} style={{ background: 'transparent', border: 'none', color: 'var(--ink-dim)', fontSize: 12, cursor: 'pointer' }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} style={{ background: 'transparent', border: 'none', color: 'var(--violet)', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>{saving ? 'Saving...' : 'Save'}</button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 400, overflowY: 'auto', paddingRight: 4 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Name {editing ? `(${2 - editsCount} edits left)` : ''}
+          </span>
+          {editing && canEditName ? (
+            <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--ink)', padding: '6px 10px', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+          ) : (
+            <div style={{ fontSize: 14, color: 'var(--ink)' }}>{user.name}</div>
+          )}
+        </label>
+        
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Email</span>
+          <div style={{ fontSize: 14, color: 'var(--ink-dim)' }}>{user.email || user.username}</div>
+        </label>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Phone</span>
+          {editing ? (
+            <input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--ink)', padding: '6px 10px', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+          ) : (
+            <div style={{ fontSize: 14, color: 'var(--ink)' }}>{details.phone || 'Not provided'}</div>
+          )}
+        </label>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>College</span>
+          {editing ? (
+            <input value={form.college} onChange={e => setForm({...form, college: e.target.value})} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--ink)', padding: '6px 10px', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+          ) : (
+            <div style={{ fontSize: 14, color: 'var(--ink)' }}>{details.college || 'Not provided'}</div>
+          )}
+        </label>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Branch / Specialization</span>
+          {editing ? (
+            <input value={form.branch} onChange={e => setForm({...form, branch: e.target.value})} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--ink)', padding: '6px 10px', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+          ) : (
+            <div style={{ fontSize: 14, color: 'var(--ink)' }}>{details.branch || 'Not provided'}</div>
+          )}
+        </label>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>City</span>
+            {editing ? (
+              <input value={form.city} onChange={e => setForm({...form, city: e.target.value})} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--ink)', padding: '6px 10px', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+            ) : (
+              <div style={{ fontSize: 14, color: 'var(--ink)' }}>{details.city || 'Not provided'}</div>
+            )}
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span style={{ fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Year</span>
+            {editing ? (
+              <input value={form.year} onChange={e => setForm({...form, year: e.target.value})} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--ink)', padding: '6px 10px', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+            ) : (
+              <div style={{ fontSize: 14, color: 'var(--ink)' }}>{details.year || 'Not provided'}</div>
+            )}
+          </label>
+        </div>
+
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 11, color: 'var(--ink-mute)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Emergency Contact</span>
+          {editing ? (
+            <input value={form.emergency_contact} onChange={e => setForm({...form, emergency_contact: e.target.value})} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: 'var(--ink)', padding: '6px 10px', borderRadius: 6, fontSize: 13, outline: 'none' }} />
+          ) : (
+            <div style={{ fontSize: 14, color: 'var(--ink)' }}>{details.emergency_contact || 'Not provided'}</div>
+          )}
+        </label>
+      </div>
+
+      <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: 16, marginTop: 4 }}>
+        <button onClick={logout} style={{ width: '100%', padding: '8px', background: 'rgba(229, 62, 62, 0.1)', color: '#fc8181', border: '1px solid rgba(229, 62, 62, 0.2)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = 'rgba(229, 62, 62, 0.2)'} onMouseLeave={e => e.currentTarget.style.background = 'rgba(229, 62, 62, 0.1)'}>Logout</button>
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -65,7 +224,7 @@ export function NavBar({ active, variant = "app" }) {
     return cached !== null ? Number(cached) : null;
   });
   const navigate = useNavigate();
-  const { user, logout } = useUserAuth() || {};
+  const { user, logout, setUser } = useUserAuth() || {};
 
   // Close popovers on outside click
   useEffect(() => {
@@ -182,8 +341,9 @@ export function NavBar({ active, variant = "app" }) {
     ...(user?.is_attending ? ["My Coins"] : []),
     "Mirage",
     "Announcements",
+    "Merch",
   ];
-  const publicItems = ["Overview","Schedule", "Events", "FAQ"];
+  const publicItems = ["Overview", "Schedule", "Events", "Sponsors", "FAQ", "Merch", "Tour"];
   const items = variant === "app" ? appItems : publicItems;
 
   const navClick = (key) => {
@@ -198,7 +358,10 @@ export function NavBar({ active, variant = "app" }) {
       landing: "/",
       overview: "/",
       events: "/explore",
+      sponsors: "/sponsors",
       faq: "/faq",
+      merch: "/merch",
+      tour: "/tour",
       login: "/login",
       credentials: "/credentials",
       "event-detail": "/event-detail",
@@ -453,8 +616,7 @@ export function NavBar({ active, variant = "app" }) {
                       position: "absolute",
                       top: "calc(100% + 10px)",
                       right: 0,
-                      width: 260,
-                      padding: 18,
+                      paddingTop: 12,
                       zIndex: 50,
                       background: "rgba(15, 15, 22, 0.97)",
                       border: "1px solid var(--glass-border-strong)",
@@ -465,97 +627,14 @@ export function NavBar({ active, variant = "app" }) {
                         "0 30px 80px -30px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.04)",
                     }}
                   >
-                    <div className="eyebrow">§ PROFILE</div>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 12,
-                        marginTop: 12,
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 44,
-                          height: 44,
-                          borderRadius: "50%",
-                          background:
-                            "linear-gradient(135deg, var(--violet), var(--teal))",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "#fff",
-                          fontSize: 15,
-                          fontFamily: "var(--f-mono)",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {initials}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 14,
-                            color: "var(--ink)",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {displayName}
-                        </div>
-                        <div
-                          className="mono"
-                          style={{
-                            fontSize: 11,
-                            color: "var(--ink-mute)",
-                            marginTop: 3,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          @{user?.username || "—"}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        height: 1,
-                        background: "var(--glass-border)",
-                        margin: "16px 0",
-                      }}
-                    />
-
-                    <button
-                      onClick={() => {
+                    <ProfilePopover
+                      user={user}
+                      setUser={setUser}
+                      logout={() => {
                         setProfileOpen(false);
                         handleLogout();
                       }}
-                      className="btn ghost"
-                      style={{
-                        width: "100%",
-                        justifyContent: "center",
-                        color: "var(--amber)",
-                      }}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                        <polyline points="16 17 21 12 16 7" />
-                        <line x1="21" y1="12" x2="9" y2="12" />
-                      </svg>
-                      Sign out
-                    </button>
+                    />
                   </div>
                 )}
               </div>
@@ -994,60 +1073,31 @@ export function ImgPlaceholder({
 }
 
 // ─────────────────────────────────────────────────────────────
-// QR placeholder (visual fake)
+// QR (real, scan-ready)
 // ─────────────────────────────────────────────────────────────
 export function QRCode({ size = 180, seed = "ASCENT-ABC123" }) {
-  const cells = 21;
-  const rng = (i) => {
-    let h = 2166136261;
-    for (let j = 0; j < seed.length; j++)
-      h = (h ^ seed.charCodeAt(j)) * 16777619;
-    h = (h ^ i) * 16777619;
-    return ((h >>> 0) % 1000) / 1000;
-  };
-  const c = size / cells;
-  const rects = [];
-  for (let y = 0; y < cells; y++) {
-    for (let x = 0; x < cells; x++) {
-      const inFinder =
-        (x < 7 && y < 7) ||
-        (x >= cells - 7 && y < 7) ||
-        (x < 7 && y >= cells - 7);
-      let on;
-      if (inFinder) {
-        const lx = x < 7 ? x : x - (cells - 7);
-        const ly = y < 7 ? y : y - (cells - 7);
-        on =
-          lx === 0 ||
-          lx === 6 ||
-          ly === 0 ||
-          ly === 6 ||
-          (lx >= 2 && lx <= 4 && ly >= 2 && ly <= 4);
-      } else {
-        on = rng(y * cells + x) > 0.52;
-      }
-      if (on)
-        rects.push(
-          <rect
-            key={`${x}-${y}`}
-            x={x * c}
-            y={y * c}
-            width={c}
-            height={c}
-            fill="#F1EFE8"
-          />,
-        );
-    }
-  }
+  const value = seed || "ASCENT-ABC123";
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      style={{ borderRadius: 8, background: "#0D0D12" }}
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 8,
+        overflow: "hidden",
+        background: "#0D0D12",
+        display: "grid",
+        placeItems: "center",
+      }}
     >
-      {rects}
-    </svg>
+      <QRCodeSVG
+        value={value}
+        size={size}
+        level="M"
+        includeMargin={true}
+        bgColor="#0D0D12"
+        fgColor="#F1EFE8"
+      />
+    </div>
   );
 }
 
@@ -1249,9 +1299,10 @@ export function Footer() {
         ) : (
           [
             { h: 'Fest', items: [
-                { label: 'Overview', to: '/login' },
-                { label: 'Events', to: '/events' },
+                { label: 'Overview', to: '/' },
+                { label: 'Events', to: '/explore' },
                 { label: 'Schedule', to: '/schedule' },
+                { label: 'Sponsors', to: '/sponsors' },
               ] 
             },
             { h: 'Participate', items: [

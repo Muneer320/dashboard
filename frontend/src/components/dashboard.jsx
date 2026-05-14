@@ -1,5 +1,5 @@
 // Ascent — Dashboard + Event Detail (fully wired to backend)
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   useMobile,
@@ -15,6 +15,7 @@ import {
   schedule as scheduleApi,
   announcements as annApi,
 } from "../lib/api";
+import { MirageEnrollmentCard } from "./MirageEnrollmentCard";
 import { SubmissionPanel } from "./submission";
 
 // ── Event banner URL helper ─────────────────────────────────────────
@@ -32,7 +33,7 @@ const _BANNER_MAP = {
   'quanta':           'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878459/Invariant_s7bl8i.webp',
   'synapse':          'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Synapse_dtk2nc.png',
   'ai film conclave': 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/AI_film_conclave_s789t6.png',
-  'ship to scale':   'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/Ship_to_Scaler_unutke.png',
+  'ship to scale':   'https://res.cloudinary.com/dt1hemzmb/image/upload/f_auto,q_auto/1000126955_jjytt0',
   'tech play zone':   'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Tech_play_zone_emyf1q.png',
 };
 function getEventBannerUrl(name) {
@@ -205,7 +206,8 @@ export function Dashboard() {
 
   const displayName = profile?.name ?? user?.name ?? "…";
   const userId = user?.id ?? "";
-  const qrSeed = `ASCENT-${userId.slice(0, 8).toUpperCase()}`;
+  const qrValue = userId ? `ASCENT:${userId}` : "ASCENT:UNKNOWN";
+  const qrLabel = userId ? userId.slice(0, 8).toUpperCase() : "UNKNOWN";
 
   return (
     <PageBackground
@@ -295,6 +297,8 @@ export function Dashboard() {
           >
             {/* LEFT column */}
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <MirageEnrollmentCard />
+
               {/* Registered events */}
               <div className="glass" style={{ padding: isMobile ? 18 : 26 }}>
                 <div
@@ -604,40 +608,6 @@ export function Dashboard() {
                   overflow: "hidden",
                 }}
               >
-                {/* ── Lock overlay — visible until user is checked in ── */}
-                {!profile?.is_attending && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      zIndex: 10,
-                      borderRadius: "inherit",
-                      backdropFilter: "blur(32px)",
-                      WebkitBackdropFilter: "blur(32px)",
-                      background: "rgba(10, 10, 16, 0.85)",
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 12,
-                      border: "1px solid rgba(255, 255, 255, 0.08)",
-                    }}
-                  >
-                    <div style={{ fontSize: 32 }}>🔒</div>
-                    <div
-                      style={{
-                        fontFamily: "var(--f-mono)",
-                        fontSize: 15,
-                        letterSpacing: "0.14em",
-                        color: "var(--ink)",
-                        textTransform: "uppercase",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Unlock at Round 2
-                    </div>
-                  </div>
-                )}
                 <div
                   style={{
                     position: "absolute",
@@ -719,7 +689,7 @@ export function Dashboard() {
                       boxShadow: "0 0 40px rgba(127,119,221,0.25)",
                     }}
                   >
-                    <QRCode size={isMobile ? 120 : 152} seed={qrSeed} />
+                    <QRCode size={isMobile ? 120 : 152} seed={qrValue} />
                   </div>
                   <div style={{ flex: 1, width: isMobile ? "100%" : "auto" }}>
                     <div className="eyebrow" style={{ marginBottom: 10 }}>
@@ -778,7 +748,7 @@ export function Dashboard() {
                     textAlign: "center",
                   }}
                 >
-                  ID · {qrSeed} · ASCENT 2026
+                  ID · {qrLabel} · ASCENT 2026
                 </div>
               </div>
 
@@ -1023,6 +993,20 @@ export function EventDetail() {
 
   // Track if a submission just succeeded (to refresh the "submitted" badge)
   const [submittedPhases, setSubmittedPhases] = useState(new Set());
+
+  // Stable reference: prevents SubmissionPanel's loadQuestions effect from
+  // re-firing on every parent render (it has userData in its dependency array).
+  const userData = useMemo(() => ({
+    email:    profile?.username || user?.username || '',
+    name:     profile?.name    || user?.name    || '',
+    teamName: team?.name || '',
+    college:  profile?.details?.college || '',
+    phone:    profile?.details?.phone   || '',
+    year:     profile?.details?.year    || '',
+    branch:   profile?.details?.branch  || '',
+    gender:   profile?.details?.gender  || '',
+    city:     profile?.details?.city    || '',
+  }), [profile, user, team]);
 
   const load = useCallback(async () => {
     if (!user || !eventId) return;
@@ -1688,17 +1672,7 @@ export function EventDetail() {
                     phaseData={selectedRound?.phaseData}
                     isRegistered={isRegistered}
                     isRestricted={isRestricted}
-                    userData={{
-                      email: profile?.username || user?.username || '',
-                      name: profile?.name || user?.name || '',
-                      teamName: team?.name || '',
-                      college: profile?.details?.college || '',
-                      phone: profile?.details?.phone || '',
-                      year: profile?.details?.year || '',
-                      branch: profile?.details?.branch || '',
-                      gender: profile?.details?.gender || '',
-                      city: profile?.details?.city || '',
-                    }}
+                    userData={userData}
                     onSuccess={() => {
                       setSubmittedPhases(
                         (prev) => new Set([...prev, `phase${currentPhase}`]),

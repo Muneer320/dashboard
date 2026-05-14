@@ -12,11 +12,13 @@ export function DataProvider({ children }) {
   const [participants, setParticipants]   = useState([])   // ParticipantItem[]
   const [stats, setStats]                 = useState({
     totalRegistered: 0,
+    totalTeams:      0,
     attending:       0,
     restricted:      0,
     foodClaimed:     0,
     entryScanned:    0,
     submitted:       0,
+    submittedTeams:  0,
     eventCount:      0,
   })
   const [eventsMealsCount, setEventsMealsCount] = useState([])  // [{ id, name, meals_count }]
@@ -33,11 +35,13 @@ export function DataProvider({ children }) {
       // Backend returns camelCase directly (StatsResponse schema uses camelCase)
       setStats({
         totalRegistered: data.totalRegistered  ?? 0,
+        totalTeams:      data.totalTeams       ?? 0,
         attending:       data.attending        ?? 0,
         restricted:      data.restricted       ?? 0,
         foodClaimed:     data.foodClaimed      ?? 0,
         entryScanned:    data.entryScanned     ?? 0,
         submitted:       data.submitted        ?? 0,
+        submittedTeams:  data.submittedTeams   ?? 0,
         eventCount:      data.eventCount       ?? 0,
       })
     } catch (e) {
@@ -89,7 +93,9 @@ export function DataProvider({ children }) {
       setMaxMealsCount(perUser?.max_meals_count ?? 0)
       setUserMeals(perUser?.users ?? [])
     } catch (e) {
-      console.error('Meals fetch failed:', e.message)
+      if (e?.status !== 403) {
+        console.error('Meals fetch failed:', e.message)
+      }
     }
   }, [user?.role])
 
@@ -107,6 +113,12 @@ export function DataProvider({ children }) {
   }, [user, loadStats, loadParticipants, loadEvents, loadAdminUsers, loadMeals])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  // Merge meals_count into events for easier access in components
+  const eventsWithMeals = events.map(ev => {
+    const mealData = eventsMealsCount.find(m => m.id === ev.id)
+    return { ...ev, meals_count: mealData?.meals_count || 0 }
+  })
 
   // ── Mutations ───────────────────────────────────────────────────────────────
 
@@ -160,10 +172,9 @@ export function DataProvider({ children }) {
     return res
   }, [_scan])
 
-  const markFoodClaimed = useCallback(async (id) => {
-    // Backend auto-assigns the next meal slot based on the user's remaining
-    // allowance across their registered events. No meal picker needed.
-    const res = await _scan(id, 'food')
+  const markFoodClaimed = useCallback(async (id, eventId) => {
+    // Backend increments meal_count for this specific event
+    const res = await _scan(id, 'food', { event_id: eventId })
     if (res.status === 'accepted') {
       setParticipants(prev => prev.map(p => p.id === id ? { ...p, foodClaimed: true } : p))
     }
@@ -205,7 +216,7 @@ export function DataProvider({ children }) {
 
   return (
     <DataContext.Provider value={{
-      events, adminUsers, participants, stats,
+      events: eventsWithMeals, adminUsers, participants, stats,
       eventsMealsCount, maxMealsCount, userMeals,
       loading, error,
       reload:               loadAll,

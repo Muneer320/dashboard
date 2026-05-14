@@ -6,7 +6,9 @@ import Landing from './components/landing';
 import { Credentials, Login } from './components/auth';
 import { Dashboard, EventDetail } from './components/dashboard';
 import { Explore, Schedule, Leaderboard } from './components/discover';
+import MerchStore from './components/merch';
 import { Mirage, Announcements, LostFound } from './components/community';
+import { MirageProfilePage } from './components/MirageEnrollmentCard';
 import { Rating, Feedback, Report } from './components/forms';
 import AdminApp from './admin-panel/App';
 import FAQ from './components/faq';
@@ -22,6 +24,8 @@ import {
   DisputesPage,
 } from './components/sidequest';
 import RedemptionBooth from './components/redemption';
+import Sponsors from './components/sponsors';
+import Tour from './components/tour';
 
 /** Blocks access to protected user pages — redirects to /login if not authed. */
 function RequireAuth({ children }) {
@@ -65,6 +69,9 @@ export default function App() {
         <Route path="/faq"           element={<FAQ />} />
         <Route path="/schedule"      element={<Schedule />}/>
         <Route path="/explore"       element={<Explore />}/>
+        <Route path="/merch"         element={<MerchStore />}/>
+        <Route path="/sponsors"      element={<Sponsors />}/>
+        <Route path="/tour"          element={<Tour />}/>
 
 
         {/* Protected user app */}
@@ -72,6 +79,7 @@ export default function App() {
         <Route path="/event-detail/:eventId" element={<RequireAuth><EventDetail /></RequireAuth>} />
         <Route path="/leaderboard"   element={<RequireAuth><Leaderboard /></RequireAuth>} />
         <Route path="/mirage"        element={<RequireAuth><Mirage /></RequireAuth>} />
+        <Route path="/mirage/profile" element={<RequireAuth><MirageProfilePage /></RequireAuth>} />
         <Route path="/announcements" element={<RequireAuth><Announcements /></RequireAuth>} />
         <Route path="/lost-found"    element={<RequireAuth><LostFound /></RequireAuth>} />
         <Route path="/rating"        element={<RequireAuth><Rating /></RequireAuth>} />

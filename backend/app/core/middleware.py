@@ -20,6 +20,8 @@ PUBLIC_PATHS = {
     "/api/v1/auth/login",
     "/api/v1/auth/admin/login",
     "/api/v1/auth/register",
+    # Public self-registration for walk-in visitors — no token exists yet.
+    "/api/v1/auth/visitor-signup",
     "/api/v1/openapi.json",
     "/docs",
     "/redoc",
@@ -50,7 +52,11 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         if path in PUBLIC_PATHS:
             return await call_next(request)
 
-        if path.startswith("/api/v1/files/") or path.startswith("/api/v1/schedule/global"):
+        if (
+            path.startswith("/api/v1/files/")
+            or path.startswith("/api/v1/mirage/files/")
+            or path.startswith("/api/v1/schedule/global")
+        ):
             return await call_next(request)
 
         token = self._extract_token(request)
@@ -120,6 +126,9 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
     def _extract_token(self, request: Request) -> str | None:
         authorization = request.headers.get("authorization")
         if not authorization:
+            if request.url.path.startswith("/api/v1/mirage/files/"):
+                token = request.query_params.get("token")
+                return token or None
             return None
         scheme, _, token = authorization.partition(" ")
         if scheme.lower() != "bearer" or not token:

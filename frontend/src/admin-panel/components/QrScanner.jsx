@@ -1,11 +1,14 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+import { BrowserMultiFormatReader } from '@zxing/browser'
 import './QrScanner.css'
 
 /**
  * Simulated QR Scanner UI.
  *
  * Props:
- *   participants   — list to match against
+ *   participants   — all participants (used for lookup/search)
+ *   scopeParticipants — optional subset of participants to display
+ *                       (e.g., event-filtered for food tab)
  *   onScan(p)      — called when a matching participant is found. May return
  *                    a Promise resolving to `{ status, message }` from the
  *                    backend. The overlay shown on the QR frame reflects this
@@ -20,6 +23,7 @@ import './QrScanner.css'
  */
 export default function QrScanner({
   participants,
+  scopeParticipants,
   onScan,
   alreadyField,
   actionLabel = 'Scan',
@@ -29,39 +33,92 @@ export default function QrScanner({
   const [result,      setResult]      = useState(null) // { type: 'success'|'warn'|'error', msg, participant }
   const [scanning,    setScanning]    = useState(false)
   const [animate,     setAnimate]     = useState(false)
+  const [cameraReady, setCameraReady] = useState(false)
+  const [cameraError, setCameraError] = useState(null)
+
+  const videoRef = useRef(null)
+  const readerRef = useRef(null)
+  const controlsRef = useRef(null)
+  const lastScanRef = useRef(0)
+  const processingRef = useRef(false)
+  const cameraReadyRef = useRef(false)
+
+  const participantsRef = useRef(participants)
+  const displayParticipants = scopeParticipants || participants
+  const onScanRef = useRef(onScan)
+  const alreadyFieldRef = useRef(alreadyField)
+  const trustServerRef = useRef(trustServer)
+  const actionLabelRef = useRef(actionLabel)
   const inputRef = useRef()
 
-  async function simulateScan() {
-    if (!input.trim()) return
+  useEffect(() => { participantsRef.current = participants }, [participants])
+  useEffect(() => { onScanRef.current = onScan }, [onScan])
+  useEffect(() => { alreadyFieldRef.current = alreadyField }, [alreadyField])
+  useEffect(() => { trustServerRef.current = trustServer }, [trustServer])
+  useEffect(() => { actionLabelRef.current = actionLabel }, [actionLabel])
+
+  function normalisePayload(raw) {
+    const cleaned = String(raw || '').trim()
+    if (!cleaned) return ''
+    const upper = cleaned.toUpperCase()
+    if (upper.startsWith('ASCENT:')) return cleaned.slice(7).trim()
+    if (upper.startsWith('ASCENT-')) return cleaned.slice(7).trim()
+    return cleaned
+  }
+
+  function findParticipant(query) {
+    const q = query.trim().toLowerCase()
+    const list = participantsRef.current || []
+    return list.find(pt => {
+      const id = String(pt.id || '').toLowerCase()
+      const name = String(pt.name || '').toLowerCase()
+      const username = String(pt.username || '').toLowerCase()
+      return id === q || name === q || username === q
+    })
+  }
+
+  async function processScanValue(rawValue) {
+    const raw = String(rawValue || '').trim()
+    if (!raw) return
+    if (processingRef.current) return
+
+    const now = Date.now()
+    if (now - lastScanRef.current < 1200) return
+    lastScanRef.current = now
+
+    processingRef.current = true
     setScanning(true)
     setResult(null)
 
-    // Small delay for the scan animation — keeps the UX feeling like the real thing.
-    await new Promise(r => setTimeout(r, 600))
+    try {
+      // Small delay for the scan animation — keeps the UX feeling like the real thing.
+      await new Promise(r => setTimeout(r, 350))
 
-    const q = input.trim().toLowerCase()
-    const p = participants.find(
-      pt =>
-        pt.id.toLowerCase() === q ||
-        pt.name.toLowerCase() === q ||
-        pt.username?.toLowerCase() === q
-    )
+      const normalized = normalisePayload(raw)
+      const lookup = normalized || raw
+      const p = findParticipant(lookup)
 
-    if (!p) {
-      setResult({ type: 'error', msg: `No participant found for "${input.trim()}"` })
-    } else if (p.status === 'restricted') {
-      setResult({ type: 'error', msg: `${p.name} is restricted and cannot be processed.`, participant: p })
-    } else if (!trustServer && alreadyField && p[alreadyField]) {
-      setResult({
-        type: 'warn',
-        msg: `${p.name} has already been scanned for ${actionLabel}.`,
-        participant: p,
-      })
-    } else {
+      if (!p) {
+        setResult({ type: 'error', msg: `No participant found for "${lookup}"` })
+        return
+      }
+      if (p.status === 'restricted') {
+        setResult({ type: 'error', msg: `${p.name} is restricted and cannot be processed.`, participant: p })
+        return
+      }
+      if (!trustServerRef.current && alreadyFieldRef.current && p[alreadyFieldRef.current]) {
+        setResult({
+          type: 'warn',
+          msg: `${p.name} has already been scanned for ${actionLabelRef.current}.`,
+          participant: p,
+        })
+        return
+      }
+
       // Fire the scan — wait for the server so the overlay reflects reality.
       let server = null
       try {
-        server = await onScan(p)
+        server = await onScanRef.current?.(p)
       } catch (e) {
         server = { status: 'error', message: e?.message || 'Scan failed' }
       }
@@ -70,7 +127,7 @@ export default function QrScanner({
       if (status === 'accepted') {
         setResult({
           type: 'success',
-          msg: serverMsg || `${p.name} — ${actionLabel} recorded successfully!`,
+          msg: serverMsg || `${p.name} — ${actionLabelRef.current} recorded successfully!`,
           participant: p,
         })
       } else if (status === 'rejected') {
@@ -86,12 +143,18 @@ export default function QrScanner({
           participant: p,
         })
       }
+    } finally {
+      setScanning(false)
+      processingRef.current = false
+      triggerAnimate()
     }
+  }
 
-    setScanning(false)
+  async function simulateScan() {
+    if (!input.trim()) return
+    await processScanValue(input.trim())
     setInput('')
     inputRef.current?.focus()
-    triggerAnimate()
   }
 
   function triggerAnimate() {
@@ -102,6 +165,47 @@ export default function QrScanner({
   function handleKey(e) {
     if (e.key === 'Enter') simulateScan()
   }
+
+  useEffect(() => {
+    let active = true
+    const reader = new BrowserMultiFormatReader()
+    readerRef.current = reader
+    setCameraError(null)
+    setCameraReady(false)
+    cameraReadyRef.current = false
+
+    const start = async () => {
+      if (!videoRef.current) return
+      try {
+        const controls = await reader.decodeFromVideoDevice(
+          null,
+          videoRef.current,
+          (result, err) => {
+            if (!active) return
+            if (!cameraReadyRef.current && (result || err)) {
+              cameraReadyRef.current = true
+              setCameraReady(true)
+            }
+            if (result) {
+              processScanValue(result.getText())
+            }
+          }
+        )
+        controlsRef.current = controls
+      } catch (e) {
+        if (!active) return
+        setCameraError(e?.message || 'Camera access failed')
+      }
+    }
+
+    start()
+
+    return () => {
+      active = false
+      try { controlsRef.current?.stop() } catch {}
+      try { readerRef.current?.reset() } catch {}
+    }
+  }, [])
 
   // Outcome drives the big overlay on top of the QR frame.
   const overlay = result && (result.type === 'success'
@@ -114,20 +218,30 @@ export default function QrScanner({
     <div className="qr-scanner">
       {/* Camera frame simulation */}
       <div className={`qr-frame ${animate ? 'animate' : ''} ${result?.type || ''}`}>
+        <video ref={videoRef} className="qr-video" autoPlay playsInline muted />
         <div className="qr-corners">
           <span className="corner tl" /><span className="corner tr" />
           <span className="corner bl" /><span className="corner br" />
         </div>
         <div className="scan-line" />
-        <div className="qr-placeholder">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.25">
-            <polyline points="23 7 23 1 17 1"/><line x1="16" y1="8" x2="23" y2="1"/>
-            <polyline points="1 7 1 1 7 1"/><line x1="8" y1="8" x2="1" y2="1"/>
-            <polyline points="23 17 23 23 17 23"/><line x1="16" y1="16" x2="23" y2="23"/>
-            <polyline points="1 17 1 23 7 23"/><line x1="8" y1="16" x2="1" y2="23"/>
-          </svg>
-          <p>Point camera at QR code</p>
-        </div>
+        {(!cameraReady || cameraError) && (
+          <div className="qr-placeholder">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.25">
+              <polyline points="23 7 23 1 17 1"/><line x1="16" y1="8" x2="23" y2="1"/>
+              <polyline points="1 7 1 1 7 1"/><line x1="8" y1="8" x2="1" y2="1"/>
+              <polyline points="23 17 23 23 17 23"/><line x1="16" y1="16" x2="23" y2="23"/>
+              <polyline points="1 17 1 23 7 23"/><line x1="8" y1="16" x2="1" y2="23"/>
+            </svg>
+            {cameraError ? (
+              <>
+                <p>Camera unavailable</p>
+                <p className="qr-placeholder-sub">{cameraError}</p>
+              </>
+            ) : (
+              <p>Starting camera…</p>
+            )}
+          </div>
+        )}
 
         {/* Big success/fail overlay on the QR frame */}
         {overlay && (
