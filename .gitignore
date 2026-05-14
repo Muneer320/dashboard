@@ -50,3 +50,4 @@ loadtest*
 /mirage-mapping-dashboard/node_modules/
 /mirage-mapping-dashboard/dist/
 /backup/
+/.worktrees/
