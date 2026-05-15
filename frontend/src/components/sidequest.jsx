@@ -2067,7 +2067,7 @@ const REWARD_META = [
     color: "#f5b04c", tag: "TOP 10",  tagColor: "var(--amber)"  },
 ];
 
-function RewardCard({ meta, balance, rank, inCart, reserved, onAdd, onRemove }) {
+function RewardCard({ meta, balance, rank, inCart, reserved, locked, onAdd, onRemove }) {
   const threshold  = TIER_THRESHOLDS[meta.key];
   const cutoff     = TIER_RANK_CUTOFFS[meta.key];
   const meetsCoins = balance >= threshold;
@@ -2075,6 +2075,7 @@ function RewardCard({ meta, balance, rank, inCart, reserved, onAdd, onRemove }) 
 
   let statusLabel, statusColor;
   if (reserved)        { statusLabel = "RESERVED";              statusColor = "var(--teal)"; }
+  else if (locked)     { statusLabel = "LOCKED";                statusColor = "var(--ink-mute)"; }
   else if (!meetsCoins){ statusLabel = `NEED ${threshold} COINS`; statusColor = "var(--ink-mute)"; }
   else if (!meetsRank) { statusLabel = `NEED TOP ${cutoff}`;    statusColor = "var(--amber)"; }
   else if (inCart)     { statusLabel = "IN CART";               statusColor = "var(--violet)"; }
@@ -2084,7 +2085,7 @@ function RewardCard({ meta, balance, rank, inCart, reserved, onAdd, onRemove }) 
     <div className="glass" style={{
       padding: 22, borderRadius: 16,
       borderTop: `3px solid ${meta.color}`,
-      opacity: !meetsCoins ? 0.7 : 1,
+      opacity: locked || !meetsCoins ? 0.7 : 1,
       transition: "box-shadow 0.2s",
       boxShadow: inCart ? `0 0 0 2px ${meta.color}66` : reserved ? "0 0 0 2px var(--teal)66" : "none",
     }}>
@@ -2134,12 +2135,26 @@ function RewardCard({ meta, balance, rank, inCart, reserved, onAdd, onRemove }) 
       )}
 
       {/* Progress bar if not eligible on coins */}
-      {!reserved && !meetsCoins && (
+      {!reserved && !locked && !meetsCoins && (
         <ProgressTo current={balance} target={threshold} />
       )}
 
+      {/* Locked notice — higher tier blocked until Badge + Stickers is reserved */}
+      {!reserved && locked && (
+        <div style={{
+          padding: "12px 14px", borderRadius: "var(--r-md)",
+          background: "rgba(127,119,221,0.07)", border: "1px solid rgba(127,119,221,0.25)",
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <span style={{ fontSize: 18 }}>🔒</span>
+          <div style={{ fontSize: 12, color: "var(--ink-mute)", lineHeight: 1.5 }}>
+            Unlock by spending coins on <strong style={{ color: "var(--violet)" }}>Badge + Stickers</strong> first.
+          </div>
+        </div>
+      )}
+
       {/* Cart button */}
-      {!reserved && meetsCoins && (
+      {!reserved && !locked && meetsCoins && (
         <button
           onClick={() => inCart ? onRemove(meta.key) : onAdd(meta.key)}
           style={{
@@ -2159,7 +2174,7 @@ function RewardCard({ meta, balance, rank, inCart, reserved, onAdd, onRemove }) 
       )}
 
       {/* Rank gap note */}
-      {!reserved && meetsCoins && !meetsRank && cutoff && (
+      {!reserved && !locked && meetsCoins && !meetsRank && cutoff && (
         <div style={{
           marginTop: 12, fontSize: 11, color: "var(--amber)",
           padding: "8px 12px", borderRadius: 8, background: "rgba(245,176,76,0.07)",
@@ -2354,6 +2369,12 @@ export function RewardsPage() {
   const addToCart    = (tier) => setCart(prev => new Set([...prev, tier]));
   const removeFromCart = (tier) => setCart(prev => { const n = new Set(prev); n.delete(tier); return n; });
 
+  // Higher tiers stay locked until the student has reserved BADGE_STICKER —
+  // matches the backend gate in /coins/reserve-reward.
+  const badgeReserved = reservedTiers.has("BADGE_STICKER");
+  const isLocked = (tier) =>
+    (tier === "NOTEBOOK_MUG" || tier === "TOTE_BAG") && !badgeReserved;
+
   const lockRewards = async () => {
     setLocking(true);
     setLockErr("");
@@ -2430,6 +2451,7 @@ export function RewardsPage() {
             rank={balance.rank}
             inCart={cart.has(meta.key)}
             reserved={reservedTiers.has(meta.key)}
+            locked={isLocked(meta.key)}
             onAdd={addToCart}
             onRemove={removeFromCart}
           />
