@@ -5,6 +5,10 @@ import { useUserAuth } from "../lib/UserAuthContext";
 import PaymentModal from "./PaymentModal";
 import { submitOrderForm, generateOrderId } from "../utils/payment";
 
+// ── Stock toggle ───────────────────────────────────────────────
+// Set to true to mark everything sold out (no cart). Flip to false when restocked.
+const MERCH_SOLD_OUT = true;
+
 const ITEMS = [
   {
     id: "badge",
@@ -293,7 +297,7 @@ function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout
 }
 
 // ── Merch Card ─────────────────────────────────────────────────
-function MerchCard({ item, isMobile, inCart, onAddToCart, onOpenCart }) {
+function MerchCard({ item, isMobile, inCart, onAddToCart, onOpenCart, soldOut }) {
   const [hovered, setHovered] = useState(false);
   const [flash, setFlash] = useState(false);
 
@@ -332,7 +336,7 @@ function MerchCard({ item, isMobile, inCart, onAddToCart, onOpenCart }) {
             objectFit: "contain", objectPosition: "center",
             transition: "transform 0.4s ease",
             transform: hovered ? "scale(1.06)" : "scale(1)",
-            filter: item.comingSoon ? "brightness(0.35) grayscale(0.4)" : "none",
+            filter: (soldOut || item.comingSoon) ? "brightness(0.35) grayscale(0.4)" : "none",
           }}
         />
         {item.tag && (
@@ -344,6 +348,13 @@ function MerchCard({ item, isMobile, inCart, onAddToCart, onOpenCart }) {
           <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
             <span style={{ fontFamily: "var(--f-mono)", fontSize: 11, letterSpacing: "0.14em", color: "var(--teal)", textTransform: "uppercase", border: "1px solid var(--teal)", padding: "6px 16px", borderRadius: 999, background: "rgba(0,0,0,0.6)" }}>
               Coming Soon
+            </span>
+          </div>
+        )}
+        {soldOut && !item.comingSoon && (
+          <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
+            <span style={{ fontFamily: "var(--f-mono)", fontSize: 11, letterSpacing: "0.14em", color: "#f87171", textTransform: "uppercase", border: "1px solid #f87171", padding: "6px 16px", borderRadius: 999, background: "rgba(0,0,0,0.6)" }}>
+              Out of Stock
             </span>
           </div>
         )}
@@ -379,25 +390,41 @@ function MerchCard({ item, isMobile, inCart, onAddToCart, onOpenCart }) {
 
         {/* Add to cart button */}
         {!item.comingSoon && (
-          <button
-            onClick={handleAdd}
-            style={{
-              marginTop: 10, width: "100%", padding: "9px 0", borderRadius: 9,
-              background: flash
-                ? "rgba(74,222,128,0.2)"
-                : inCart
-                ? "rgba(139,92,246,0.25)"
-                : hovered
-                ? "var(--violet)"
-                : "rgba(139,92,246,0.15)",
-              border: `1px solid ${flash ? "rgba(74,222,128,0.5)" : inCart ? "rgba(139,92,246,0.5)" : "rgba(139,92,246,0.35)"}`,
-              color: flash ? "#4ade80" : "#fff",
-              fontSize: 11, fontWeight: 700, fontFamily: "var(--f-mono)",
-              letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.2s",
-            }}
-          >
-            {flash ? "✓ ADDED" : inCart ? "IN CART — VIEW →" : "ADD TO CART"}
-          </button>
+          soldOut ? (
+            <button
+              disabled
+              style={{
+                marginTop: 10, width: "100%", padding: "9px 0", borderRadius: 9,
+                background: "rgba(248,113,113,0.08)",
+                border: "1px solid rgba(248,113,113,0.25)",
+                color: "#f87171",
+                fontSize: 11, fontWeight: 700, fontFamily: "var(--f-mono)",
+                letterSpacing: "0.06em", cursor: "not-allowed", opacity: 0.7,
+              }}
+            >
+              OUT OF STOCK
+            </button>
+          ) : (
+            <button
+              onClick={handleAdd}
+              style={{
+                marginTop: 10, width: "100%", padding: "9px 0", borderRadius: 9,
+                background: flash
+                  ? "rgba(74,222,128,0.2)"
+                  : inCart
+                  ? "rgba(139,92,246,0.25)"
+                  : hovered
+                  ? "var(--violet)"
+                  : "rgba(139,92,246,0.15)",
+                border: `1px solid ${flash ? "rgba(74,222,128,0.5)" : inCart ? "rgba(139,92,246,0.5)" : "rgba(139,92,246,0.35)"}`,
+                color: flash ? "#4ade80" : "#fff",
+                fontSize: 11, fontWeight: 700, fontFamily: "var(--f-mono)",
+                letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.2s",
+              }}
+            >
+              {flash ? "✓ ADDED" : inCart ? "IN CART — VIEW →" : "ADD TO CART"}
+            </button>
+          )
         )}
       </div>
     </div>
@@ -502,7 +529,7 @@ export default function MerchStore() {
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 28 : 48, alignItems: "center", marginBottom: isMobile ? 40 : 56 }}>
           <div>
             <div className="eyebrow" style={{ marginBottom: 14 }}>
-              § MERCH STORE · {ITEMS.filter((i) => !i.comingSoon).length} ITEMS
+              § MERCH STORE · {MERCH_SOLD_OUT ? "SOLD OUT" : `${ITEMS.filter((i) => !i.comingSoon).length} ITEMS`}
             </div>
             <h1 className="display" style={{ fontSize: isMobile ? 38 : 60, letterSpacing: "-0.03em", lineHeight: 1.05, marginBottom: 16 }}>
               Wear the<br />ascent.
@@ -512,8 +539,8 @@ export default function MerchStore() {
               Limited stock — grab yours before it's gone.
             </p>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 999, fontSize: 12, color: "var(--ink-dim)", fontFamily: "var(--f-mono)" }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4ade80", boxShadow: "0 0 6px #4ade80", flexShrink: 0 }} />
-              Available on-site · Techfest 2026
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: MERCH_SOLD_OUT ? "#f87171" : "#4ade80", boxShadow: MERCH_SOLD_OUT ? "0 0 6px #f87171" : "0 0 6px #4ade80", flexShrink: 0 }} />
+              {MERCH_SOLD_OUT ? "Sold out · Techfest 2026" : "Available on-site · Techfest 2026"}
             </div>
           </div>
 
@@ -536,13 +563,14 @@ export default function MerchStore() {
               inCart={cart.some((c) => c.id === item.id)}
               onAddToCart={addToCart}
               onOpenCart={() => setDrawerOpen(true)}
+              soldOut={MERCH_SOLD_OUT}
             />
           ))}
         </div>
       </div>
 
       {/* Floating cart FAB */}
-      {cartCount > 0 && (
+      {!MERCH_SOLD_OUT && cartCount > 0 && (
         <button
           onClick={() => setDrawerOpen(true)}
           style={{
