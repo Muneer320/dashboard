@@ -875,8 +875,7 @@ function normaliseRound(key, val) {
 
   let state;
   if (isLocked) {
-    // Only show "done" if it had a start_time that has already passed
-    state = (startTime && startTime < now) ? "locked" : "upcoming";
+    state = "locked";
   } else if (isActive) {
     // Auto-close by time: if end_time passed, treat as closed
     state = (endTime && now > endTime) ? "closed" : "live";
@@ -1090,6 +1089,14 @@ export function EventDetail() {
         // Previous phase not yet done → force this phase to upcoming
         rounds[i] = { ...rounds[i], state: "upcoming" };
       }
+    }
+  }
+
+  // User-specific phase restriction gate
+  const userClearedPhase = userEntry?.phase || 0;
+  for (let i = 0; i < rounds.length; i++) {
+    if (rounds[i].phaseNum && rounds[i].phaseNum > userClearedPhase + 1) {
+      rounds[i] = { ...rounds[i], userLocked: true };
     }
   }
 
@@ -1444,7 +1451,15 @@ export function EventDetail() {
                         />
                       </div>
                       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                        {selectedRound.state === "live" && (
+                        {selectedRound.userLocked && (
+                          <span
+                            className="btn sm ghost"
+                            style={{ cursor: "default", opacity: 0.6 }}
+                          >
+                            Requires Phase {selectedRound.phaseNum - 1}
+                          </span>
+                        )}
+                        {!selectedRound.userLocked && selectedRound.state === "live" && (
                           <a
                             onClick={() =>
                               document
@@ -1456,7 +1471,7 @@ export function EventDetail() {
                             Submit ⤴
                           </a>
                         )}
-                        {selectedRound.state === "upcoming" && (
+                        {!selectedRound.userLocked && selectedRound.state === "upcoming" && (
                           <span
                             className="btn sm"
                             style={{ cursor: "default", opacity: 0.6 }}
@@ -1464,7 +1479,7 @@ export function EventDetail() {
                             Opening soon…
                           </span>
                         )}
-                        {(selectedRound.state === "locked" || selectedRound.state === "closed") && (
+                        {!selectedRound.userLocked && (selectedRound.state === "locked" || selectedRound.state === "closed") && (
                           <span
                             className="btn sm ghost"
                             style={{ cursor: "default", opacity: 0.6 }}
@@ -1572,11 +1587,13 @@ export function EventDetail() {
                         fontSize: 9.5,
                         letterSpacing: "0.1em",
                         color:
+                          selectedRound.userLocked ? "var(--ink-mute)" :
                           selectedRound.state === "live"
                             ? "var(--violet)"
                             : "var(--ink-mute)",
                         border: "1px solid",
                         borderColor:
+                          selectedRound.userLocked ? "var(--glass-border)" :
                           selectedRound.state === "live"
                             ? "rgba(127,119,221,0.4)"
                             : "var(--glass-border)",
@@ -1584,11 +1601,14 @@ export function EventDetail() {
                         padding: "2px 7px",
                       }}
                     >
-                      {selectedRound.state === "live"
+                      {selectedRound.userLocked ? "🔒 LOCKED" :
+                       selectedRound.state === "live"
                         ? "● OPEN"
-                        : selectedRound.state === "locked" || selectedRound.state === "closed"
-                          ? "✓ CLOSED"
-                          : "◌ NOT OPEN"}
+                        : selectedRound.state === "locked"
+                          ? "🔒 LOCKED"
+                          : selectedRound.state === "closed"
+                            ? "✓ CLOSED"
+                            : "◌ NOT OPEN"}
                     </span>
                     {selectedRound.phaseNum && (
                       <span
@@ -1666,20 +1686,27 @@ export function EventDetail() {
                     </div>
                   </div>
                 ) : currentPhase ? (
-                  <SubmissionPanel
-                    key={`${eventId}-phase${currentPhase}`}
-                    eventId={eventId}
-                    phase={currentPhase}
-                    phaseData={selectedRound?.phaseData}
-                    isRegistered={isRegistered}
-                    isRestricted={isRestricted}
-                    userData={userData}
-                    onSuccess={() => {
-                      setSubmittedPhases(
-                        (prev) => new Set([...prev, `phase${currentPhase}`]),
-                      );
-                    }}
-                  />
+                  selectedRound?.userLocked ? (
+                    <div style={{ fontSize: 13, color: 'var(--ink-mute)', textAlign: 'center', padding: '20px 0' }}>
+                      <div style={{ fontSize: 24, marginBottom: 8 }}>🔒</div>
+                      You must clear Phase {selectedRound.phaseNum - 1} to access this phase.
+                    </div>
+                  ) : (
+                    <SubmissionPanel
+                      key={`${eventId}-phase${currentPhase}`}
+                      eventId={eventId}
+                      phase={currentPhase}
+                      phaseData={selectedRound?.phaseData}
+                      isRegistered={isRegistered}
+                      isRestricted={isRestricted}
+                      userData={userData}
+                      onSuccess={() => {
+                        setSubmittedPhases(
+                          (prev) => new Set([...prev, `phase${currentPhase}`]),
+                        );
+                      }}
+                    />
+                  )
                 ) : (
                   <div style={{ fontSize: 13, color: 'var(--ink-mute)', textAlign: 'center', padding: '20px 0' }}>
                     {rounds.length === 0
