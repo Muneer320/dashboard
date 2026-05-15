@@ -1,11 +1,28 @@
-"""Postgres-backed admin auth service."""
+"""Admin auth service with Supabase-first lookup and Postgres fallback."""
 
 from __future__ import annotations
 
 from fastapi import HTTPException, status
+from supabase import AsyncClient
 
+from app.core.config import settings
 from app.core.security import create_access_token, verify_password
 from app.db.postgres import db_connection
+from app.db.supabase_client import first_row
+
+
+async def _fetch_admin_by_username_supabase(
+    supabase: AsyncClient,
+    username: str,
+) -> dict | None:
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("username", username)
+        .limit(1)
+        .execute()
+    )
+    return first_row(resp)
 
 
 async def _fetch_admin_by_username_postgres(username: str) -> dict | None:
@@ -17,9 +34,21 @@ async def _fetch_admin_by_username_postgres(username: str) -> dict | None:
         return dict(row) if row is not None else None
 
 
-async def admin_login(username: str, password: str) -> str:
+async def _fetch_admin_by_username(
+    supabase: AsyncClient,
+    username: str,
+) -> dict | None:
+    try:
+        return await _fetch_admin_by_username_supabase(supabase, username)
+    except Exception:
+        if not settings.DATABASE_URL:
+            raise
+        return await _fetch_admin_by_username_postgres(username)
+
+
+async def admin_login(supabase: AsyncClient, username: str, password: str) -> str:
     """Authenticate against the admins table and return a JWT with role embedded."""
-    row = await _fetch_admin_by_username_postgres(username)
+    row = await _fetch_admin_by_username(supabase, username)
 
     if row is None or not verify_password(password, row["password_hash"]):
         raise HTTPException(

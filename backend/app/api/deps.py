@@ -14,6 +14,7 @@ from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from supabase import AsyncClient
 
+from app.core.config import settings
 from app.core.security import TokenError, decode_access_token
 from app.db.postgres import db_connection
 from app.db.supabase_client import first_row, get_supabase
@@ -90,7 +91,39 @@ async def get_current_user_from_header_or_query(
     return await _resolve_user_from_token(token, supabase)
 
 
-async def get_current_admin(token: str = Depends(oauth2_scheme)) -> Admin:
+async def _fetch_admin_by_uid_supabase(
+    supabase: AsyncClient,
+    admin_uid: int,
+) -> dict | None:
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", admin_uid)
+        .limit(1)
+        .execute()
+    )
+    return first_row(resp)
+
+
+async def _fetch_admin_by_uid(
+    supabase: AsyncClient,
+    admin_uid: int,
+) -> dict | None:
+    try:
+        return await _fetch_admin_by_uid_supabase(supabase, admin_uid)
+    except Exception as exc:
+        if not settings.DATABASE_URL:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_upstream_unreachable_detail(exc),
+            ) from exc
+        return await _fetch_admin_by_uid_postgres(admin_uid)
+
+
+async def get_current_admin(
+    supabase: AsyncClient = Depends(get_supabase),
+    token: str = Depends(oauth2_scheme),
+) -> Admin:
     """Dependency that requires an admin JWT (issued via POST /auth/admin/login)."""
     try:
         payload = decode_access_token(token)
@@ -113,7 +146,7 @@ async def get_current_admin(token: str = Depends(oauth2_scheme)) -> Admin:
             detail="Invalid token payload",
         ) from exc
 
-    row = await _fetch_admin_by_uid_postgres(admin_uid)
+    row = await _fetch_admin_by_uid(supabase, admin_uid)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
@@ -258,23 +291,7 @@ async def get_booth_volunteer(
             detail="Invalid token payload",
         ) from exc
 
-    if settings.DATABASE_URL:
-        row = await _fetch_admin_by_uid_postgres(admin_uid)
-    else:
-        try:
-            resp = await (
-                supabase.table("admins")
-                .select("*")
-                .eq("uid", admin_uid)
-                .limit(1)
-                .execute()
-            )
-            row = first_row(resp)
-        except httpx.RequestError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=_upstream_unreachable_detail(exc),
-            ) from exc
+    row = await _fetch_admin_by_uid(supabase, admin_uid)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")

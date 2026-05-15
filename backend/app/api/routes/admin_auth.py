@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
+from supabase import AsyncClient
 from app.core.limiter import limiter
 
 from app.api.deps import get_current_admin
+from app.db.supabase_client import get_supabase
 from app.models.admin import Admin
 from app.schemas.auth import TokenResponse
 from app.services.admin_auth_service import admin_login
@@ -30,9 +32,10 @@ class AdminLoginRequest(BaseModel):
 async def admin_login_endpoint(
     request: Request,
     payload: AdminLoginRequest,
+    supabase: AsyncClient = Depends(get_supabase),
 ) -> TokenResponse:
     """Login for admin, eventManager, and scanner accounts."""
-    token = await admin_login(payload.username, payload.password)
+    token = await admin_login(supabase, payload.username, payload.password)
     return TokenResponse(access_token=token)
 
 

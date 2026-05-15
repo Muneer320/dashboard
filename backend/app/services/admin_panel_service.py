@@ -182,7 +182,28 @@ _POSTGRES_TABLES = {"events", "users", "teams", "admins"}
 
 async def _fetch_all(supabase: AsyncClient, table: str, cols: str = "*") -> list[dict]:
     """Paginate a Supabase table query to bypass the 1 000-row default limit."""
-    if settings.DATABASE_URL:
+    async def _fetch_supabase() -> list[dict]:
+        all_rows: list[dict] = []
+        offset = 0
+        while True:
+            resp = await (
+                supabase.table(table)
+                .select(cols)
+                .range(offset, offset + _PAGE_SIZE - 1)
+                .execute()
+            )
+            page = rows(resp)
+            all_rows.extend(page)
+            if len(page) < _PAGE_SIZE:
+                break
+            offset += _PAGE_SIZE
+        return all_rows
+
+    try:
+        return await _fetch_supabase()
+    except Exception:
+        if not settings.DATABASE_URL:
+            raise
         if table not in _POSTGRES_TABLES:
             raise RuntimeError(f"Unsupported Postgres table fetch: {table}")
         selected_cols = cols if cols.strip() != "*" else "*"
@@ -190,22 +211,6 @@ async def _fetch_all(supabase: AsyncClient, table: str, cols: str = "*") -> list
         async with db_connection() as conn:
             result = await conn.fetch(query)
         return [dict(row) for row in result]
-
-    all_rows: list[dict] = []
-    offset = 0
-    while True:
-        resp = await (
-            supabase.table(table)
-            .select(cols)
-            .range(offset, offset + _PAGE_SIZE - 1)
-            .execute()
-        )
-        page = rows(resp)
-        all_rows.extend(page)
-        if len(page) < _PAGE_SIZE:
-            break
-        offset += _PAGE_SIZE
-    return all_rows
 
 
 async def _all_events(supabase: AsyncClient) -> list[Event]:

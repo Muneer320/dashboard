@@ -50,7 +50,34 @@ def _next_meal_key(food: dict) -> tuple[str, int]:
     return f"meal{claimed + 1}", claimed
 
 
-async def scan_food(supabase: AsyncClient, user: User, event_id: str) -> str:
+async def _scan_food_legacy_allowance(supabase: AsyncClient, user: User) -> str:
+    allowance = await _user_meal_allowance(supabase, user)
+    if allowance <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User is not registered for any event -- no meal allowance",
+        )
+
+    food = dict(user.food or {})
+    next_key, claimed = _next_meal_key(food)
+    if claimed >= allowance:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No meals left -- already claimed {claimed}/{allowance}",
+        )
+
+    food[next_key] = True
+    user.food = food
+    await (
+        supabase.table("users")
+        .update({"food": food})
+        .eq("id", str(user.id))
+        .execute()
+    )
+    return f"Meal {next_key} marked as consumed ({claimed + 1}/{allowance})"
+
+
+async def scan_food(supabase: AsyncClient, user: User, event_id: str | None = None) -> str:
     """
     Increment meal_count for the user in a specific event.
 
@@ -63,6 +90,9 @@ async def scan_food(supabase: AsyncClient, user: User, event_id: str) -> str:
 
     Data structure: users.food = { "event_id": { "meal_count": 2 }, ... }
     """
+    if not event_id:
+        return await _scan_food_legacy_allowance(supabase, user)
+
     # Check if user is registered for this event
     if event_id not in (user.events or {}):
         raise HTTPException(
