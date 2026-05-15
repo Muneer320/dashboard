@@ -33,8 +33,10 @@ const _BANNER_MAP = {
   'quanta':           'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878459/Invariant_s7bl8i.webp',
   'synapse':          'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Synapse_dtk2nc.png',
   'ai film conclave': 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878462/AI_film_conclave_s789t6.png',
-  'ship to scale':   'https://res.cloudinary.com/dt1hemzmb/image/upload/f_auto,q_auto/1000126955_jjytt0',
+  'ship to scale':    'https://res.cloudinary.com/dt1hemzmb/image/upload/f_auto,q_auto/1000126955_jjytt0',
   'tech play zone':   'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Tech_play_zone_emyf1q.png',
+  'ascent of intellect':'https://res.cloudinary.com/dt1hemzmb/image/upload/v1778866017/7681f82f-e3dd-44aa-8e0d-0a7f9e85d3c3_mvbily.jpg',
+  'prompt wars':      'https://res.cloudinary.com/dt1hemzmb/image/upload/v1778158104/WhatsApp_Image_2026-05-07_at_5.53.28_PM_x7bgrl.jpg'
 };
 function getEventBannerUrl(name) {
   if (!name) return null;
