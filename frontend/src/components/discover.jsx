@@ -90,7 +90,7 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
       eliminated: "#D97777",
     }[status?.status] ?? "var(--ink-mute)";
 
-  const bannerUrl = getEventBannerUrl(ev.name);
+  const bannerUrl = ev.image_url || getEventBannerUrl(ev.name);
 
   const unstopUrls = {
     impulse:

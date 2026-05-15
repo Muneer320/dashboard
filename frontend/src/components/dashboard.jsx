@@ -1729,7 +1729,7 @@ export function EventDetail() {
             }}
           >
             {(() => {
-              const bannerUrl = getEventBannerUrl(event.name);
+              const bannerUrl = event.image_url || getEventBannerUrl(event.name);
               return bannerUrl ? (
                 <div style={{ borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
                   <img
