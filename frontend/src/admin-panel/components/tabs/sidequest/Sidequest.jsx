@@ -193,7 +193,16 @@ function NewVerificationView() {
       await adminCoins.rejectUGC(rejectFor, rejectReason)
       setRejectFor(null); setRejectReason('')
       await load()
-    } catch (e) { setError(e.message) }
+    } catch (e) {
+      // 400 "Already rejected" or 409 "claimed by another admin" both mean
+      // the row is no longer actionable — close the modal and refresh.
+      if (e.status === 409 || (e.status === 400 && /already/i.test(e.message || ''))) {
+        setRejectFor(null); setRejectReason('')
+        await load()
+      } else {
+        setError(e.message)
+      }
+    }
     finally { setWorking(false) }
   }
 
@@ -297,12 +306,14 @@ function NewVerificationView() {
       </div>
 
       {rejectFor && (
-        <Modal onClose={() => setRejectFor(null)}>
+        <Modal onClose={() => { setRejectFor(null); setRejectReason('') }}>
           <h3>Reject submission</h3>
           <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 6 }}>
             Reason is mandatory and shown to the student.
           </p>
-          <select className="input-field" value="" onChange={(e) => setRejectReason(e.target.value)}
+          <select className="input-field"
+            value={REJECT_TEMPLATES.includes(rejectReason) ? rejectReason : ''}
+            onChange={(e) => setRejectReason(e.target.value)}
             style={{ marginTop: 12 }}>
             <option value="">— Select template —</option>
             {REJECT_TEMPLATES.map(r => <option key={r} value={r}>{r}</option>)}
@@ -312,7 +323,10 @@ function NewVerificationView() {
             placeholder="Or write your own reason…"
             style={{ marginTop: 8, resize: 'vertical' }} />
           <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
-            <button className="btn btn-ghost" onClick={() => setRejectFor(null)}>Cancel</button>
+            <button className="btn btn-ghost"
+              onClick={() => { setRejectFor(null); setRejectReason('') }}>
+              Cancel
+            </button>
             <button className="btn btn-danger" onClick={reject} disabled={!rejectReason.trim() || working}>
               {working ? '…' : 'Reject'}
             </button>
@@ -742,10 +756,16 @@ export function AuditLog() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// 9b. Coins Overview — per-student balance + redemptions
+// 9b. Coins Overview — per-student balance + cart + redeemed
 // ─────────────────────────────────────────────────────────────
 
-const TIER_LABEL = { STICKER: 'Sticker', MUG: 'Mug', TSHIRT: 'T-shirt', PREMIUM_KIT: 'Premium Kit', COINS: 'Coins' }
+const TIER_LABEL = {
+  BADGE_STICKER: 'Badge + Stickers',
+  NOTEBOOK_MUG:  'Notebook + Mug',
+  TOTE_BAG:      'Tote Bag',
+  STICKER: 'Sticker', MUG: 'Mug', TSHIRT: 'T-shirt',
+  PREMIUM_KIT: 'Premium Kit', COINS: 'Coins',
+}
 
 export function CoinsOverview() {
   const [students, setStudents] = useState([])
@@ -753,7 +773,6 @@ export function CoinsOverview() {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [expanded, setExpanded] = useState(null)
 
   // Debounce search to avoid hammering the API on every keystroke.
   useEffect(() => {
@@ -772,13 +791,16 @@ export function CoinsOverview() {
   useEffect(() => { load() }, [load])
 
   const totalCoins = useMemo(() => students.reduce((s, r) => s + (r.coins || 0), 0), [students])
-  const totalRedemptions = useMemo(() => students.reduce((s, r) => s + (r.redemptions?.length || 0), 0), [students])
+  const totalRedemptions = useMemo(
+    () => students.reduce((s, r) => s + (r.redeemed?.length || 0), 0),
+    [students],
+  )
 
   return (
     <div className="fade-in">
       <PageHeader
         title="Coins Overview"
-        sub="Live balance and redemptions for every participant."
+        sub="Live balance, cart, and redemptions for every participant."
         action={
           <button className="btn btn-ghost" onClick={() => load()} style={{ fontSize: 12 }}>Refresh</button>
         }
@@ -819,7 +841,7 @@ export function CoinsOverview() {
         {loading ? <Spinner /> : students.length === 0 ? (
           <div className="empty-state"><p>No participants with coin activity found.</p></div>
         ) : (
-          <table className="data-table" style={{ minWidth: 700 }}>
+          <table className="data-table" style={{ minWidth: 880 }}>
             <thead>
               <tr>
                 <th>#</th>
@@ -831,74 +853,63 @@ export function CoinsOverview() {
                   </span>
                 </th>
                 <th>Sources</th>
+                <th>In Cart</th>
                 <th>Redeemed</th>
                 <th>Last Activity</th>
               </tr>
             </thead>
             <tbody>
               {students.map((s, idx) => (
-                <React.Fragment key={s.student_id}>
-                  <tr
-                    style={{ cursor: s.redemptions?.length ? 'pointer' : 'default' }}
-                    onClick={() => setExpanded(expanded === s.student_id ? null : s.student_id)}
-                  >
-                    <td style={{ color: 'var(--text-muted)', fontSize: 11 }}>{idx + 1}</td>
-                    <td><StudentCell row={s} /></td>
-                    <td style={{ textAlign: 'right' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
-                        <AdminFlipCoin size={16} />
-                        {(s.coins || 0).toLocaleString()}
-                      </span>
-                    </td>
-                    <td>
-                      <span className="badge badge-info">{s.distinct_sources || 0}</span>
-                    </td>
-                    <td>
-                      {s.redemptions?.length > 0 ? (
-                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                          {s.redemptions.map((r, i) => (
-                            <span key={i} className={`badge badge-${r.status === 'pending' ? 'warning' : 'success'}`}>
-                              {TIER_LABEL[r.tier] || r.tier}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
-                      )}
-                    </td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{relTime(s.last_entry)}</td>
-                  </tr>
-
-                  {/* Expanded redemptions detail */}
-                  {expanded === s.student_id && s.redemptions?.length > 0 && (
-                    <tr>
-                      <td colSpan={6} style={{ padding: '0 0 8px 40px', background: 'rgba(0,0,0,0.15)' }}>
-                        <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr>
-                              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Tier</th>
-                              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Code</th>
-                              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Status</th>
-                              <th style={{ padding: '6px 10px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Code Expires</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {s.redemptions.map((r, i) => (
-                              <tr key={i}>
-                                <td style={{ padding: '4px 10px' }}>{TIER_LABEL[r.tier] || r.tier}</td>
-                                <td style={{ padding: '4px 10px', fontFamily: 'monospace' }}>{r.redemption_code || '—'}</td>
-                                <td style={{ padding: '4px 10px' }}>
-                                  <span className={`badge badge-${r.status === 'pending' ? 'warning' : 'success'}`}>{r.status}</span>
-                                </td>
-                                <td style={{ padding: '4px 10px', color: 'var(--text-muted)' }}>{fmtTime(r.expires_at)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                <tr key={s.student_id}>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 11 }}>{idx + 1}</td>
+                  <td><StudentCell row={s} /></td>
+                  <td style={{ textAlign: 'right' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}>
+                      <AdminFlipCoin size={16} />
+                      {(s.coins || 0).toLocaleString()}
+                    </span>
+                  </td>
+                  <td>
+                    {s.source_names?.length > 0 ? (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {s.source_names.map((src) => (
+                          <span key={src} className="badge badge-info" style={{ fontSize: 10 }}>
+                            {SOURCE_LABEL[src] || src}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                    )}
+                  </td>
+                  <td>
+                    {s.cart?.length > 0 ? (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {s.cart.map((r, i) => (
+                          <span key={i} className="badge badge-warning" style={{ fontSize: 10 }}>
+                            {TIER_LABEL[r.tier] || r.tier}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                    )}
+                  </td>
+                  <td>
+                    {s.redeemed?.length > 0 ? (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {s.redeemed.map((r, i) => (
+                          <span key={i} className="badge badge-success" style={{ fontSize: 10 }}>
+                            {TIER_LABEL[r.tier] || r.tier}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 12 }}>{relTime(s.last_entry)}</td>
+                </tr>
               ))}
             </tbody>
           </table>

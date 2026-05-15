@@ -139,6 +139,13 @@ async def credit_coins(
     """
     Write a verified coin entry to the ledger.
     Returns the created ledger row.
+
+    Side-effect: when `coins` is strictly positive, the student's
+    `users.cents` column is bumped by the same amount so the existing
+    leaderboard (which reads `users.cents`) stays in sync with the
+    ledger. Negative entries — reversals, redemptions, negative manual
+    adjustments — never decrement `users.cents`; the leaderboard
+    reflects only positive earnings.
     """
     entry = {
         "student_id": str(student_id),
@@ -152,7 +159,39 @@ async def credit_coins(
         "metadata": metadata or {},
     }
     resp = await supabase.table("coins_ledger").insert(entry).execute()
-    return rows(resp)[0]
+    inserted = rows(resp)[0]
+
+    if coins > 0:
+        await _bump_user_cents(supabase, student_id, coins)
+
+    return inserted
+
+
+async def _bump_user_cents(
+    supabase: AsyncClient, student_id: UUID | str, delta: int
+) -> None:
+    """Add `delta` to `users.cents` for this student. Read-then-write —
+    PostgREST does not expose a server-side atomic increment, so we
+    accept the small race window; the ledger remains the source of
+    truth and any drift can be reconciled from it."""
+    sid = str(student_id)
+    current_resp = await (
+        supabase.table("users")
+        .select("cents")
+        .eq("id", sid)
+        .limit(1)
+        .execute()
+    )
+    row = first_row(current_resp)
+    if row is None:
+        return
+    new_cents = int(row.get("cents") or 0) + delta
+    await (
+        supabase.table("users")
+        .update({"cents": new_cents})
+        .eq("id", sid)
+        .execute()
+    )
 
 
 async def post_reversal(

@@ -417,7 +417,14 @@ async def reject_ugc(
             except ValueError:
                 reversal_entry = None
 
-    await (
+    # Atomic claim — only one admin gets to flip the row to rejected. The
+    # WHERE filter restricts to states the row was actually in when we read
+    # it, so the loser of a race comes back with 0 rows and a 409.
+    if is_reverification:
+        prior_statuses = ["needs_review", "verified"]
+    else:
+        prior_statuses = ["admin_queued", "pending_manual"]
+    claim_resp = await (
         supabase.table("ugc_submissions")
         .update({
             "status": "rejected",
@@ -426,8 +433,14 @@ async def reject_ugc(
             "verified_by": admin.uid,
         })
         .eq("id", submission["id"])
+        .in_("status", prior_statuses)
         .execute()
     )
+    if not rows(claim_resp):
+        raise HTTPException(
+            status_code=409,
+            detail="Submission was already processed by another admin",
+        )
 
     await write_audit(
         supabase,
@@ -995,31 +1008,62 @@ async def coins_students_overview(
 ) -> list[dict[str, Any]]:
     """
     Returns every student who has at least one ledger entry, with their
-    live coin balance, distinct source count, and any reward redemptions.
-    Optionally filtered by name/username substring (case-insensitive).
+    live coin balance, list of earning-source names, items currently in
+    their cart (pending reservations), and items they have already
+    redeemed (claimed reservations). Filtered by name/username substring
+    (case-insensitive) when `search` is provided.
     """
-    leaderboard = await get_live_leaderboard(supabase, limit=None)
+    # Pull the leaderboard rows + the raw per-source breakdown in one pass.
+    ledger_resp = await (
+        supabase.table("coins_ledger")
+        .select("student_id, source_type, coins, created_at")
+        .eq("status", "verified")
+        .execute()
+    )
+    by_student: dict[str, dict[str, Any]] = {}
+    for row in rows(ledger_resp):
+        sid = row["student_id"]
+        bucket = by_student.setdefault(sid, {
+            "student_id": sid,
+            "coins": 0,
+            "source_names": set(),
+            "last_entry": row["created_at"],
+        })
+        bucket["coins"] += row["coins"]
+        # Reversals and redemption debits aren't "earning sources" — keep them
+        # out of the per-student source list shown in the admin overview.
+        if row["coins"] > 0 and row["source_type"] not in ("REVERSAL", "REDEMPTION"):
+            bucket["source_names"].add(row["source_type"])
+        if row["created_at"] > bucket["last_entry"]:
+            bucket["last_entry"] = row["created_at"]
 
     redemptions_resp = await (
         supabase.table("reward_redemptions")
-        .select("student_id, tier, status, redemption_code, expires_at")
+        .select("student_id, tier, status, claimed_at")
         .execute()
     )
-    redemptions_by_student: dict[str, list[dict]] = {}
+    cart_by_student: dict[str, list[dict]] = {}
+    redeemed_by_student: dict[str, list[dict]] = {}
     for r in rows(redemptions_resp):
         sid = r["student_id"]
-        redemptions_by_student.setdefault(sid, []).append(r)
+        if r["status"] == "pending":
+            cart_by_student.setdefault(sid, []).append(r)
+        elif r["status"] == "claimed":
+            redeemed_by_student.setdefault(sid, []).append(r)
 
-    entries = [
-        {
-            "student_id": e["student_id"],
-            "coins": e["coins"],
-            "distinct_sources": e["distinct_sources"],
-            "last_entry": e.get("last_entry"),
-            "redemptions": redemptions_by_student.get(e["student_id"], []),
-        }
-        for e in leaderboard
-    ]
+    entries = []
+    for sid, bucket in by_student.items():
+        entries.append({
+            "student_id": sid,
+            "coins": bucket["coins"],
+            "source_names": sorted(bucket["source_names"]),
+            "distinct_sources": len(bucket["source_names"]),
+            "last_entry": bucket["last_entry"],
+            "cart": cart_by_student.get(sid, []),
+            "redeemed": redeemed_by_student.get(sid, []),
+        })
+
+    entries.sort(key=lambda e: -e["coins"])
 
     await _hydrate_student_names(supabase, entries)
 
