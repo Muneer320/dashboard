@@ -923,18 +923,45 @@ export function CoinsOverview() {
 // Shared mini-components
 // ─────────────────────────────────────────────────────────────
 function Modal({ children, onClose }) {
+  // Native <dialog>: rendered in the browser's top layer, so it escapes
+  // every ancestor containing block (transform, filter, contain, overflow)
+  // and every z-index war. Backdrop, focus trap, ESC, and inert background
+  // are handled by the UA.
+  const ref = useRef(null)
+  useEffect(() => {
+    const d = ref.current
+    if (!d || d.open) return
+    d.showModal()
+    return () => { if (d.open) d.close() }
+  }, [])
+
+  const handleClick = (e) => {
+    const d = ref.current
+    if (!d) return
+    // Clicks on the backdrop register with target === the dialog element,
+    // but the click coords land outside its rendered box. Coord check is
+    // more reliable than target equality across browsers.
+    const r = d.getBoundingClientRect()
+    const inside =
+      e.clientX >= r.left && e.clientX <= r.right &&
+      e.clientY >= r.top  && e.clientY <= r.bottom
+    if (!inside) onClose()
+  }
+  // ESC fires a 'cancel' event; intercept it so closing flows through the
+  // parent's state instead of the UA closing the dialog out from under React.
+  const handleCancel = (e) => { e.preventDefault(); onClose() }
+
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 100,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-      backdropFilter: 'blur(4px)',
-    }}>
-      <div onClick={(e) => e.stopPropagation()} className="card" style={{
-        padding: 22, maxWidth: 480, width: '100%',
-      }}>
+    <dialog
+      ref={ref}
+      className="modal-dialog"
+      onClick={handleClick}
+      onCancel={handleCancel}
+    >
+      <div className="card" style={{ padding: 22 }}>
         {children}
       </div>
-    </div>
+    </dialog>
   )
 }
 
