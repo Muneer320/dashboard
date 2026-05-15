@@ -233,6 +233,15 @@ export const adminPanel = {
   manualEnroll: (body) =>
     post('/admin-panel/registrations/manual', body, { adminAuth: true }),
 
+  teamLookup: (email, eventId) =>
+    get(`/admin-panel/team/lookup?email=${encodeURIComponent(email)}&event_id=${encodeURIComponent(eventId)}`, { adminAuth: true }),
+
+  removeTeamMember: (teamId, userId, eventId) =>
+    post('/admin-panel/team/remove-member', { team_id: teamId, user_id: userId, event_id: eventId }, { adminAuth: true }),
+
+  resetPassword: (email, newPassword) =>
+    post('/admin-panel/users/reset-password', { email, new_password: newPassword }, { adminAuth: true }),
+
   selectPhase: (eventId, emails) =>
     post('/admin-panel/registrations/select-phase', { event_id: eventId, emails }, { adminAuth: true }),
 

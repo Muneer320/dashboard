@@ -241,11 +241,215 @@ async def manual_registration(
         plain_password=body.password,
         event_id=body.event_id,
         team_mode=body.team_mode,
+        existing_team_id=body.existing_team_id,
         existing_team_name=body.existing_team_name,
         existing_member_name=body.existing_member_name,
         new_team_name=body.new_team_name,
     )
     return ManualEnrollResponse(**data)
+
+
+# ── Team lookup (by teammate email + event) ────────────────────────────────────
+
+@router.get("/team/lookup")
+async def team_lookup(
+    email: str,
+    event_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    """
+    Given a teammate's email and an event_id, return the team they belong to
+    for that event, including member names.
+
+    Returns:
+        { found: true,  team_id, team_name, member_count, members: [{id, name}] }
+     OR { found: false, reason: str }
+    """
+    norm_email = (email or "").strip().lower()
+    if not norm_email:
+        return {"found": False, "reason": "Email is required"}
+
+    # 1. Find the user
+    u_resp = await (
+        supabase.table("users")
+        .select("id, name, events")
+        .eq("username", norm_email)
+        .limit(1)
+        .execute()
+    )
+    u_rows = u_resp.data or []
+    if not u_rows:
+        return {"found": False, "reason": f"No user found with email '{norm_email}'"}
+
+    user_row = u_rows[0]
+    events_col: dict = user_row.get("events") or {}
+    event_entry = events_col.get(event_id)
+    if not isinstance(event_entry, dict):
+        return {"found": False, "reason": "User is not registered for this event"}
+
+    team_id = event_entry.get("teamId")
+    if not team_id:
+        return {"found": False, "reason": "User is not in a team for this event"}
+
+    # 2. Fetch team
+    t_resp = await (
+        supabase.table("teams")
+        .select("id, name, member_ids")
+        .eq("id", str(team_id))
+        .limit(1)
+        .execute()
+    )
+    t_rows = t_resp.data or []
+    if not t_rows:
+        return {"found": False, "reason": "Team record not found (data inconsistency)"}
+
+    team = t_rows[0]
+    member_ids: list[str] = [str(m) for m in (team.get("member_ids") or [])]
+
+    # 3. Fetch member names + emails in one query (batch, 414-safe)
+    members: list[dict] = []
+    _BATCH = 50
+    for i in range(0, len(member_ids), _BATCH):
+        chunk = member_ids[i : i + _BATCH]
+        m_resp = await (
+            supabase.table("users")
+            .select("id, name, username")
+            .in_("id", chunk)
+            .execute()
+        )
+        members.extend(m_resp.data or [])
+
+    # Preserve the order from member_ids
+    member_map = {str(m["id"]): m for m in members}
+    ordered = [member_map[mid] for mid in member_ids if mid in member_map]
+
+    return {
+        "found": True,
+        "team_id":      str(team["id"]),
+        "team_name":    team["name"],
+        "member_count": len(member_ids),
+        "members":      [{"id": str(m["id"]), "name": m["name"], "email": m.get("username", "")} for m in ordered],
+    }
+
+
+# ── Remove a member from a team ───────────────────────────────────────────────
+
+class _RemoveMemberBody(BaseModel):
+    team_id: str
+    user_id: str
+    event_id: str
+
+
+@router.post("/team/remove-member")
+async def remove_team_member(
+    body: _RemoveMemberBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    """
+    Remove a member from a team.
+    - Removes user_id from teams.member_ids
+    - Clears teamId in user.events[event_id] (user stays registered, just solo)
+    """
+    # 1. Fetch team
+    t_resp = await (
+        supabase.table("teams")
+        .select("id, member_ids")
+        .eq("id", body.team_id)
+        .limit(1)
+        .execute()
+    )
+    t_rows = t_resp.data or []
+    if not t_rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found.")
+
+    current_members = [str(m) for m in (t_rows[0].get("member_ids") or [])]
+    if body.user_id not in current_members:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not a member of this team.")
+
+    updated_members = [m for m in current_members if m != body.user_id]
+    await (
+        supabase.table("teams")
+        .update({"member_ids": updated_members})
+        .eq("id", body.team_id)
+        .execute()
+    )
+
+    # 2. Clear teamId from user's event entry
+    u_resp = await (
+        supabase.table("users")
+        .select("id, events")
+        .eq("id", body.user_id)
+        .limit(1)
+        .execute()
+    )
+    u_rows = u_resp.data or []
+    if u_rows:
+        user_row = u_rows[0]
+        events_col: dict = dict(user_row.get("events") or {})
+        event_entry = events_col.get(body.event_id)
+        if isinstance(event_entry, dict):
+            event_entry = dict(event_entry)
+            event_entry["teamId"] = None
+            events_col[body.event_id] = event_entry
+            await (
+                supabase.table("users")
+                .update({"events": events_col})
+                .eq("id", body.user_id)
+                .execute()
+            )
+
+    return {"removed": True, "team_id": body.team_id, "user_id": body.user_id, "remaining": len(updated_members)}
+
+
+# ── Reset a user's password ──────────────────────────────────────────────────────────
+
+class _ResetPasswordBody(BaseModel):
+    email: str
+    new_password: str
+
+
+@router.post("/users/reset-password")
+async def reset_user_password(
+    body: _ResetPasswordBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    """
+    Reset a participant's password. Admin only.
+    Hashes the new password server-side and updates users.password_hash.
+    """
+    import asyncio as _asyncio
+    from app.core.security import get_password_hash
+
+    norm_email = (body.email or "").strip().lower()
+    if not norm_email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required.")
+    if len(body.new_password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters.")
+
+    u_resp = await (
+        supabase.table("users")
+        .select("id, name")
+        .eq("username", norm_email)
+        .limit(1)
+        .execute()
+    )
+    u_rows = u_resp.data or []
+    if not u_rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No user found with email '{norm_email}'.")
+
+    user_row = u_rows[0]
+    hashed = await _asyncio.to_thread(get_password_hash, body.new_password)
+    await (
+        supabase.table("users")
+        .update({"password_hash": hashed})
+        .eq("id", user_row["id"])
+        .execute()
+    )
+
+    return {"reset": True, "name": user_row["name"], "email": norm_email}
 
 
 # ── Select Participants (phase = 1) ───────────────────────────────────────────

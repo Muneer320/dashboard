@@ -329,8 +329,9 @@ class ManualEnrollRequest(BaseModel):
     event_id: str
     # 'none' | 'existing' | 'new'
     team_mode: str = "none"
-    existing_team_name: Optional[str] = None   # used when team_mode='existing'
-    existing_member_name: Optional[str] = None # optional hint for existing team lookup
+    existing_team_name: Optional[str] = None   # used when team_mode='existing' (fallback)
+    existing_team_id: Optional[str] = None     # preferred: direct team ID from lookup
+    existing_member_name: Optional[str] = None # informational only
     new_team_name: Optional[str] = None        # used when team_mode='new'
 
 
