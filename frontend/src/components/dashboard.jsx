@@ -296,7 +296,7 @@ export function Dashboard() {
             }}
           >
             {/* LEFT column */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
               <MirageEnrollmentCard />
 
               {/* Registered events */}
@@ -408,7 +408,7 @@ export function Dashboard() {
                           >
                             {(ev.eventData.title || ev.eventData.name)[0]}
                           </div>
-                          <div>
+                          <div style={{ minWidth: 0 }}>
                             <div
                               style={{
                                 display: "flex",
@@ -559,14 +559,15 @@ export function Dashboard() {
                             cursor: "pointer",
                           }}
                         >
-                          <div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                               {ev.eventData.title || ev.eventData.name}
                             </div>
                             <div style={{
                               fontSize: 10, color: "var(--ink-mute)",
                               fontFamily: "var(--f-mono)", marginTop: 3,
                               letterSpacing: "0.06em",
+                              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis"
                             }}>
                               {phaseLabel}{venue ? ` · ${venue}` : ""}
                             </div>
@@ -598,7 +599,7 @@ export function Dashboard() {
             </div>
 
             {/* RIGHT column */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
               {/* FOOD QR */}
               <div
                 className="glass-strong"

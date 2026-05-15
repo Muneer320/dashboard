@@ -114,8 +114,10 @@
   border: 1px solid var(--border);
   background: #0b0b0f;
   min-height: 160px;
+  max-height: 320px;
 }
 .qr-video-wrapper.active {
+  height: 280px;
   min-height: 280px;
 }
 .qr-video {

@@ -496,10 +496,10 @@ export default function ManageRegistrations() {
 
       <div className="tabs-container" style={{ marginBottom: 24, display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
         {[
-          { id: 'bulk', icon: '📤', label: 'Bulk Upload & Diff' },
-          { id: 'manual', icon: '➕', label: 'Manual Entry & Reset' },
-          { id: 'phase', icon: '🎯', label: 'Phase Selection' },
-          { id: 'teams', icon: '👥', label: 'Team Manager' },
+          { id: 'bulk', icon: '', label: 'Bulk Upload & Diff' },
+          { id: 'manual', icon: '', label: 'Manual Entry & Reset' },
+          { id: 'phase', icon: '', label: 'Phase Selection' },
+          { id: 'teams', icon: '', label: 'Team Manager' },
         ].map(tab => (
           <button
             key={tab.id}
