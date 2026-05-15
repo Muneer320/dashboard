@@ -43,7 +43,7 @@ const _BANNER_MAP = {
     "https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Tech_play_zone_emyf1q.png",
   'ascent of intellect':
     'https://res.cloudinary.com/dt1hemzmb/image/upload/v1778866017/7681f82f-e3dd-44aa-8e0d-0a7f9e85d3c3_mvbily.jpg',
-  'prompt wars':
+  'promptwars':
     'https://res.cloudinary.com/dt1hemzmb/image/upload/v1778158104/WhatsApp_Image_2026-05-07_at_5.53.28_PM_x7bgrl.jpg'
 };
 
