@@ -159,8 +159,17 @@ async def scan_food(supabase: AsyncClient, user: User, event_id: str) -> str:
 
 
 async def scan_college_entry(supabase: AsyncClient, user: User) -> str:
+    is_visitor = True
+    if user.events:
+        for ev in user.events.values():
+            if int(ev.get("phase") or 0) > 0:
+                is_visitor = False
+                break
+
+    prefix = "Visitor" if is_visitor else "User"
+    
     if user.is_attending:
-        return "User already attending"
+        return f"{prefix} already attending"
 
     user.is_attending = True
 
@@ -170,6 +179,9 @@ async def scan_college_entry(supabase: AsyncClient, user: User) -> str:
         .eq("id", str(user.id))
         .execute()
     )
+    
+    if is_visitor:
+        return "Visitor entry marked successfully"
     return "College entry marked successfully"
 
 

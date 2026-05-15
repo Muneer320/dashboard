@@ -265,7 +265,10 @@ export default function QrScanner({
       let isWarn = false
 
       // If Entry and phase == 0, make it an orange "Visitor" toast
-      if (action === 'Entry' && participant && (participant.phase ?? 0) === 0) {
+      const isVisitorMsg = msg && msg.toLowerCase().includes('visitor')
+      const isVisitorLocal = participant && (participant.phase ?? 0) === 0
+      
+      if (action === 'Entry' && (isVisitorMsg || isVisitorLocal)) {
         toastLabel = 'Visitor, Entry Marked'
         isWarn = true
       }
