@@ -40,18 +40,36 @@ export default function QrScanner({
   const scannerRef      = useRef(null)  // qr-scanner instance
   const processingRef   = useRef(false)
   const lastScanRef     = useRef(0)
+  const toastRef        = useRef(null)
+  const resultRef       = useRef(null)
 
-  // Keep refs in sync with props
+  // Keep refs in sync with props and state
   useEffect(() => { participantsRef.current = participants }, [participants])
   useEffect(() => { onScanRef.current = onScan }, [onScan])
   useEffect(() => { alreadyFieldRef.current = alreadyField }, [alreadyField])
   useEffect(() => { trustServerRef.current = trustServer }, [trustServer])
   useEffect(() => { actionLabelRef.current = actionLabel }, [actionLabel])
+  useEffect(() => { toastRef.current = toast }, [toast])
+  useEffect(() => { resultRef.current = result }, [result])
 
   // Cleanup on unmount
   useEffect(() => () => stopCamera(), [])
 
+  // ─── Dismiss Helpers ──────────────────────────────────────────────────────
+
+  function dismissToast() {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast(null)
+    lastScanRef.current = Date.now() // Enforce gap after dismiss
+  }
+
+  function dismissResult() {
+    setResult(null)
+    lastScanRef.current = Date.now() // Enforce gap after dismiss
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────
+
 
   function normalisePayload(raw) {
     const cleaned = String(raw || '').trim()
@@ -137,9 +155,11 @@ export default function QrScanner({
   // ─── Scan flow ────────────────────────────────────────────────────────────
 
   function handleCameraDecode(rawValue) {
-    // 1.5 s debounce so a single QR doesn't fire multiple backend calls
+    if (toastRef.current || resultRef.current) return // Block while showing!
+    
+    // 1s debounce so a single QR doesn't fire multiple backend calls
     const now = Date.now()
-    if (now - lastScanRef.current < 1500) return
+    if (now - lastScanRef.current < 1000) return
     if (processingRef.current) return
     lastScanRef.current = now
     processScanValue(rawValue)
@@ -175,7 +195,7 @@ export default function QrScanner({
       if (p.status === 'restricted') {
         setResult({ type: 'error', msg: `${p.name} is restricted.`, participant: p })
         return
-      }5
+      }
 
       // Food gate: participant must have completed main-gate entry first
       if (actionLabelRef.current === 'Food' && !p.entryScanned) {
@@ -184,6 +204,21 @@ export default function QrScanner({
           msg: `${p.name} has not completed main gate entry. Entry scan required before food can be claimed.`,
           participant: p,
         })
+        return
+      }
+
+      if (actionLabelRef.current === 'Food' && (p.phase ?? 0) === 0) {
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+        setToast({ label: 'Not Qualified', name: `${p.name} — not selected for Round 2`, isError: true })
+        toastTimerRef.current = setTimeout(dismissToast, 3000)
+        return
+      }
+
+      if (actionLabelRef.current === 'Attendance' && (p.phase ?? 0) === 0) {
+        // Use the toast popup so it's unmistakable
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+        setToast({ label: 'Not Qualified', name: `${p.name} — not selected for Round 2`, isError: true })
+        toastTimerRef.current = setTimeout(dismissToast, 3000)
         return
       }
 
@@ -219,21 +254,32 @@ export default function QrScanner({
 
     if (status === 'accepted') {
       const displayName = participant?.name || `ID ${shortId}`
-      // Build human-friendly action label
       const action = actionLabelRef.current
-      const toastLabel =
+      
+      let toastLabel =
         action === 'Food'       ? 'Food Entry Marked' :
         action === 'Attendance' ? 'Attendance Marked'  :
         action === 'Entry'      ? 'Entry Marked'       :
         `${action} Recorded`
+        
+      let isWarn = false
+
+      // If Entry and phase == 0, make it an orange "Visitor" toast
+      const isVisitorMsg = msg && msg.toLowerCase().includes('visitor')
+      const isVisitorLocal = participant && (participant.phase ?? 0) === 0
+      
+      if (action === 'Entry' && (isVisitorMsg || isVisitorLocal)) {
+        toastLabel = 'Visitor, Entry Marked'
+        isWarn = true
+      }
 
       // Show ONLY the toast for success — no inline strip
       setResult(null)
 
       // ── Success popup toast ──
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-      setToast({ label: toastLabel, name: displayName })
-      toastTimerRef.current = setTimeout(() => setToast(null), 2500)
+      setToast({ label: toastLabel, name: displayName, isWarn })
+      toastTimerRef.current = setTimeout(dismissToast, 2500)
     } else if (status === 'rejected') {
       setResult({
         type: 'warn',
@@ -267,15 +313,27 @@ export default function QrScanner({
 
       {/* ── Success toast popup ───────────────────────────────────────────── */}
       {toast && (
-        <div className="qr-toast-overlay" onClick={() => setToast(null)} role="dialog" aria-live="assertive">
-          <div className="qr-toast">
-            <div className="qr-toast-icon">
-              <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="9 12 11.5 14.5 15.5 10" />
-              </svg>
+        <div className="qr-toast-overlay" onClick={dismissToast} role="dialog" aria-live="assertive">
+          <div className={`qr-toast${toast.isError ? ' error' : toast.isWarn ? ' warn' : ''}`}>
+            <div className={`qr-toast-icon${toast.isError ? ' error' : toast.isWarn ? ' warn' : ''}`}>
+              {toast.isError ? (
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
+              ) : toast.isWarn ? (
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="13" /><circle cx="12" cy="17" r="0.5" fill="currentColor" />
+                </svg>
+              ) : (
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="9 12 11.5 14.5 15.5 10" />
+                </svg>
+              )}
             </div>
-            <p className="qr-toast-label">{toast.label}</p>
+            <p className={`qr-toast-label${toast.isError ? ' error' : toast.isWarn ? ' warn' : ''}`}>{toast.label}</p>
             {toast.name && <p className="qr-toast-name">{toast.name}</p>}
             <p className="qr-toast-dismiss">Tap to dismiss</p>
           </div>
@@ -360,7 +418,7 @@ export default function QrScanner({
 
       {/* Result */}
       {result && (
-        <div className={`qr-result qr-result-${result.type}`}>
+        <div className={`qr-result qr-result-${result.type}`} onClick={dismissResult} style={{ cursor: 'pointer' }} title="Tap to dismiss">
           <div className="result-icon">
             {result.type === 'success' && (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

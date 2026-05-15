@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt pyproject.toml README.md main.py ./
+COPY requirements.txt pyproject.toml README.md main.py anvil.html ./
 COPY app ./app
 COPY docker ./docker
 
@@ -16,7 +16,8 @@ RUN pip install --upgrade pip && \
       boto3==1.43.6 \
       google-api-python-client==2.187.0 \
       google-auth-httplib2==0.3.0 \
-      google-auth-oauthlib==1.2.3
+      google-auth-oauthlib==1.2.3 \
+      redis==5.3.1
 
 EXPOSE 8000
 

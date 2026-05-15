@@ -249,11 +249,274 @@ async def manual_registration(
         plain_password=body.password,
         event_id=body.event_id,
         team_mode=body.team_mode,
+        existing_team_id=body.existing_team_id,
         existing_team_name=body.existing_team_name,
         existing_member_name=body.existing_member_name,
         new_team_name=body.new_team_name,
     )
     return ManualEnrollResponse(**data)
+
+
+class _RemoveMemberBody(BaseModel):
+    team_id: str
+    user_id: str
+    event_id: str
+
+
+class _ResetPasswordBody(BaseModel):
+    email: str
+    new_password: str
+
+
+class _SelectPhaseBody(BaseModel):
+    event_id: str
+    emails: list[str]
+
+
+@router.get("/team/lookup")
+async def team_lookup(
+    email: str,
+    event_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    norm_email = (email or "").strip().lower()
+    if not norm_email:
+        return {"found": False, "reason": "Email is required"}
+
+    u_resp = await (
+        supabase.table("users")
+        .select("id, name, events")
+        .eq("username", norm_email)
+        .limit(1)
+        .execute()
+    )
+    u_rows = u_resp.data or []
+    if not u_rows:
+        return {"found": False, "reason": f"No user found with email '{norm_email}'"}
+
+    user_row = u_rows[0]
+    events_col: dict = user_row.get("events") or {}
+    event_entry = events_col.get(event_id)
+    if not isinstance(event_entry, dict):
+        return {"found": False, "reason": "User is not registered for this event"}
+
+    team_id = event_entry.get("teamId")
+    if not team_id:
+        return {"found": False, "reason": "User is not in a team for this event"}
+
+    t_resp = await (
+        supabase.table("teams")
+        .select("id, name, member_ids")
+        .eq("id", str(team_id))
+        .limit(1)
+        .execute()
+    )
+    t_rows = t_resp.data or []
+    if not t_rows:
+        return {"found": False, "reason": "Team record not found (data inconsistency)"}
+
+    team = t_rows[0]
+    member_ids: list[str] = [str(m) for m in (team.get("member_ids") or [])]
+
+    members: list[dict] = []
+    batch_size = 50
+    for index in range(0, len(member_ids), batch_size):
+        chunk = member_ids[index:index + batch_size]
+        m_resp = await (
+            supabase.table("users")
+            .select("id, name, username")
+            .in_("id", chunk)
+            .execute()
+        )
+        members.extend(m_resp.data or [])
+
+    member_map = {str(m["id"]): m for m in members}
+    ordered = [member_map[mid] for mid in member_ids if mid in member_map]
+
+    return {
+        "found": True,
+        "team_id": str(team["id"]),
+        "team_name": team["name"],
+        "member_count": len(member_ids),
+        "members": [
+            {"id": str(m["id"]), "name": m["name"], "email": m.get("username", "")}
+            for m in ordered
+        ],
+    }
+
+
+@router.post("/team/remove-member")
+async def remove_team_member(
+    body: _RemoveMemberBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    t_resp = await (
+        supabase.table("teams")
+        .select("id, member_ids")
+        .eq("id", body.team_id)
+        .limit(1)
+        .execute()
+    )
+    t_rows = t_resp.data or []
+    if not t_rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found.")
+
+    current_members = [str(m) for m in (t_rows[0].get("member_ids") or [])]
+    if body.user_id not in current_members:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a member of this team.",
+        )
+
+    updated_members = [m for m in current_members if m != body.user_id]
+    await (
+        supabase.table("teams")
+        .update({"member_ids": updated_members})
+        .eq("id", body.team_id)
+        .execute()
+    )
+
+    u_resp = await (
+        supabase.table("users")
+        .select("id, events")
+        .eq("id", body.user_id)
+        .limit(1)
+        .execute()
+    )
+    u_rows = u_resp.data or []
+    if u_rows:
+        user_row = u_rows[0]
+        events_col: dict = dict(user_row.get("events") or {})
+        event_entry = events_col.get(body.event_id)
+        if isinstance(event_entry, dict):
+            event_entry = dict(event_entry)
+            event_entry["teamId"] = None
+            events_col[body.event_id] = event_entry
+            await (
+                supabase.table("users")
+                .update({"events": events_col})
+                .eq("id", body.user_id)
+                .execute()
+            )
+
+    return {
+        "removed": True,
+        "team_id": body.team_id,
+        "user_id": body.user_id,
+        "remaining": len(updated_members),
+    }
+
+
+@router.post("/users/reset-password")
+async def reset_user_password(
+    body: _ResetPasswordBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    from app.core.security import get_password_hash
+
+    norm_email = (body.email or "").strip().lower()
+    if not norm_email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required.")
+    if len(body.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters.",
+        )
+
+    u_resp = await (
+        supabase.table("users")
+        .select("id, name")
+        .eq("username", norm_email)
+        .limit(1)
+        .execute()
+    )
+    u_rows = u_resp.data or []
+    if not u_rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No user found with email '{norm_email}'.",
+        )
+
+    user_row = u_rows[0]
+    hashed = await asyncio.to_thread(get_password_hash, body.new_password)
+    await (
+        supabase.table("users")
+        .update({"password_hash": hashed})
+        .eq("id", user_row["id"])
+        .execute()
+    )
+
+    return {"reset": True, "name": user_row["name"], "email": norm_email}
+
+
+@router.post("/registrations/select-phase")
+async def select_phase(
+    body: _SelectPhaseBody,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+):
+    updated = 0
+    edge_cases = []
+    normalised = [email.strip().lower() for email in body.emails if email.strip()]
+    if not normalised:
+        return {"updated": 0, "edge_cases": []}
+
+    batch_size = 50
+    db_rows: list[dict] = []
+    for index in range(0, len(normalised), batch_size):
+        chunk = normalised[index:index + batch_size]
+        try:
+            resp = await (
+                supabase.table("users")
+                .select("id, username, events")
+                .in_("username", chunk)
+                .execute()
+            )
+            if resp.data:
+                db_rows.extend(resp.data)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database query failed (batch {index // batch_size + 1}): {exc}",
+            ) from exc
+
+    found = {
+        row["username"].strip().lower(): row
+        for row in db_rows
+        if isinstance(row.get("username"), str)
+    }
+
+    for email in normalised:
+        row = found.get(email)
+        if not row:
+            edge_cases.append({"email": email, "reason": "User not found"})
+            continue
+
+        events_col: dict = row.get("events") or {}
+        if not isinstance(events_col, dict) or body.event_id not in events_col:
+            edge_cases.append({"email": email, "reason": "Not registered for this event"})
+            continue
+
+        raw_entry = events_col[body.event_id]
+        event_entry = dict(raw_entry) if isinstance(raw_entry, dict) else {}
+        event_entry["phase"] = 1
+        events_col[body.event_id] = event_entry
+
+        try:
+            await (
+                supabase.table("users")
+                .update({"events": events_col})
+                .eq("id", row["id"])
+                .execute()
+            )
+            updated += 1
+        except Exception as exc:
+            edge_cases.append({"email": email, "reason": f"Update failed: {exc}"})
+
+    return {"updated": updated, "edge_cases": edge_cases}
 
 
 # ── Overview ──────────────────────────────────────────────────────────────────

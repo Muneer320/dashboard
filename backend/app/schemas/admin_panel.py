@@ -47,6 +47,7 @@ class ParticipantItem(BaseModel):
     isAttending: bool            # event-level gate
     foodClaimed: bool
     entryScanned: bool           # campus-level gate (user.is_attending)
+    phase: int = 0               # 0 = R1, 1 = selected, 2 = R2 active
     submitted: bool              # True once ANY phase has a completed submission
     submissionData: Optional[dict] = None  # raw submission JSONB from users.events[eid]
 
@@ -328,8 +329,9 @@ class ManualEnrollRequest(BaseModel):
     event_id: str
     # 'none' | 'existing' | 'new'
     team_mode: str = "none"
-    existing_team_name: Optional[str] = None   # used when team_mode='existing'
-    existing_member_name: Optional[str] = None # optional hint for existing team lookup
+    existing_team_name: Optional[str] = None   # used when team_mode='existing' (fallback)
+    existing_team_id: Optional[str] = None     # preferred: direct team ID from lookup
+    existing_member_name: Optional[str] = None # informational only
     new_team_name: Optional[str] = None        # used when team_mode='new'
 
 

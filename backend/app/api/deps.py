@@ -217,8 +217,6 @@ async def _fetch_admin_by_uid_postgres(admin_uid: int) -> dict | None:
             admin_uid,
         )
         return dict(row) if row is not None else None
-
-
 async def get_prm_volunteer_or_above(
     admin: Admin = Depends(get_current_admin),
 ) -> Admin:

@@ -41,6 +41,7 @@ PUBLIC_PATHS = {
     "/api/v1/coins/power-hour-status",
     "/api/v1/coins/power-hour-status/",
     "/api/v1/mirage/moment",
+    "/anvil",
 }
 
 

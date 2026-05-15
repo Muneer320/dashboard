@@ -795,6 +795,7 @@ async def manual_enroll(
     plain_password: str,
     event_id: str,
     team_mode: str = "none",           # 'none' | 'existing' | 'new'
+    existing_team_id: str | None = None,  # preferred: direct ID from lookup
     existing_team_name: str | None = None,
     existing_member_name: str | None = None,  # informational only
     new_team_name: str | None = None,
@@ -879,34 +880,51 @@ async def manual_enroll(
     resolved_team_name: str | None = None
 
     if team_mode == "existing":
-        search_name = (existing_team_name or "").strip()
-        if not search_name:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="existing_team_name is required when team_mode='existing'.",
+        # ── Fast path: direct team_id from lookup (no ambiguity) ──────────────
+        if existing_team_id:
+            t_resp = await (
+                supabase.table("teams")
+                .select("id, name, member_ids")
+                .eq("id", existing_team_id)
+                .limit(1)
+                .execute()
             )
-        # Fetch all teams for this event and find the best name match.
-        teams_resp = await (
-            supabase.table("teams")
-            .select("id, name, member_ids")
-            .eq("event_id", event_uuid)
-            .execute()
-        )
-        all_teams = teams_resp.data or []
-        norm = lambda s: s.strip().lower()
-        # Exact match first, then case-insensitive contains.
-        match = next(
-            (t for t in all_teams if norm(t["name"]) == norm(search_name)),
-            None,
-        ) or next(
-            (t for t in all_teams if norm(search_name) in norm(t["name"])),
-            None,
-        )
-        if match is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No team named '{search_name}' found for this event.",
+            t_rows = t_resp.data or []
+            if not t_rows:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Team ID '{existing_team_id}' not found.",
+                )
+            match = t_rows[0]
+        else:
+            # ── Fallback: name-based search (legacy path) ──────────────────────
+            search_name = (existing_team_name or "").strip()
+            if not search_name:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Provide either existing_team_id or existing_team_name.",
+                )
+            teams_resp = await (
+                supabase.table("teams")
+                .select("id, name, member_ids")
+                .eq("event_id", event_uuid)
+                .execute()
             )
+            all_teams = teams_resp.data or []
+            norm = lambda s: s.strip().lower()
+            match = next(
+                (t for t in all_teams if norm(t["name"]) == norm(search_name)),
+                None,
+            ) or next(
+                (t for t in all_teams if norm(search_name) in norm(t["name"])),
+                None,
+            )
+            if match is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No team named '{search_name}' found for this event.",
+                )
+
         team_uuid = str(match["id"])
         resolved_team_name = match["name"]
 

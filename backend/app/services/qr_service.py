@@ -50,34 +50,7 @@ def _next_meal_key(food: dict) -> tuple[str, int]:
     return f"meal{claimed + 1}", claimed
 
 
-async def _scan_food_legacy_allowance(supabase: AsyncClient, user: User) -> str:
-    allowance = await _user_meal_allowance(supabase, user)
-    if allowance <= 0:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is not registered for any event -- no meal allowance",
-        )
-
-    food = dict(user.food or {})
-    next_key, claimed = _next_meal_key(food)
-    if claimed >= allowance:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No meals left -- already claimed {claimed}/{allowance}",
-        )
-
-    food[next_key] = True
-    user.food = food
-    await (
-        supabase.table("users")
-        .update({"food": food})
-        .eq("id", str(user.id))
-        .execute()
-    )
-    return f"Meal {next_key} marked as consumed ({claimed + 1}/{allowance})"
-
-
-async def scan_food(supabase: AsyncClient, user: User, event_id: str | None = None) -> str:
+async def scan_food(supabase: AsyncClient, user: User, event_id: str) -> str:
     """
     Increment meal_count for the user in a specific event.
 
@@ -90,14 +63,26 @@ async def scan_food(supabase: AsyncClient, user: User, event_id: str | None = No
 
     Data structure: users.food = { "event_id": { "meal_count": 2 }, ... }
     """
-    if not event_id:
-        return await _scan_food_legacy_allowance(supabase, user)
-
     # Check if user is registered for this event
     if event_id not in (user.events or {}):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User is not registered for this event",
+        )
+
+    # Main gate entry must be completed before food can be claimed
+    if not user.is_attending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has not completed main gate entry. Entry scan required before food can be claimed.",
+        )
+
+    # Phase gate: only selected participants (phase >= 1) can claim food
+    event_entry = (user.events or {}).get(event_id, {})
+    if int(event_entry.get("phase") or 0) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has not been selected for Round 2. Only selected participants (phase = 1) can claim food.",
         )
 
     # Get the event to check meals_count limit
@@ -174,8 +159,17 @@ async def scan_food(supabase: AsyncClient, user: User, event_id: str | None = No
 
 
 async def scan_college_entry(supabase: AsyncClient, user: User) -> str:
+    is_visitor = True
+    if user.events:
+        for ev in user.events.values():
+            if int(ev.get("phase") or 0) > 0:
+                is_visitor = False
+                break
+
+    prefix = "Visitor" if is_visitor else "User"
+    
     if user.is_attending:
-        return "User already attending"
+        return f"{prefix} already attending"
 
     user.is_attending = True
 
@@ -185,6 +179,9 @@ async def scan_college_entry(supabase: AsyncClient, user: User) -> str:
         .eq("id", str(user.id))
         .execute()
     )
+    
+    if is_visitor:
+        return "Visitor entry marked successfully"
     return "College entry marked successfully"
 
 
@@ -214,6 +211,13 @@ async def scan_event_entry(
 
     if event_entry.get("restricted"):
         return "User is restricted from this event"
+
+    # SELECTION GATE: only phase >= 1 (selected) participants may attend events
+    if int(event_entry.get("phase") or 0) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has not been selected for Round 2. Only selected participants (phase = 1) can mark event attendance.",
+        )
 
     if event_entry.get("isAttending"):
         return "User already scanned for this event"

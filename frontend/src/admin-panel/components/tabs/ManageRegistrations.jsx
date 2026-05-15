@@ -126,10 +126,13 @@ export default function ManageRegistrations() {
   const [uncovered, setUncovered]             = useState([])
   // After regeneration: [{ name, email, password, status }]
   const [regenCreds, setRegenCreds]           = useState([])
-  const [regenProgress, setRegenProgress]     = useState(null)
+  const [regenProgress, setRegenProgress]    = useState(null)
   const [regenSending, setRegenSending]       = useState(false)
   // 'idle' | 'preview' | 'regenerated' — controls which buttons appear
   const [uncoveredPhase, setUncoveredPhase]   = useState('idle')
+
+  // Tabs: 'bulk' | 'manual' | 'phase' | 'teams'
+  const [activeTab, setActiveTab] = useState('bulk')
 
   useEffect(() => {
     setCurrentPage(1)
@@ -491,411 +494,639 @@ export default function ManageRegistrations() {
         <span className="section-title">Manage Registrations</span>
       </div>
 
-      {/* ── Upload card ─────────────────────────────────────── */}
-      <div className="card" style={{ maxWidth: 860, marginBottom: 28 }}>
-        <h3 style={{ marginBottom: 10 }}>Upload Attendees List</h3>
-        <p style={{ marginBottom: 22, color: 'var(--text-secondary)', fontSize: 13 }}>
-          Upload a CSV or Excel file (Unstop format). New users are created, credentials CSV is downloaded,
-          and emails can be sent automatically.
-        </p>
-
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 180 }}>
-            <label style={labelStyle}>1. Select Event</label>
-            <select
-              className="input-field"
-              value={selectedEvent}
-              onChange={e => setSelectedEvent(e.target.value)}
-              disabled={isLoading}
-            >
-              <option value="">— Choose an Event —</option>
-              {events.map(ev => (
-                <option key={ev.eventId || ev.id} value={ev.eventId || ev.id}>
-                  {ev.name || ev.eventName}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <label style={labelStyle}>2. Choose File (CSV / Excel)</label>
-            <input
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              onChange={handleFileChange}
-              className="input-field"
-              style={{ paddingTop: 8, paddingBottom: 8 }}
-              disabled={isLoading}
-              ref={fileInputRef}
-            />
-          </div>
-
+      <div className="tabs-container" style={{ marginBottom: 24, display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+        {[
+          { id: 'bulk', icon: '', label: 'Bulk Upload & Diff' },
+          { id: 'manual', icon: '', label: 'Manual Entry & Reset' },
+          { id: 'phase', icon: '', label: 'Phase Selection' },
+          { id: 'teams', icon: '', label: 'Team Manager' },
+        ].map(tab => (
           <button
-            className="btn btn-primary"
-            onClick={handleUpload}
-            disabled={!file || !selectedEvent || isLoading}
-            style={{ height: 42, minWidth: 200, position: 'relative', overflow: 'hidden' }}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              padding: '10px 18px',
+              borderRadius: 8,
+              border: 'none',
+              background: activeTab === tab.id ? 'var(--accent-color)' : 'var(--bg-secondary)',
+              color: activeTab === tab.id ? '#fff' : 'var(--text-secondary)',
+              fontWeight: activeTab === tab.id ? 600 : 500,
+              fontSize: 14,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
+            }}
           >
-            {isLoading ? (
-              <>
-                <span style={{ position: 'relative', zIndex: 2 }}>
-                  {batchProgress
-                    ? `Batch ${batchProgress.current} of ${batchProgress.total}…`
-                    : 'Processing…'}
-                </span>
-                <div style={{
-                  position: 'absolute', top: 0, left: 0, bottom: 0,
-                  width: batchProgress
-                    ? `${(batchProgress.current / batchProgress.total) * 100}%`
-                    : '100%',
-                  background: 'rgba(255,255,255,0.18)',
-                  transition: batchProgress ? 'width 0.3s' : 'none',
-                  animation: batchProgress ? 'none' : 'progress-indeterminate 1.5s infinite linear',
-                }} />
-              </>
-            ) : 'Upload Registrations'}
+            <span>{tab.icon}</span>
+            {tab.label}
           </button>
-        </div>
-
-        {/* Batch status line — shown while a multi-batch upload is in flight */}
-        {isLoading && batchProgress && (
-          <div style={{
-            marginTop: 14, padding: '10px 14px', borderRadius: 8,
-            background: 'var(--bg-secondary)',
-            border: '1px solid var(--border-color)',
-            fontSize: 12, color: 'var(--text-secondary)',
-            display: 'flex', alignItems: 'center', gap: 10,
-          }}>
-            <span style={{
-              width: 10, height: 10, borderRadius: '50%',
-              background: '#3b82f6',
-              boxShadow: '0 0 0 0 rgba(59,130,246,0.6)',
-              animation: 'pulse-dot 1.2s infinite',
-              flexShrink: 0,
-            }} />
-            <span>{batchProgress.status}</span>
-            <style dangerouslySetInnerHTML={{ __html: `
-              @keyframes pulse-dot {
-                0%   { box-shadow: 0 0 0 0    rgba(59,130,246,0.55); }
-                70%  { box-shadow: 0 0 0 10px rgba(59,130,246,0);    }
-                100% { box-shadow: 0 0 0 0    rgba(59,130,246,0);    }
-              }
-            ` }} />
-          </div>
-        )}
-
-        <style dangerouslySetInnerHTML={{ __html: `
-          @keyframes progress-indeterminate {
-            0%    { transform: scaleX(0); transform-origin: left;  opacity: 1; }
-            50%   { transform: scaleX(1); transform-origin: left;  opacity: 1; }
-            50.1% { transform: scaleX(1); transform-origin: right; opacity: 1; }
-            100%  { transform: scaleX(0); transform-origin: right; opacity: 0; }
-          }
-        ` }} />
-
-        {/* Stats */}
-        {stats && (
-          <div style={{ marginTop: 24, padding: 18, background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border-color)' }}>
-            <h4 style={{ margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>🎉 Upload Successful</h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
-              {[
-                { label: 'New Entries',       value: stats.created,    color: '#10b981' },
-                { label: 'Rows Altered',       value: stats.altered,    color: '#3b82f6' },
-                { label: 'Duplicates Evaded',  value: stats.duplicates, color: '#f59e0b' },
-                { label: 'Errors Skipped',     value: stats.errors,     color: '#ef4444' },
-              ].map(s => (
-                <div key={s.label} style={{ padding: 14, background: 'var(--bg-card)', borderRadius: 8, borderLeft: `3px solid ${s.color}` }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>{s.label}</div>
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>{s.value}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        ))}
       </div>
 
-      {/* ── Credentials table ──────────────────────────────── */}
-      {users.length > 0 && (
-        <div className="card" style={{ maxWidth: 860 }}>
-          {/* Errors panel */}
-        {uploadErrors.length > 0 && (
-          <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10 }}>
-            <div style={{ fontWeight: 600, fontSize: 13, color: '#f87171', marginBottom: 8 }}>⚠️ {uploadErrors.length} error{uploadErrors.length !== 1 ? 's' : ''} during processing:</div>
-            {uploadErrors.map((e, i) => (
-              <div key={i} style={{ fontSize: 12, color: '#fca5a5', fontFamily: 'monospace', marginTop: 4 }}>
-                {e.email} — {e.reason}
+      {/* ── Bulk Upload Tab ─────────────────────────────────────── */}
+      {activeTab === 'bulk' && (
+        <>
+          <div className="card" style={{ maxWidth: 860, marginBottom: 28 }}>
+            <h3 style={{ marginBottom: 10 }}>Upload Attendees List</h3>
+            <p style={{ marginBottom: 22, color: 'var(--text-secondary)', fontSize: 13 }}>
+              Upload a CSV or Excel file (Unstop format). New users are created, credentials CSV is downloaded,
+              and emails can be sent automatically.
+            </p>
+
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <label style={labelStyle}>1. Select Event</label>
+                <select
+                  className="input-field"
+                  value={selectedEvent}
+                  onChange={e => setSelectedEvent(e.target.value)}
+                  disabled={isLoading}
+                >
+                  <option value="">— Choose an Event —</option>
+                  {events.map(ev => (
+                    <option key={ev.eventId || ev.id} value={ev.eventId || ev.id}>
+                      {ev.name || ev.eventName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <label style={labelStyle}>2. Choose File (CSV / Excel)</label>
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  onChange={handleFileChange}
+                  className="input-field"
+                  style={{ paddingTop: 8, paddingBottom: 8 }}
+                  disabled={isLoading}
+                  ref={fileInputRef}
+                />
+              </div>
+
+              <button
+                className="btn btn-primary"
+                onClick={handleUpload}
+                disabled={!file || !selectedEvent || isLoading}
+                style={{ height: 42, minWidth: 200, position: 'relative', overflow: 'hidden' }}
+              >
+                {isLoading ? (
+                  <>
+                    <span style={{ position: 'relative', zIndex: 2 }}>
+                      {batchProgress
+                        ? `Batch ${batchProgress.current} of ${batchProgress.total}…`
+                        : 'Processing…'}
+                    </span>
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, bottom: 0,
+                      width: batchProgress
+                        ? `${(batchProgress.current / batchProgress.total) * 100}%`
+                        : '100%',
+                      background: 'rgba(255,255,255,0.18)',
+                      transition: batchProgress ? 'width 0.3s' : 'none',
+                      animation: batchProgress ? 'none' : 'progress-indeterminate 1.5s infinite linear',
+                    }} />
+                  </>
+                ) : 'Upload Registrations'}
+              </button>
+            </div>
+
+            {/* Batch status line — shown while a multi-batch upload is in flight */}
+            {isLoading && batchProgress && (
+              <div style={{
+                marginTop: 14, padding: '10px 14px', borderRadius: 8,
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                fontSize: 12, color: 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <span style={{
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: '#3b82f6',
+                  boxShadow: '0 0 0 0 rgba(59,130,246,0.6)',
+                  animation: 'pulse-dot 1.2s infinite',
+                  flexShrink: 0,
+                }} />
+                <span>{batchProgress.status}</span>
+                <style dangerouslySetInnerHTML={{ __html: `
+                  @keyframes pulse-dot {
+                    0%   { box-shadow: 0 0 0 0    rgba(59,130,246,0.55); }
+                    70%  { box-shadow: 0 0 0 10px rgba(59,130,246,0);    }
+                    100% { box-shadow: 0 0 0 0    rgba(59,130,246,0);    }
+                  }
+                ` }} />
+              </div>
+            )}
+
+            <style dangerouslySetInnerHTML={{ __html: `
+              @keyframes progress-indeterminate {
+                0%    { transform: scaleX(0); transform-origin: left;  opacity: 1; }
+                50%   { transform: scaleX(1); transform-origin: left;  opacity: 1; }
+                50.1% { transform: scaleX(1); transform-origin: right; opacity: 1; }
+                100%  { transform: scaleX(0); transform-origin: right; opacity: 0; }
+              }
+            ` }} />
+
+            {/* Stats */}
+            {stats && (
+              <div style={{ marginTop: 24, padding: 18, background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>🎉 Upload Successful</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+                  {[
+                    { label: 'New Entries',       value: stats.created,    color: '#10b981' },
+                    { label: 'Rows Altered',       value: stats.altered,    color: '#3b82f6' },
+                    { label: 'Duplicates Evaded',  value: stats.duplicates, color: '#f59e0b' },
+                    { label: 'Errors Skipped',     value: stats.errors,     color: '#ef4444' },
+                  ].map(s => (
+                    <div key={s.label} style={{ padding: 14, background: 'var(--bg-card)', borderRadius: 8, borderLeft: `3px solid ${s.color}` }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>{s.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Credentials table ──────────────────────────────── */}
+          {users.length > 0 && (
+            <div className="card" style={{ maxWidth: 860 }}>
+              {/* Errors panel */}
+              {uploadErrors.length > 0 && (
+                <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#f87171', marginBottom: 8 }}>⚠️ {uploadErrors.length} error{uploadErrors.length !== 1 ? 's' : ''} during processing:</div>
+                  {uploadErrors.map((e, i) => (
+                    <div key={i} style={{ fontSize: 12, color: '#fca5a5', fontFamily: 'monospace', marginTop: 4 }}>
+                      {e.email} — {e.reason}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <h3 style={{ margin: 0 }}>Processed Users</h3>
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                    {newUsers.length} new · {users.filter(u => u.Type === 'existing').length} already registered
+                    {sentCount > 0 && ` · ${sentCount} emails sent`}
+                    {failedCount > 0 && ` · ${failedCount} failed`}
+                  </p>
+                </div>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSendEmails}
+                  disabled={isSending || !newUsers.length}
+                  style={{ minWidth: 160, display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  {isSending ? (
+                    <>
+                      <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                      Sending…
+                    </>
+                  ) : '📧 Send Credential Emails'}
+                </button>
+              </div>
+
+              <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
+
+              <div className="table-responsive">
+                <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                      {['#', 'Name', 'Email', 'Password', 'Event', 'Account', 'Email Status'].map(h => (
+                        <th key={h} style={{ padding: '10px 12px', fontWeight: 600, fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedUsers.map((u, idx) => {
+                      const actualIndex = (currentPage - 1) * itemsPerPage + idx
+                      const isNew   = u.Type === 'new'
+                      const status  = emailProgress[u.Username]
+                      return (
+                        <tr key={u.Username + actualIndex} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background .15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <td style={tdStyle}>{actualIndex + 1}</td>
+                          <td style={{ ...tdStyle, fontWeight: 500 }}>{u.Name}</td>
+                          <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{u.Username}</td>
+                          <td style={tdStyle}>
+                            {isNew ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontFamily: 'monospace', fontSize: 12, letterSpacing: showPassword[u.Username] ? 0 : '0.12em' }}>
+                                  {showPassword[u.Username] ? u.Password : '••••••••'}
+                                </span>
+                                <button
+                                  onClick={() => togglePassword(u.Username)}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, fontSize: 13 }}
+                                  title={showPassword[u.Username] ? 'Hide' : 'Show'}
+                                >
+                                  {showPassword[u.Username] ? '🙈' : '👁️'}
+                                </button>
+                              </div>
+                            ) : (
+                              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>existing account</span>
+                            )}
+                          </td>
+                          <td style={{ ...tdStyle, fontSize: 12, color: 'var(--text-secondary)' }}>{u.Event}</td>
+                          <td style={tdStyle}>
+                            <span style={{
+                              fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
+                              background: isNew ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
+                              color: isNew ? '#10b981' : '#60a5fa',
+                              border: isNew ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(59,130,246,0.3)',
+                            }}>
+                              {isNew ? '✦ New' : '↺ Added to event'}
+                            </span>
+                          </td>
+                          <td style={tdStyle}>
+                            {isNew
+                              ? <EmailStatusBadge status={status} />
+                              : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>—</span>
+                            }
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
+            </div>
+          )}
+
+          {/* ── Find users missing from your credentials CSV ────────────────── */}
+          <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
+            <h3 style={{ marginBottom: 6 }}>Find Users Missing From Your CSV</h3>
+            <p style={{ marginBottom: 18, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
+              Upload a CSV with <strong>Name, Email, Password</strong> columns of users who already received their credentials.
+              We'll diff it against the <code>users</code> table and surface anyone present in the database but missing from your file.
+              You can then regenerate fresh passwords for those users and send them credential emails — using the same mailer the upload flow uses.
+              <br />
+              <span style={{ color: '#f59e0b', fontSize: 12 }}>
+                ⚠️ Regenerating overwrites <code>password_hash</code>. Any password those users may have had will stop working.
+              </span>
+            </p>
+
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <label style={labelStyle}>Already-sent CSV (Name, Email, Password)</label>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleCoveredFileChange}
+                  className="input-field"
+                  style={{ paddingTop: 8, paddingBottom: 8 }}
+                  disabled={findingUncovered || regenSending}
+                  ref={coveredFileRef}
+                />
+              </div>
+
+              <button
+                className="btn btn-primary"
+                onClick={handleFindUncovered}
+                disabled={!coveredFile || findingUncovered || regenSending}
+                style={{ height: 42, minWidth: 180 }}
+              >
+                {findingUncovered ? 'Diffing…' : 'Find Missing Users'}
+              </button>
+            </div>
+
+            {/* Result list */}
+            {uncoveredPhase !== 'idle' && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: 14 }}>
+                      {uncoveredPhase === 'regenerated' ? 'Regenerated & emailed' : 'Missing users'}
+                      <span style={{ marginLeft: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+                        {uncoveredPhase === 'regenerated' ? regenCreds.length : uncovered.length}
+                      </span>
+                    </h4>
+                    <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                      {uncoveredPhase === 'regenerated'
+                        ? 'New passwords were generated and credential emails dispatched via the Apps-Script mailer.'
+                        : 'These users are in the database but not in your CSV.'}
+                    </p>
+                  </div>
+
+                  {uncoveredPhase === 'preview' && uncovered.length > 0 && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={handleRegenerateAndEmail}
+                      disabled={regenSending}
+                      style={{ minWidth: 220, display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                      {regenSending ? (
+                        <>
+                          <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
+                          {regenProgress?.status || 'Working…'}
+                        </>
+                      ) : '🔑 Generate Passwords & Email'}
+                    </button>
+                  )}
+                </div>
+
+                {regenProgress && regenSending && (
+                  <div style={{
+                    marginBottom: 14, padding: '10px 14px', borderRadius: 8,
+                    background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
+                    fontSize: 12, color: 'var(--text-secondary)',
+                  }}>
+                    {regenProgress.status}
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {uncoveredPhase === 'preview' && uncovered.length === 0 && (
+                  <div style={{
+                    padding: '14px 16px', borderRadius: 10,
+                    background: 'rgba(16,185,129,0.08)',
+                    border: '1px solid rgba(16,185,129,0.3)',
+                    color: '#10b981', fontSize: 13,
+                  }}>
+                    ✓ No gaps found — every user in the database appears in your CSV.
+                  </div>
+                )}
+
+                {/* Preview table — before regeneration */}
+                {uncoveredPhase === 'preview' && uncovered.length > 0 && (
+                  <div className="table-responsive">
+                    <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                          {['#', 'Name', 'Email'].map(h => (
+                            <th key={h} style={{ padding: '10px 12px', fontWeight: 600, fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {uncovered.slice(0, 200).map((u, i) => (
+                          <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={tdStyle}>{i + 1}</td>
+                            <td style={{ ...tdStyle, fontWeight: 500 }}>{u.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                            <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{u.email}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {uncovered.length > 200 && (
+                      <div style={{ padding: 10, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+                        Showing first 200 of {uncovered.length}. The Generate &amp; Email step will process all of them.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Result table — after regeneration */}
+                {uncoveredPhase === 'regenerated' && regenCreds.length > 0 && (
+                  <div className="table-responsive">
+                    <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
+                          {['#', 'Name', 'Email', 'New Password', 'Email Status'].map(h => (
+                            <th key={h} style={{ padding: '10px 12px', fontWeight: 600, fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {regenCreds.slice(0, 200).map((c, i) => (
+                          <tr key={c.email + i} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={tdStyle}>{i + 1}</td>
+                            <td style={{ ...tdStyle, fontWeight: 500 }}>{c.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
+                            <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{c.email}</td>
+                            <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{c.password}</td>
+                            <td style={tdStyle}><EmailStatusBadge status={c.status} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {regenCreds.length > 200 && (
+                      <div style={{ padding: 10, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
+                        Showing first 200 of {regenCreds.length}.
+                      </div>
+                    )}
+                    <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-secondary)' }}>
+                      ✓ Sent: {regenCreds.filter(c => c.status === 'sent').length}
+                      {' · '}
+                      ✗ Failed: {regenCreds.filter(c => c.status === 'failed').length}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Manual Entry Tab ─────────────────────────── */}
+      {activeTab === 'manual' && (
+        <>
+          <ManualEntryCard events={events} onCredentialEmailed={sendCredentialEmails} />
+          <ResetPasswordCard />
+        </>
+      )}
+
+      {/* ── Phase Selection Tab ────────────────────── */}
+      {activeTab === 'phase' && (
+        <SelectPhaseCard events={events} />
+      )}
+
+      {/* ── Manage Team Members Tab ──────────────────────────────── */}
+      {activeTab === 'teams' && (
+        <TeamManagerCard events={events} />
+      )}
+    </div>
+  )
+}
+
+// ─── SelectPhaseCard ──────────────────────────────────────────────────────────
+
+function SelectPhaseCard({ events }) {
+  const [selectedEvent, setSelectedEvent] = useState('')
+  const [file,          setFile]          = useState(null)
+  const [loading,       setLoading]       = useState(false)
+  const [result,        setResult]        = useState(null) // { updated, edge_cases }
+  const fileRef = React.useRef(null)
+
+  async function handleSubmit() {
+    if (!selectedEvent) { alert('Please select an event.'); return }
+    if (!file)          { alert('Please choose a CSV file.'); return }
+
+    setLoading(true)
+    setResult(null)
+
+    try {
+      const text = await file.text()
+      const { header, rows } = parseCSVRows(text)
+
+      if (!header.length || !rows.length)
+        throw new Error('CSV is empty or missing a header row.')
+
+      const lower    = header.map(h => h.trim().toLowerCase())
+      const emailIdx = lower.findIndex(h => h === 'email' || h === 'mail' || h === 'username')
+      if (emailIdx < 0)
+        throw new Error('CSV is missing an "email" column.')
+
+      const emails = rows
+        .map(r => (r[emailIdx] || '').trim().toLowerCase())
+        .filter(e => e && e.includes('@'))
+
+      if (!emails.length)
+        throw new Error('No valid email addresses found in the CSV.')
+
+      const data = await adminPanel.selectPhase(selectedEvent, emails)
+      setResult(data)
+      setFile(null)
+      if (fileRef.current) fileRef.current.value = ''
+    } catch (e) {
+      console.error(e)
+      alert(e.message || 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function downloadEdgeCases() {
+    if (!result?.edge_cases?.length) return
+    const csv = 'email,reason\r\n' +
+      result.edge_cases.map(ec => `${csvCell(ec.email)},${csvCell(ec.reason)}`).join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = 'select_phase_edge_cases.csv'
+    document.body.appendChild(a)
+    a.click()
+    URL.revokeObjectURL(url)
+    a.remove()
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
+      <h3 style={{ marginBottom: 6 }}>Select Participants (Phase 1)</h3>
+      <p style={{ marginBottom: 20, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
+        Upload a CSV with a single <strong>email</strong> column. All matched participants
+        registered for the selected event will have their <code>phase</code> set to{' '}
+        <strong>1</strong> (selected / cleared Round 1). Unrecognised emails or users not
+        registered for the event are collected as edge cases.
+      </p>
+
+      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <label style={labelStyle}>1. Select Event</label>
+          <select
+            className="input-field"
+            value={selectedEvent}
+            onChange={e => setSelectedEvent(e.target.value)}
+            disabled={loading}
+          >
+            <option value="">— Choose an Event —</option>
+            {events.map(ev => (
+              <option key={ev.eventId || ev.id} value={ev.eventId || ev.id}>
+                {ev.name || ev.eventName}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <label style={labelStyle}>2. Upload CSV (email column)</label>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv"
+            className="input-field"
+            style={{ paddingTop: 8, paddingBottom: 8 }}
+            onChange={e => setFile(e.target.files?.[0] || null)}
+            disabled={loading}
+          />
+        </div>
+
+        <button
+          className="btn btn-primary"
+          onClick={handleSubmit}
+          disabled={loading || !selectedEvent || !file}
+          style={{ height: 42, minWidth: 180 }}
+        >
+          {loading ? 'Processing…' : 'Mark as Selected'}
+        </button>
+      </div>
+
+      {/* Results */}
+      {result && (
+        <div style={{ marginTop: 24 }}>
+          {/* Summary strip */}
+          <div style={{
+            display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 16,
+          }}>
+            {[
+              { label: 'Phase set to 1', value: result.updated,            color: '#10b981' },
+              { label: 'Edge Cases',     value: result.edge_cases?.length ?? 0, color: '#f59e0b' },
+            ].map(s => (
+              <div key={s.label} style={{
+                flex: 1, minWidth: 120, padding: '12px 16px',
+                background: 'var(--bg-card)', borderRadius: 8,
+                borderLeft: `3px solid ${s.color}`,
+              }}>
+                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  {s.label}
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
               </div>
             ))}
           </div>
-        )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
-            <div>
-              <h3 style={{ margin: 0 }}>Processed Users</h3>
-              <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-                {newUsers.length} new · {users.filter(u => u.Type === 'existing').length} already registered
-                {sentCount > 0 && ` · ${sentCount} emails sent`}
-                {failedCount > 0 && ` · ${failedCount} failed`}
-              </p>
+          {/* Edge cases table */}
+          {result.edge_cases?.length > 0 && (
+            <div style={{
+              padding: '12px 16px',
+              background: 'rgba(245,158,11,0.08)',
+              border: '1px solid rgba(245,158,11,0.25)',
+              borderRadius: 10,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ fontWeight: 600, fontSize: 13, color: '#fbbf24' }}>
+                  ⚠️ {result.edge_cases.length} edge case{result.edge_cases.length !== 1 ? 's' : ''}
+                </span>
+                <button
+                  className="btn btn-secondary"
+                  onClick={downloadEdgeCases}
+                  style={{ fontSize: 12, padding: '4px 12px', height: 30 }}
+                >
+                  ↓ Download CSV
+                </button>
+              </div>
+              <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                {result.edge_cases.map((ec, i) => (
+                  <div key={i} style={{
+                    display: 'flex', gap: 12, padding: '6px 0',
+                    borderBottom: i < result.edge_cases.length - 1 ? '1px solid rgba(245,158,11,0.15)' : 'none',
+                    fontSize: 12, fontFamily: 'monospace',
+                  }}>
+                    <span style={{ color: '#fde68a', minWidth: 220, wordBreak: 'break-all' }}>{ec.email}</span>
+                    <span style={{ color: '#fca5a5' }}>— {ec.reason}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <button
-              className="btn btn-primary"
-              onClick={handleSendEmails}
-              disabled={isSending || !newUsers.length}
-              style={{ minWidth: 160, display: 'flex', alignItems: 'center', gap: 8 }}
-            >
-              {isSending ? (
-                <>
-                  <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
-                  Sending…
-                </>
-              ) : '📧 Send Credential Emails'}
-            </button>
-          </div>
-
-          <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { to { transform: rotate(360deg); } }` }} />
-
-          <div className="table-responsive">
-            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
-                  {['#', 'Name', 'Email', 'Password', 'Event', 'Account', 'Email Status'].map(h => (
-                    <th key={h} style={{ padding: '10px 12px', fontWeight: 600, fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedUsers.map((u, idx) => {
-                  const actualIndex = (currentPage - 1) * itemsPerPage + idx
-                  const isNew   = u.Type === 'new'
-                  const status  = emailProgress[u.Username]
-                  return (
-                    <tr key={u.Username + actualIndex} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background .15s' }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <td style={tdStyle}>{actualIndex + 1}</td>
-                      <td style={{ ...tdStyle, fontWeight: 500 }}>{u.Name}</td>
-                      <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{u.Username}</td>
-                      <td style={tdStyle}>
-                        {isNew ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontFamily: 'monospace', fontSize: 12, letterSpacing: showPassword[u.Username] ? 0 : '0.12em' }}>
-                              {showPassword[u.Username] ? u.Password : '••••••••'}
-                            </span>
-                            <button
-                              onClick={() => togglePassword(u.Username)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 2, fontSize: 13 }}
-                              title={showPassword[u.Username] ? 'Hide' : 'Show'}
-                            >
-                              {showPassword[u.Username] ? '🙈' : '👁️'}
-                            </button>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>existing account</span>
-                        )}
-                      </td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--text-secondary)' }}>{u.Event}</td>
-                      <td style={tdStyle}>
-                        <span style={{
-                          fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
-                          background: isNew ? 'rgba(16,185,129,0.1)' : 'rgba(59,130,246,0.1)',
-                          color: isNew ? '#10b981' : '#60a5fa',
-                          border: isNew ? '1px solid rgba(16,185,129,0.3)' : '1px solid rgba(59,130,246,0.3)',
-                        }}>
-                          {isNew ? '✦ New' : '↺ Added to event'}
-                        </span>
-                      </td>
-                      <td style={tdStyle}>
-                        {isNew
-                          ? <EmailStatusBadge status={status} />
-                          : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>—</span>
-                        }
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          <Pagination
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-          />
+          )}
         </div>
       )}
-
-      {/* ── Add Participant Manually ─────────────────────────── */}
-      <ManualEntryCard events={events} onCredentialEmailed={sendCredentialEmails} />
-
-      {/* ── Find users missing from your credentials CSV ────────────────── */}
-      <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
-        <h3 style={{ marginBottom: 6 }}>Find Users Missing From Your CSV</h3>
-        <p style={{ marginBottom: 18, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
-          Upload a CSV with <strong>Name, Email, Password</strong> columns of users who already received their credentials.
-          We'll diff it against the <code>users</code> table and surface anyone present in the database but missing from your file.
-          You can then regenerate fresh passwords for those users and send them credential emails — using the same mailer the upload flow uses.
-          <br />
-          <span style={{ color: '#f59e0b', fontSize: 12 }}>
-            ⚠️ Regenerating overwrites <code>password_hash</code>. Any password those users may have had will stop working.
-          </span>
-        </p>
-
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <label style={labelStyle}>Already-sent CSV (Name, Email, Password)</label>
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleCoveredFileChange}
-              className="input-field"
-              style={{ paddingTop: 8, paddingBottom: 8 }}
-              disabled={findingUncovered || regenSending}
-              ref={coveredFileRef}
-            />
-          </div>
-
-          <button
-            className="btn btn-primary"
-            onClick={handleFindUncovered}
-            disabled={!coveredFile || findingUncovered || regenSending}
-            style={{ height: 42, minWidth: 180 }}
-          >
-            {findingUncovered ? 'Diffing…' : 'Find Missing Users'}
-          </button>
-        </div>
-
-        {/* Result list */}
-        {uncoveredPhase !== 'idle' && (
-          <div style={{ marginTop: 20 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 }}>
-              <div>
-                <h4 style={{ margin: 0, fontSize: 14 }}>
-                  {uncoveredPhase === 'regenerated' ? 'Regenerated & emailed' : 'Missing users'}
-                  <span style={{ marginLeft: 8, color: 'var(--text-muted)', fontSize: 12 }}>
-                    {uncoveredPhase === 'regenerated' ? regenCreds.length : uncovered.length}
-                  </span>
-                </h4>
-                <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
-                  {uncoveredPhase === 'regenerated'
-                    ? 'New passwords were generated and credential emails dispatched via the Apps-Script mailer.'
-                    : 'These users are in the database but not in your CSV.'}
-                </p>
-              </div>
-
-              {uncoveredPhase === 'preview' && uncovered.length > 0 && (
-                <button
-                  className="btn btn-primary"
-                  onClick={handleRegenerateAndEmail}
-                  disabled={regenSending}
-                  style={{ minWidth: 220, display: 'flex', alignItems: 'center', gap: 8 }}
-                >
-                  {regenSending ? (
-                    <>
-                      <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
-                      {regenProgress?.status || 'Working…'}
-                    </>
-                  ) : '🔑 Generate Passwords & Email'}
-                </button>
-              )}
-            </div>
-
-            {regenProgress && regenSending && (
-              <div style={{
-                marginBottom: 14, padding: '10px 14px', borderRadius: 8,
-                background: 'var(--bg-secondary)', border: '1px solid var(--border-color)',
-                fontSize: 12, color: 'var(--text-secondary)',
-              }}>
-                {regenProgress.status}
-              </div>
-            )}
-
-            {/* Empty state */}
-            {uncoveredPhase === 'preview' && uncovered.length === 0 && (
-              <div style={{
-                padding: '14px 16px', borderRadius: 10,
-                background: 'rgba(16,185,129,0.08)',
-                border: '1px solid rgba(16,185,129,0.3)',
-                color: '#10b981', fontSize: 13,
-              }}>
-                ✓ No gaps found — every user in the database appears in your CSV.
-              </div>
-            )}
-
-            {/* Preview table — before regeneration */}
-            {uncoveredPhase === 'preview' && uncovered.length > 0 && (
-              <div className="table-responsive">
-                <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
-                      {['#', 'Name', 'Email'].map(h => (
-                        <th key={h} style={{ padding: '10px 12px', fontWeight: 600, fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {uncovered.slice(0, 200).map((u, i) => (
-                      <tr key={u.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                        <td style={tdStyle}>{i + 1}</td>
-                        <td style={{ ...tdStyle, fontWeight: 500 }}>{u.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{u.email}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {uncovered.length > 200 && (
-                  <div style={{ padding: 10, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-                    Showing first 200 of {uncovered.length}. The Generate &amp; Email step will process all of them.
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Result table — after regeneration */}
-            {uncoveredPhase === 'regenerated' && regenCreds.length > 0 && (
-              <div className="table-responsive">
-                <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)', textAlign: 'left' }}>
-                      {['#', 'Name', 'Email', 'New Password', 'Email Status'].map(h => (
-                        <th key={h} style={{ padding: '10px 12px', fontWeight: 600, fontSize: 11, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {regenCreds.slice(0, 200).map((c, i) => (
-                      <tr key={c.email + i} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                        <td style={tdStyle}>{i + 1}</td>
-                        <td style={{ ...tdStyle, fontWeight: 500 }}>{c.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{c.email}</td>
-                        <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 12 }}>{c.password}</td>
-                        <td style={tdStyle}><EmailStatusBadge status={c.status} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {regenCreds.length > 200 && (
-                  <div style={{ padding: 10, fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>
-                    Showing first 200 of {regenCreds.length}.
-                  </div>
-                )}
-                <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-secondary)' }}>
-                  ✓ Sent: {regenCreds.filter(c => c.status === 'sent').length}
-                  {' · '}
-                  ✗ Failed: {regenCreds.filter(c => c.status === 'failed').length}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   )
 }
@@ -953,7 +1184,39 @@ function ManualEntryCard({ events, onCredentialEmailed }) {
   const [copied, setCopied]       = useState(false)
   const [emailStatus, setEmailStatus] = useState(null) // null | 'sending' | 'sent' | 'failed'
 
+  // Team lookup state
+  const [teammateMail, setTeammateMail] = useState('')
+  const [teamLookup, setTeamLookup]     = useState(null)   // null | 'loading' | { found, ... }
+  const [lookupErr,  setLookupErr]      = useState(null)
+
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }))
+
+  // Reset team lookup whenever teammate email or event changes
+  const handleTeammateMailChange = (v) => {
+    setTeammateMail(v)
+    setTeamLookup(null)
+    setLookupErr(null)
+  }
+  const handleEventChange = (v) => {
+    set('event_id', v)
+    setTeamLookup(null)
+    setLookupErr(null)
+  }
+
+  const handleTeamCheck = async () => {
+    if (!teammateMail.trim()) { setLookupErr('Enter a teammate email first.'); return }
+    if (!form.event_id)       { setLookupErr('Select an event first.'); return }
+    setTeamLookup('loading')
+    setLookupErr(null)
+    try {
+      const res = await adminPanel.teamLookup(teammateMail.trim(), form.event_id)
+      setTeamLookup(res)
+      if (!res.found) setLookupErr(res.reason || 'Team not found.')
+    } catch (e) {
+      setTeamLookup(null)
+      setLookupErr(e.message || 'Lookup failed.')
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -962,8 +1225,10 @@ function ManualEntryCard({ events, onCredentialEmailed }) {
     if (!form.password.trim()) { setError('Password is required.'); return }
     if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return }
     if (!form.event_id)        { setError('Please select an event.'); return }
-    if (form.team_mode === 'existing' && !form.existing_team_name.trim()) {
-      setError('Please enter the existing team name.'); return
+    if (form.team_mode === 'existing') {
+      if (!teamLookup || teamLookup === 'loading' || !teamLookup.found) {
+        setError('Please check a teammate email and confirm the team before submitting.'); return
+      }
     }
     if (form.team_mode === 'new' && !form.new_team_name.trim()) {
       setError('Please enter the new team name.'); return
@@ -977,12 +1242,14 @@ function ManualEntryCard({ events, onCredentialEmailed }) {
         password:             form.password,
         event_id:             form.event_id,
         team_mode:            form.team_mode,
-        existing_team_name:   form.existing_team_name.trim() || null,
-        existing_member_name: form.existing_member_name.trim() || null,
+        existing_team_id:     (form.team_mode === 'existing' && teamLookup?.found) ? teamLookup.team_id : null,
         new_team_name:        form.new_team_name.trim() || null,
       })
       setResult(res)
       setForm(EMPTY_FORM)
+      setTeammateMail('')
+      setTeamLookup(null)
+      setLookupErr(null)
       setShowPw(false)
     } catch (err) {
       setError(err.message || 'Something went wrong.')
@@ -1108,7 +1375,7 @@ function ManualEntryCard({ events, onCredentialEmailed }) {
             <select
               className="input-field"
               value={form.event_id}
-              onChange={e => set('event_id', e.target.value)}
+              onChange={e => handleEventChange(e.target.value)}
               disabled={loading}
             >
               <option value="">— Select an Event —</option>
@@ -1132,38 +1399,77 @@ function ManualEntryCard({ events, onCredentialEmailed }) {
         {/* ── Conditional team fields ─────────────────────────────────────── */}
         {form.team_mode === 'existing' && (
           <div style={{
-            display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16,
-            padding: '14px 16px', borderRadius: 10,
+            marginBottom: 16, padding: '14px 16px', borderRadius: 10,
             background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.2)',
           }}>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={labelStyle}>Existing Team Name <span style={{ color: '#f87171' }}>*</span></label>
-              <input
-                className="input-field"
-                type="text"
-                placeholder="e.g. Team Alpha"
-                value={form.existing_team_name}
-                onChange={e => set('existing_team_name', e.target.value)}
-                disabled={loading}
-              />
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
-                Searched by name (case-insensitive) within the selected event.
+            {/* Email + Check row */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <label style={labelStyle}>Teammate Email <span style={{ color: '#f87171' }}>*</span></label>
+                <input
+                  className="input-field"
+                  type="email"
+                  placeholder="e.g. priya@example.com"
+                  value={teammateMail}
+                  onChange={e => handleTeammateMailChange(e.target.value)}
+                  disabled={loading || teamLookup === 'loading'}
+                />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
+                  Enter any existing member's email to look up their team.
+                </div>
               </div>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={handleTeamCheck}
+                disabled={loading || teamLookup === 'loading' || !teammateMail.trim() || !form.event_id}
+                style={{ height: 40, minWidth: 100, marginBottom: 22 }}
+              >
+                {teamLookup === 'loading' ? 'Checking…' : '🔍 Check'}
+              </button>
             </div>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={labelStyle}>Any Existing Member's Name <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional)</span></label>
-              <input
-                className="input-field"
-                type="text"
-                placeholder="e.g. Priya Nair"
-                value={form.existing_member_name}
-                onChange={e => set('existing_member_name', e.target.value)}
-                disabled={loading}
-              />
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 5 }}>
-                For reference only — the team is matched by name above.
+
+            {/* Lookup error */}
+            {lookupErr && teamLookup !== 'loading' && (
+              <div style={{
+                marginTop: 8, padding: '8px 12px', borderRadius: 7, fontSize: 13,
+                background: 'rgba(239,68,68,0.1)', color: '#f87171',
+                border: '1px solid rgba(239,68,68,0.25)',
+              }}>
+                ⚠️ {lookupErr}
               </div>
-            </div>
+            )}
+
+            {/* Team confirmation card */}
+            {teamLookup && teamLookup !== 'loading' && teamLookup.found && (
+              <div style={{
+                marginTop: 12, padding: '12px 14px', borderRadius: 9,
+                background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 14, color: '#34d399' }}>
+                    ✅ {teamLookup.team_name}
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {teamLookup.member_count} member{teamLookup.member_count !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {(teamLookup.members || []).map(m => (
+                    <span key={m.id} style={{
+                      padding: '3px 10px', borderRadius: 20, fontSize: 12,
+                      background: 'rgba(16,185,129,0.12)', color: '#6ee7b7',
+                      border: '1px solid rgba(16,185,129,0.2)',
+                    }}>
+                      {m.name}
+                    </span>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+                  Team ID: <code style={{ fontSize: 10 }}>{teamLookup.team_id}</code>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1321,6 +1627,244 @@ function ManualEntryCard({ events, onCredentialEmailed }) {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── TeamManagerCard ──────────────────────────────────────────────────────────
+
+function TeamManagerCard({ events }) {
+  const [eventId,   setEventId]   = React.useState('')
+  const [email,     setEmail]     = React.useState('')
+  const [loading,   setLoading]   = React.useState(false)
+  const [team,      setTeam]      = React.useState(null)
+  const [lookupErr, setLookupErr] = React.useState(null)
+  const [removing,  setRemoving]  = React.useState({})
+  const [removeMsg, setRemoveMsg] = React.useState({})
+
+  const reset = () => { setTeam(null); setLookupErr(null); setRemoving({}); setRemoveMsg({}) }
+
+  const handleFetch = async () => {
+    if (!email.trim()) { setLookupErr('Enter a member email.'); return }
+    if (!eventId)      { setLookupErr('Select an event.'); return }
+    setLoading(true); reset()
+    try {
+      const res = await adminPanel.teamLookup(email.trim(), eventId)
+      setTeam(res)
+      if (!res.found) setLookupErr(res.reason || 'Team not found.')
+    } catch (e) {
+      setLookupErr(e.message || 'Lookup failed.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const askRemove    = (uid) => setRemoving(r => ({ ...r, [uid]: 'confirm' }))
+  const cancelRemove = (uid) => setRemoving(r => { const n = { ...r }; delete n[uid]; return n })
+
+  const confirmRemove = async (uid) => {
+    setRemoving(r => ({ ...r, [uid]: 'loading' }))
+    try {
+      await adminPanel.removeTeamMember(team.team_id, uid, eventId)
+      setTeam(t => ({ ...t, members: t.members.filter(m => m.id !== uid), member_count: t.member_count - 1 }))
+      setRemoveMsg(m => ({ ...m, [uid]: 'Removed ✓' }))
+    } catch (e) {
+      setRemoveMsg(m => ({ ...m, [uid]: 'Failed: ' + e.message }))
+    } finally {
+      setRemoving(r => { const n = { ...r }; delete n[uid]; return n })
+    }
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
+      <h3 style={{ marginBottom: 6 }}>Manage Team Members</h3>
+      <p style={{ marginBottom: 20, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
+        Enter any team member's email to look up their team. Remove individual members
+        — they stay registered for the event as solo participants.
+      </p>
+
+      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <label style={labelStyle}>Event</label>
+          <select className="input-field" value={eventId}
+            onChange={e => { setEventId(e.target.value); reset() }} disabled={loading}>
+            <option value="">— Choose Event —</option>
+            {events.map(ev => (
+              <option key={ev.eventId || ev.id} value={ev.eventId || ev.id}>{ev.name || ev.eventName}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <label style={labelStyle}>Any Member's Email</label>
+          <input className="input-field" type="email" placeholder="e.g. member@example.com"
+            value={email} onChange={e => { setEmail(e.target.value); reset() }}
+            disabled={loading} onKeyDown={e => e.key === 'Enter' && handleFetch()} />
+        </div>
+        <button className="btn btn-primary" onClick={handleFetch}
+          disabled={loading || !email.trim() || !eventId} style={{ height: 42, minWidth: 140 }}>
+          {loading ? 'Fetching…' : '🔍 Fetch Team'}
+        </button>
+      </div>
+
+      {lookupErr && (
+        <div style={{
+          padding: '9px 14px', borderRadius: 8, fontSize: 13, marginBottom: 12,
+          background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171',
+        }}>⚠️ {lookupErr}</div>
+      )}
+
+      {team && team.found && (
+        <div>
+          <div style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '10px 14px', borderRadius: '10px 10px 0 0',
+            background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.25)',
+            borderBottom: 'none',
+          }}>
+            <span style={{ fontWeight: 700, fontSize: 15 }}>🏷️ {team.team_name}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              {team.members.length} / {team.member_count} member{team.member_count !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div style={{ border: '1px solid rgba(99,102,241,0.25)', borderRadius: '0 0 10px 10px', overflow: 'hidden' }}>
+            {team.members.length === 0 ? (
+              <div style={{ padding: '18px 14px', color: 'var(--text-muted)', fontSize: 13, textAlign: 'center' }}>
+                No members remaining.
+              </div>
+            ) : team.members.map((m, i) => {
+              const state  = removing[m.id]
+              const msg    = removeMsg[m.id]
+              const isLast = i === team.members.length - 1
+              return (
+                <div key={m.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px',
+                  background: i % 2 === 0 ? 'var(--bg-card)' : 'var(--bg-secondary)',
+                  borderBottom: isLast ? 'none' : '1px solid var(--border-color)',
+                }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 22, textAlign: 'right' }}>{i + 1}</span>
+                  <span style={{ flex: 1, fontWeight: 500, fontSize: 13 }}>{m.name}</span>
+                  <span style={{ flex: 1, fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace', wordBreak: 'break-all' }}>{m.email}</span>
+                  {msg ? (
+                    <span style={{ fontSize: 12, color: '#10b981', minWidth: 80 }}>{msg}</span>
+                  ) : state === 'confirm' ? (
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#f59e0b' }}>Remove?</span>
+                      <button onClick={() => confirmRemove(m.id)} style={{
+                        padding: '3px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                        background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171',
+                      }}>Yes</button>
+                      <button onClick={() => cancelRemove(m.id)} style={{
+                        padding: '3px 10px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                        background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-muted)',
+                      }}>No</button>
+                    </div>
+                  ) : state === 'loading' ? (
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Removing…</span>
+                  ) : (
+                    <button onClick={() => askRemove(m.id)} style={{
+                      padding: '4px 12px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+                      background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171',
+                    }}>Remove</button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+            Team ID: <code style={{ fontSize: 10 }}>{team.team_id}</code>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── ResetPasswordCard ────────────────────────────────────────────────────────
+
+function ResetPasswordCard() {
+  const [email,    setEmail]    = React.useState('')
+  const [password, setPassword] = React.useState('')
+  const [showPw,   setShowPw]   = React.useState(false)
+  const [loading,  setLoading]  = React.useState(false)
+  const [result,   setResult]   = React.useState(null)
+  const [error,    setError]    = React.useState(null)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!email.trim())       { setError('Email is required.'); return }
+    if (!password.trim())    { setError('New password is required.'); return }
+    if (password.length < 6) { setError('Password must be at least 6 characters.'); return }
+    setLoading(true); setError(null); setResult(null)
+    try {
+      const res = await adminPanel.resetPassword(email.trim().toLowerCase(), password)
+      setResult(res)
+      setEmail(''); setPassword('')
+    } catch (e) {
+      setError(e.message || 'Reset failed.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="card" style={{ maxWidth: 860, marginTop: 28 }}>
+      <h3 style={{ marginBottom: 6 }}>Reset Participant Password</h3>
+      <p style={{ marginBottom: 20, color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.55 }}>
+        Set a new password for any participant. The old password stops working immediately.{' '}
+        <span style={{ color: '#f59e0b', fontSize: 12 }}>
+          ⚠️ Overwrites <code>password_hash</code> — irreversible.
+        </span>
+      </p>
+
+      <form onSubmit={handleSubmit} autoComplete="off">
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={labelStyle}>Participant Email <span style={{ color: '#f87171' }}>*</span></label>
+            <input className="input-field" type="email" placeholder="e.g. arjun@example.com"
+              value={email} onChange={e => { setEmail(e.target.value); setResult(null); setError(null) }}
+              disabled={loading} autoComplete="off" />
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <label style={labelStyle}>New Password <span style={{ color: '#f87171' }}>*</span></label>
+            <div style={{ position: 'relative' }}>
+              <input className="input-field" type={showPw ? 'text' : 'password'}
+                placeholder="Min 6 characters" value={password}
+                onChange={e => { setPassword(e.target.value); setResult(null); setError(null) }}
+                disabled={loading} autoComplete="new-password" style={{ paddingRight: 40 }} />
+              <button type="button" onClick={() => setShowPw(v => !v)} tabIndex={-1} style={{
+                position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14,
+              }}>{showPw ? '🙈' : '👁️'}</button>
+            </div>
+          </div>
+          <button type="submit" className="btn btn-primary"
+            disabled={loading || !email.trim() || !password.trim()} style={{ height: 42, minWidth: 160 }}>
+            {loading ? 'Resetting…' : '🔑 Reset Password'}
+          </button>
+        </div>
+
+        {error && (
+          <div style={{
+            marginTop: 14, padding: '9px 14px', borderRadius: 8, fontSize: 13,
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#f87171',
+          }}>⚠️ {error}</div>
+        )}
+
+        {result && (
+          <div style={{
+            marginTop: 14, padding: '10px 16px', borderRadius: 8, fontSize: 13,
+            background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)',
+            color: '#34d399', display: 'flex', alignItems: 'center', gap: 10,
+          }}>
+            <span style={{ fontSize: 18 }}>✅</span>
+            <div>
+              <div style={{ fontWeight: 600 }}>Password reset for {result.name}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{result.email}</div>
+            </div>
+          </div>
+        )}
+      </form>
     </div>
   )
 }

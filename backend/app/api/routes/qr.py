@@ -41,6 +41,13 @@ async def scan_qr(
         return QRScanResponse(message=message, status=status_text)
 
     if payload.mode == "food":
+        # Event-based food distribution. User must select event first.
+        # event_id is now REQUIRED.
+        if not payload.event_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="event_id is required for food distribution",
+            )
         message = await scan_food(supabase, target_user, payload.event_id)
         status_text = "accepted" if any(
             word in message.lower() for word in ("claimed", "marked")
