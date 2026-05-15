@@ -372,6 +372,43 @@
   animation: slideIn 0.25s ease forwards;
 }
 
+/* ---- Native <dialog>-based modal ----
+ * Rendered in the browser's top layer, so it's immune to ancestor
+ * containing blocks (transform, filter, contain, overflow, etc.). */
+.admin-theme .modal-dialog {
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  max-width: 480px;
+  width: calc(100% - 32px);
+  overflow: visible;
+  align-self: center;
+  justify-self: center;
+}
+.admin-theme .modal-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+}
+.admin-theme .modal-dialog,
+.admin-theme .modal-dialog::backdrop {
+  opacity: 0;
+  transition:
+    opacity 0.2s ease,
+    overlay 0.2s ease allow-discrete,
+    display 0.2s ease allow-discrete;
+}
+.admin-theme .modal-dialog[open],
+.admin-theme .modal-dialog[open]::backdrop {
+  opacity: 1;
+}
+@starting-style {
+  .admin-theme .modal-dialog[open],
+  .admin-theme .modal-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
 /* ---- Page layout ---- */
 .admin-theme .app-shell {
   display: flex;
