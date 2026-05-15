@@ -11,16 +11,19 @@ from app.schemas.mirage import (
     MirageLikeResponse,
     MirageMomentResponse,
     MirageOverviewResponse,
-    MiragePeopleSearchResponse,
     MiragePhotoItem,
+    MirageSearchPeopleResponse,
+    MirageSearchPersonDetailResponse,
 )
 from app.services import mirage_pipeline_service as mirage_pipeline_service
 from app.services.mirage_pipeline_service import (
+    get_mirage_search_person_detail,
     get_collection_detail,
     get_drive_file_payload,
     get_overview_payload,
     list_my_mirage_photos,
     list_public_gallery,
+    search_mirage_people,
     toggle_photo_like,
     verify_drive_file_signature,
 )
@@ -44,16 +47,6 @@ async def get_overview(
 ) -> MirageOverviewResponse:
     payload = await get_overview_payload(supabase, user)
     return MirageOverviewResponse(**payload)
-
-
-@router.get("/people/search", response_model=MiragePeopleSearchResponse)
-async def search_mirage_people_route(
-    q: str = Query("", max_length=160),
-    supabase: AsyncClient = Depends(get_supabase),
-    user: User = Depends(get_current_user),
-) -> MiragePeopleSearchResponse:
-    payload = await mirage_pipeline_service.search_mirage_people(supabase, user, q)
-    return MiragePeopleSearchResponse(**payload)
 
 
 @router.get("/moment", response_model=MirageMomentResponse | None)
@@ -91,6 +84,27 @@ async def get_my_photos(
 ) -> list[MiragePhotoItem]:
     items = await list_my_mirage_photos(supabase, user)
     return [MiragePhotoItem(**item) for item in items]
+
+
+@router.get("/search/people", response_model=MirageSearchPeopleResponse)
+async def get_search_people(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(8, ge=1, le=20),
+    supabase: AsyncClient = Depends(get_supabase),
+    user: User = Depends(get_current_user),
+) -> MirageSearchPeopleResponse:
+    payload = await search_mirage_people(supabase, user, q, limit)
+    return MirageSearchPeopleResponse(**payload)
+
+
+@router.get("/search/people/{user_id}", response_model=MirageSearchPersonDetailResponse)
+async def get_search_person_detail(
+    user_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    user: User = Depends(get_current_user),
+) -> MirageSearchPersonDetailResponse:
+    payload = await get_mirage_search_person_detail(supabase, user, user_id)
+    return MirageSearchPersonDetailResponse(**payload)
 
 
 @router.get("/files/{file_id}")

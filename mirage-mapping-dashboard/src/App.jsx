@@ -43,7 +43,8 @@ function getProcessorBaseUrl() {
   if (typeof window === 'undefined') return '';
   const { hostname, port, protocol } = window.location;
   if ((hostname === '127.0.0.1' || hostname === 'localhost') && port === '4175') {
-    return hostname === 'localhost' ? DEFAULT_PROCESSOR_URL : `${protocol}//${hostname}:8765`;
+    // Use the Vite dev-server proxy for local processor calls.
+    return '';
   }
   if (port === '8765') {
     return `${protocol}//${window.location.host}`;
@@ -591,6 +592,7 @@ function JobPage({ ops }) {
   const [status, setStatus] = useState('Loading job...');
   const [busy, setBusy] = useState(false);
   const [jobMissing, setJobMissing] = useState(false);
+  const [useBackendDetail, setUseBackendDetail] = useState(false);
 
   function isMissingJobError(error) {
     const message = String(error?.message || '').toLowerCase();
@@ -618,8 +620,18 @@ function JobPage({ ops }) {
 
   async function loadJob({ silent = false } = {}) {
     if (!jobId) return;
+    const safeJobId = encodeURIComponent(jobId);
     try {
-      const jobData = await ops.processorRequest(`/jobs/${encodeURIComponent(jobId)}/detail`);
+      if (useBackendDetail) {
+        const jobData = await ops.backendRequest(`/api/v1/admin-panel/mirage/jobs/${safeJobId}`);
+        setDetail(jobData);
+        setJobMissing(false);
+        if (!silent) {
+          setStatus('Job loaded (backend fallback).');
+        }
+        return;
+      }
+      const jobData = await ops.processorRequest(`/jobs/${safeJobId}/detail`);
       setDetail(jobData);
       setJobMissing(false);
       if (!silent) {
@@ -633,7 +645,24 @@ function JobPage({ ops }) {
         setStatus('This Mirage job no longer exists. Open another job from the Jobs page.');
         return;
       }
-      setStatus(error.message);
+      try {
+        setUseBackendDetail(true);
+        const jobData = await ops.backendRequest(`/api/v1/admin-panel/mirage/jobs/${safeJobId}`);
+        setDetail(jobData);
+        setJobMissing(false);
+        if (!silent) {
+          setStatus('Job loaded (backend fallback).');
+        }
+      } catch (backendError) {
+        if (isMissingJobError(backendError)) {
+          setJobMissing(true);
+          setDetail(null);
+          setBusy(false);
+          setStatus('This Mirage job no longer exists. Open another job from the Jobs page.');
+          return;
+        }
+        setStatus(backendError.message || error.message);
+      }
     }
   }
 

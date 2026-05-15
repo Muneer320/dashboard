@@ -361,7 +361,7 @@ function MirageLegacy() {
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 
-const BROADCAST_CATEGORIES = new Set(['general', 'pinned', 'schedule', 'meal', 'alert', 'info']);
+const BROADCAST_CATEGORIES = new Set(['general', 'pinned', 'schedule', 'meal', 'alert', 'info', 'visitor']);
 
 /** Parse raw text into spans + clickable anchor elements for any URLs */
 function RichText({ text, style = {} }) {
@@ -469,20 +469,23 @@ export function Announcements() {
     return `${Math.floor(hrs / 24)}d ago`;
   }
 
+  const FILTERS = [
+    { key: 'all',      label: 'All' },
+    { key: 'general',  label: 'General' },
+    { key: 'events',   label: 'My Events' },
+    { key: 'visitors', label: 'Visitors' },
+  ];
+
   const visible = posts.filter(p => {
     if (!isVisible(p)) return false;
     if (filter === 'all') return true;
     const isEvent = isEventTargetedPost(p);
-    if (filter === 'general') return !isEvent;
+    const cat = (p.category || 'general').trim().toLowerCase();
+    if (filter === 'general') return !isEvent && cat !== 'visitor';
     if (filter === 'events')  return isEvent;
+    if (filter === 'visitors') return cat === 'visitor';
     return true;
   });
-
-  const FILTERS = [
-    { key: 'all',     label: 'All' },
-    { key: 'general', label: 'General' },
-    { key: 'events',  label: 'My Events' },
-  ];
 
   return (
     <PageBackground bgImage="https://res.cloudinary.com/dglvt0iom/image/upload/v1776878490/dashboard_scene_k9629h.jpg" blurAmount={18} dimAmount={0.80}>
@@ -516,7 +519,11 @@ export function Announcements() {
                     : posts.filter(p => {
                         if (!isVisible(p)) return false;
                         const isEv = isEventTargetedPost(p);
-                        return f.key === 'events' ? isEv : !isEv;
+                        const cat = (p.category || 'general').trim().toLowerCase();
+                        if (f.key === 'visitors') return cat === 'visitor';
+                        if (f.key === 'events')   return isEv;
+                        if (f.key === 'general')  return !isEv && cat !== 'visitor';
+                        return true;
                       }).length}
                 </span>
               )}
@@ -539,6 +546,8 @@ export function Announcements() {
                       : "You don't appear to be registered for any events yet."}
                   </div>
                 </>
+              ) : filter === 'visitors' ? (
+                <div>No visitor announcements yet.</div>
               ) : 'No announcements yet.'}
             </div>
           )}

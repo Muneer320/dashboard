@@ -96,20 +96,6 @@ class MirageUserProfileResponse(BaseModel):
     images: list[MirageAnchorImageItem] = Field(default_factory=list)
 
 
-class MiragePersonSearchHit(BaseModel):
-    userId: str
-    name: str
-    username: Optional[str] = None
-    email: Optional[str] = None
-    photoCount: int = 0
-    photos: list[MiragePhotoItem] = Field(default_factory=list)
-
-
-class MiragePeopleSearchResponse(BaseModel):
-    query: str
-    people: list[MiragePersonSearchHit] = Field(default_factory=list)
-
-
 class MirageAnchorUserItem(BaseModel):
     userId: str
     username: Optional[str] = None
@@ -285,6 +271,26 @@ class MirageFaceMatchReviewResponse(BaseModel):
 class MirageJobStatusResponse(BaseModel):
     jobId: str
     status: str
+
+
+class MirageSearchPersonItem(BaseModel):
+    userId: str
+    name: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[str] = None
+    photoCount: int = 0
+    coverPhoto: Optional[MiragePhotoItem] = None
+    latestPhotoAt: Optional[str] = None
+
+
+class MirageSearchPeopleResponse(BaseModel):
+    query: str
+    people: list[MirageSearchPersonItem] = Field(default_factory=list)
+
+
+class MirageSearchPersonDetailResponse(BaseModel):
+    participant: MirageSearchPersonItem
+    photos: list[MiragePhotoItem] = Field(default_factory=list)
 
 
 class MirageMomentParticipantItem(BaseModel):

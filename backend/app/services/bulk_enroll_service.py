@@ -784,3 +784,197 @@ async def regenerate_passwords_for_ids(
     await asyncio.gather(*[_bound_update(uid, h) for uid, h in update_jobs])
 
     return creds
+
+
+# \u2500\u2500 Manual single-participant enroll \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+
+async def manual_enroll(
+    supabase: AsyncClient,
+    name: str,
+    email: str,
+    plain_password: str,
+    event_id: str,
+    team_mode: str = "none",           # 'none' | 'existing' | 'new'
+    existing_team_name: str | None = None,
+    existing_member_name: str | None = None,  # informational only
+    new_team_name: str | None = None,
+) -> dict[str, Any]:
+    """
+    Manually enrol a single participant.
+
+    - Creates the user if the email doesn't exist yet (uses the supplied
+      plain-text password which is hashed server-side).
+    - If the user already exists, adds the event to their events map
+      (raises 409 if they're already enrolled in that event).
+    - Handles team assignment:
+        * team_mode='none'     \u2192 solo entry, no team
+        * team_mode='existing' \u2192 looks up team by name in the event (case-insensitive),
+                                  appends user to member_ids
+        * team_mode='new'      \u2192 inserts a fresh team row
+
+    Returns a dict with user_id, name, email, password (if new),
+    event_name, team_name, is_new_user, message.
+    """
+    email = (email or "").strip().lower()
+    if not email or not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address.")
+
+    name = (name or "").strip() or email.split("@")[0]
+    event = await _fetch_event(supabase, event_id)
+    event_uuid = event["id"]
+    event_name = event["name"]
+
+    # \u2500\u2500 1. Fetch or create user \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    resp = await (
+        supabase.table("users")
+        .select("*")
+        .eq("username", email)
+        .limit(1)
+        .execute()
+    )
+    existing_row = first_row(resp)
+
+    is_new_user = existing_row is None
+    returned_password: str | None = None
+    team_uuid: str | None = None
+
+    if existing_row is not None:
+        user = User.from_row(existing_row)
+        events_map = dict(user.events or {})
+        if event_uuid in events_map:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"User '{email}' is already registered for this event.",
+            )
+        user_id = str(user.id)
+    else:
+        # Hash the supplied password in a thread so we don't block the event loop.
+        hashed_pw = await asyncio.to_thread(get_password_hash, plain_password)
+        user_id = str(uuid.uuid4())
+        new_user_payload = {
+            "id": user_id,
+            "username": email,
+            "password_hash": hashed_pw,
+            "name": name,
+            "unstop_id": None,
+            "is_attending": False,
+            "details": {"email": email, "phone": "", "college": "", "year": "",
+                        "branch": "", "gender": "", "city": "", "emergency_contact": ""},
+            "events": {},
+            "food": {},
+            "is_profile_complete": False,
+            "cents": 0,
+        }
+        try:
+            await supabase.table("users").insert(new_user_payload).execute()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create user: {exc}",
+            ) from exc
+        returned_password = plain_password
+        events_map = {}
+
+    # \u2500\u2500 2. Resolve team \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    resolved_team_name: str | None = None
+
+    if team_mode == "existing":
+        search_name = (existing_team_name or "").strip()
+        if not search_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="existing_team_name is required when team_mode='existing'.",
+            )
+        # Fetch all teams for this event and find the best name match.
+        teams_resp = await (
+            supabase.table("teams")
+            .select("id, name, member_ids")
+            .eq("event_id", event_uuid)
+            .execute()
+        )
+        all_teams = teams_resp.data or []
+        norm = lambda s: s.strip().lower()
+        # Exact match first, then case-insensitive contains.
+        match = next(
+            (t for t in all_teams if norm(t["name"]) == norm(search_name)),
+            None,
+        ) or next(
+            (t for t in all_teams if norm(search_name) in norm(t["name"])),
+            None,
+        )
+        if match is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No team named '{search_name}' found for this event.",
+            )
+        team_uuid = str(match["id"])
+        resolved_team_name = match["name"]
+
+        # Append the new user to member_ids (non-destructive).
+        current_members: list[str] = [str(m) for m in (match.get("member_ids") or [])]
+        if user_id not in current_members:
+            current_members.append(user_id)
+            try:
+                await (
+                    supabase.table("teams")
+                    .update({"member_ids": current_members})
+                    .eq("id", team_uuid)
+                    .execute()
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to update team members: {exc}",
+                ) from exc
+
+    elif team_mode == "new":
+        t_name = (new_team_name or "").strip()
+        if not t_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="new_team_name is required when team_mode='new'.",
+            )
+        team_uuid = str(uuid.uuid4())
+        resolved_team_name = t_name
+        try:
+            await supabase.table("teams").insert({
+                "id": team_uuid,
+                "name": t_name,
+                "event_id": event_uuid,
+                "leader_id": user_id,
+                "member_ids": [user_id],
+            }).execute()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to create team: {exc}",
+            ) from exc
+
+    # \u2500\u2500 3. Write event entry onto user \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    events_map[event_uuid] = _default_event_entry(team_uuid=team_uuid)
+    try:
+        await (
+            supabase.table("users")
+            .update({"events": events_map, "name": name})
+            .eq("id", user_id)
+            .execute()
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to enrol user in event: {exc}",
+        ) from exc
+
+    action = "created and enrolled" if is_new_user else "enrolled"
+    team_msg = f" in team '{resolved_team_name}'" if resolved_team_name else ""
+    return {
+        "user_id": user_id,
+        "name": name,
+        "email": email,
+        "password": returned_password,
+        "event_name": event_name,
+        "team_name": resolved_team_name,
+        "is_new_user": is_new_user,
+        "message": f"User {action} in '{event_name}'{team_msg}.",
+    }
+

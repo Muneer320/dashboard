@@ -22,10 +22,92 @@ const primaryBtnStyle = {
   fontSize: 13,
 }
 
+const inputStyle = {
+  marginTop: 6,
+  width: '100%',
+  padding: '8px 10px',
+  borderRadius: 10,
+  border: '1px solid rgba(255,255,255,0.12)',
+  background: 'rgba(0,0,0,0.2)',
+  color: 'inherit',
+}
+
 function sortSlides(images) {
   const list = Array.isArray(images) ? images.slice() : []
   list.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
   return list
+}
+
+function clampPercent(value, fallback = 50) {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return fallback
+  return Math.max(0, Math.min(100, next))
+}
+
+function clampZoom(value, fallback = 1) {
+  const next = Number(value)
+  if (!Number.isFinite(next)) return fallback
+  return Math.max(1, Math.min(2.5, next))
+}
+
+function cropTransform(crop) {
+  const cropX = clampPercent(crop?.cropX, 50)
+  const cropY = clampPercent(crop?.cropY, 50)
+  const cropZoom = clampZoom(crop?.cropZoom, 1)
+  return {
+    transform: `translate(${50 - cropX}%, ${50 - cropY}%) scale(${cropZoom})`,
+    transformOrigin: 'center center',
+  }
+}
+
+function defaultCropDraft(image) {
+  return {
+    slideTitle: image?.slideTitle || '',
+    cropX: clampPercent(image?.cropX, 50),
+    cropY: clampPercent(image?.cropY, 50),
+    cropZoom: clampZoom(image?.cropZoom, 1),
+  }
+}
+
+function CropPreview({ image, crop, aspectRatio = '3 / 2', maxHeight = 180 }) {
+  const src = image?.imageUrl || image?.thumbnailUrl || ''
+  return (
+    <div
+      style={{
+        aspectRatio,
+        maxHeight,
+        width: '100%',
+        borderRadius: 14,
+        overflow: 'hidden',
+        background: 'rgba(0,0,0,0.28)',
+        position: 'relative',
+        border: '1px solid rgba(255,255,255,0.08)',
+      }}
+    >
+      {src ? (
+        <img
+          alt={image?.filename || ''}
+          src={src}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            ...cropTransform(crop),
+          }}
+        />
+      ) : null}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(180deg, rgba(9,10,22,0.12) 0%, rgba(9,10,22,0.36) 100%)',
+          pointerEvents: 'none',
+        }}
+      />
+    </div>
+  )
 }
 
 export default function MirageMoments() {
@@ -34,8 +116,9 @@ export default function MirageMoments() {
   const [error, setError] = React.useState('')
   const [detail, setDetail] = React.useState(null)
   const [draft, setDraft] = React.useState({ title: '', subtitle: '', dayLabel: '' })
-  const [lookup, setLookup] = React.useState({})
-  const [participantQueryByImage, setParticipantQueryByImage] = React.useState({})
+  const [cropEditorByImage, setCropEditorByImage] = React.useState({})
+  const [cropDrafts, setCropDrafts] = React.useState({})
+  const [savingImageId, setSavingImageId] = React.useState('')
 
   const loadMoments = React.useCallback(async () => {
     setLoading(true)
@@ -65,8 +148,8 @@ export default function MirageMoments() {
         subtitle: m.subtitle ?? '',
         dayLabel: m.dayLabel || '',
       })
-      setParticipantQueryByImage({})
-      setLookup({})
+      setCropEditorByImage({})
+      setCropDrafts({})
     } catch (e) {
       setError(e.message || 'Could not open moment.')
       setDetail(null)
@@ -160,6 +243,10 @@ export default function MirageMoments() {
         setDetail(m)
         await loadMoments()
       } catch (e) {
+        if (e?.status === 404) {
+          setDetail(null)
+          await loadMoments()
+        }
         setError(e.message || 'Upload failed.')
       }
     },
@@ -216,54 +303,67 @@ export default function MirageMoments() {
     [detail, openMoment, loadMoments],
   )
 
-  const runLookup = React.useCallback(async (imageId, qRaw) => {
-    const q = (qRaw || '').trim()
-    if (q.length < 2) {
-      setLookup((prev) => ({ ...prev, [imageId]: [] }))
-      return
-    }
-    try {
-      const rows = await adminPanel.lookup({ q })
-      const list = Array.isArray(rows) ? rows.slice(0, 8) : []
-      setLookup((prev) => ({ ...prev, [imageId]: list }))
-    } catch {
-      setLookup((prev) => ({ ...prev, [imageId]: [] }))
-    }
+  const toggleCropEditor = React.useCallback((image) => {
+    const imageId = image.imageId
+    setCropEditorByImage((current) => ({
+      ...current,
+      [imageId]: !current[imageId],
+    }))
+    setCropDrafts((current) => current[imageId] ? current : ({
+      ...current,
+      [imageId]: defaultCropDraft(image),
+    }))
   }, [])
 
-  const saveParticipants = React.useCallback(
-    async (imageId, participantUserIds) => {
-      if (!detail) return
-      setError('')
-      try {
-        const m = await adminPanel.mirageMomentImageParticipants(imageId, participantUserIds)
-        setDetail(m)
-      } catch (e) {
-        setError(e.message || 'Participants update failed.')
+  const updateCropDraft = React.useCallback((imageId, key, value) => {
+    setCropDrafts((current) => {
+      const base = current[imageId] || { slideTitle: '', cropX: 50, cropY: 50, cropZoom: 1 }
+      let nextValue = value
+      if (key === 'cropX' || key === 'cropY') nextValue = clampPercent(value)
+      if (key === 'cropZoom') nextValue = clampZoom(value)
+      return {
+        ...current,
+        [imageId]: {
+          ...base,
+          [key]: nextValue,
+        },
       }
-    },
-    [detail],
-  )
+    })
+  }, [])
 
-  const addParticipantChip = React.useCallback(
-    (imageId, userId, existingIds) => {
-      if (!userId || existingIds.includes(userId)) return
-      saveParticipants(imageId, [...existingIds, userId])
-      setParticipantQueryByImage((prev) => ({ ...prev, [imageId]: '' }))
-      setLookup((prev) => ({ ...prev, [imageId]: [] }))
-    },
-    [saveParticipants],
-  )
+  const resetCropDraft = React.useCallback((image) => {
+    setCropDrafts((current) => ({
+      ...current,
+      [image.imageId]: defaultCropDraft(image),
+    }))
+  }, [])
 
-  const removeParticipantChip = React.useCallback(
-    (imageId, userId, existingIds) => {
-      saveParticipants(
-        imageId,
-        existingIds.filter((uid) => uid !== userId),
-      )
-    },
-    [saveParticipants],
-  )
+  const saveImageCrop = React.useCallback(async (image) => {
+    const imageId = image.imageId
+    const cropDraft = cropDrafts[imageId] || defaultCropDraft(image)
+    setSavingImageId(imageId)
+    setError('')
+    try {
+      const m = await adminPanel.mirageMomentImagePatch(imageId, {
+        slideTitle: cropDraft.slideTitle?.trim?.() || null,
+        cropX: clampPercent(cropDraft.cropX),
+        cropY: clampPercent(cropDraft.cropY),
+        cropZoom: clampZoom(cropDraft.cropZoom),
+      })
+      setDetail(m)
+      const updatedImage = (m.images || []).find((item) => item.imageId === imageId)
+      if (updatedImage) {
+        setCropDrafts((current) => ({
+          ...current,
+          [imageId]: defaultCropDraft(updatedImage),
+        }))
+      }
+    } catch (e) {
+      setError(e.message || 'Crop save failed.')
+    } finally {
+      setSavingImageId('')
+    }
+  }, [cropDrafts])
 
   return (
     <div className="fade-in admin-mirage-moments" style={{ padding: '0 0 120px', maxWidth: 1280 }}>
@@ -273,8 +373,8 @@ export default function MirageMoments() {
           <h1 style={{ margin: 0, fontWeight: 800, letterSpacing: '-0.03em', fontSize: 28 }}>
             Mirage Moments
           </h1>
-          <p style={{ margin: '8px 0 0', color: 'rgba(226,229,246,0.6)', fontSize: 13, maxWidth: 560 }}>
-            One live Moment of the Day for the public hero. Publish unpublishes anything else automatically.
+          <p style={{ margin: '8px 0 0', color: 'rgba(226,229,246,0.6)', fontSize: 13, maxWidth: 620 }}>
+            One live Moment of the Day for the public hero. Frame each slide for a cleaner landscape card and modal preview.
           </p>
         </div>
         <button type="button" style={primaryBtnStyle} onClick={createDraft}>
@@ -291,7 +391,7 @@ export default function MirageMoments() {
       <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)', gap: 22 }}>
         <div className="glass" style={{ padding: 16, borderRadius: 16 }}>
           <div style={{ fontSize: 12, opacity: 0.55 }}>Moments ({moments.length})</div>
-          {loading ? <div style={{ marginTop: 12, fontSize: 13 }}>Loading…</div> : null}
+          {loading ? <div style={{ marginTop: 12, fontSize: 13 }}>Loading...</div> : null}
           {!loading && !moments.length ? (
             <div style={{ marginTop: 12, fontSize: 13 }}>No moments yet.</div>
           ) : null}
@@ -344,7 +444,7 @@ export default function MirageMoments() {
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 11, opacity: 0.55 }}>Title</label>
               <input
-                style={{ marginTop: 6, width: '100%', padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+                style={inputStyle}
                 value={draft.title}
                 onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
               />
@@ -352,7 +452,7 @@ export default function MirageMoments() {
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 11, opacity: 0.55 }}>Subtitle (optional)</label>
               <input
-                style={{ marginTop: 6, width: '100%', padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+                style={inputStyle}
                 value={draft.subtitle}
                 onChange={(e) => setDraft((d) => ({ ...d, subtitle: e.target.value }))}
               />
@@ -360,7 +460,7 @@ export default function MirageMoments() {
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 11, opacity: 0.55 }}>Day label</label>
               <input
-                style={{ marginTop: 6, width: '100%', maxWidth: 360, padding: '8px 10px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit' }}
+                style={{ ...inputStyle, maxWidth: 360 }}
                 value={draft.dayLabel}
                 onChange={(e) => setDraft((d) => ({ ...d, dayLabel: e.target.value }))}
               />
@@ -373,103 +473,127 @@ export default function MirageMoments() {
 
             <div style={{ fontWeight: 600, marginBottom: 10 }}>Slides</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {sortSlides(detail.images).map((img) => (
-                <div
-                  key={img.imageId}
-                  style={{
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 14,
-                    padding: 12,
-                    display: 'grid',
-                    gridTemplateColumns: '120px minmax(0,1fr)',
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ aspectRatio: '4/5', borderRadius: 10, overflow: 'hidden', background: 'rgba(0,0,0,0.25)' }}>
-                    <img alt="" src={img.thumbnailUrl || img.imageUrl || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, opacity: 0.6 }}>
-                      {img.filename}{' '}{img.isCover ? ' · cover' : ''}
+              {sortSlides(detail.images).map((img) => {
+                const cropDraft = cropDrafts[img.imageId] || defaultCropDraft(img)
+                const editingCrop = !!cropEditorByImage[img.imageId]
+                return (
+                  <div
+                    key={img.imageId}
+                    style={{
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 14,
+                      padding: 12,
+                      display: 'grid',
+                      gridTemplateColumns: '140px minmax(0,1fr)',
+                      gap: 12,
+                    }}
+                  >
+                    <div>
+                      <CropPreview image={img} crop={cropDraft} aspectRatio="3 / 2" maxHeight={120} />
                     </div>
-                    <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      <button type="button" style={ghostBtnStyle} onClick={() => patchImageOrder(img.imageId, -1)}>
-                        ↑
-                      </button>
-                      <button type="button" style={ghostBtnStyle} onClick={() => patchImageOrder(img.imageId, 1)}>
-                        ↓
-                      </button>
-                      <button type="button" style={ghostBtnStyle} onClick={() => setCover(img.imageId)}>
-                        Make cover
-                      </button>
-                      <button type="button" style={ghostBtnStyle} onClick={() => removeImage(img.imageId)}>
-                        Remove
-                      </button>
-                    </div>
-                    <div style={{ marginTop: 12 }}>
-                      <label style={{ display: 'block', fontSize: 11, opacity: 0.55 }}>Tag Ascent participants</label>
-                      <input
-                        style={{ marginTop: 6, width: '100%', padding: '7px 9px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(0,0,0,0.2)', color: 'inherit', fontSize: 13 }}
-                        placeholder="Search name or username"
-                        value={participantQueryByImage[img.imageId] || ''}
-                        onChange={(e) => {
-                          const v = e.target.value
-                          setParticipantQueryByImage((prev) => ({ ...prev, [img.imageId]: v }))
-                          runLookup(img.imageId, v)
-                        }}
-                      />
-                      {Array.isArray(lookup[img.imageId]) && lookup[img.imageId].length > 0 ? (
-                        <div style={{ marginTop: 6, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, overflow: 'hidden' }}>
-                          {lookup[img.imageId].map((row) => (
+                    <div>
+                      <div style={{ fontSize: 11, opacity: 0.6 }}>
+                        {img.filename}{img.isCover ? ' · cover' : ''}
+                      </div>
+                      <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button type="button" style={ghostBtnStyle} onClick={() => patchImageOrder(img.imageId, -1)}>
+                          ↑
+                        </button>
+                        <button type="button" style={ghostBtnStyle} onClick={() => patchImageOrder(img.imageId, 1)}>
+                          ↓
+                        </button>
+                        <button type="button" style={ghostBtnStyle} onClick={() => toggleCropEditor(img)}>
+                          {editingCrop ? 'Hide crop' : 'Crop'}
+                        </button>
+                        <button type="button" style={ghostBtnStyle} onClick={() => setCover(img.imageId)}>
+                          Make cover
+                        </button>
+                        <button type="button" style={ghostBtnStyle} onClick={() => removeImage(img.imageId)}>
+                          Remove
+                        </button>
+                      </div>
+
+                      {editingCrop ? (
+                        <div style={{ marginTop: 14, display: 'grid', gap: 14 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(260px, 1fr)', gap: 16, alignItems: 'start' }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, opacity: 0.55 }}>Slide title</label>
+                              <input
+                                style={inputStyle}
+                                value={cropDraft.slideTitle}
+                                onChange={(e) => updateCropDraft(img.imageId, 'slideTitle', e.target.value)}
+                                placeholder="Optional line shown on the public hero"
+                              />
+
+                              <div style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+                                <label style={{ display: 'grid', gap: 6, fontSize: 12 }}>
+                                  <span style={{ opacity: 0.65 }}>Horizontal framing · {Math.round(cropDraft.cropX)}%</span>
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    value={cropDraft.cropX}
+                                    onChange={(e) => updateCropDraft(img.imageId, 'cropX', e.target.value)}
+                                  />
+                                </label>
+                                <label style={{ display: 'grid', gap: 6, fontSize: 12 }}>
+                                  <span style={{ opacity: 0.65 }}>Vertical framing · {Math.round(cropDraft.cropY)}%</span>
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    value={cropDraft.cropY}
+                                    onChange={(e) => updateCropDraft(img.imageId, 'cropY', e.target.value)}
+                                  />
+                                </label>
+                                <label style={{ display: 'grid', gap: 6, fontSize: 12 }}>
+                                  <span style={{ opacity: 0.65 }}>Zoom · {cropDraft.cropZoom.toFixed(2)}x</span>
+                                  <input
+                                    type="range"
+                                    min="1"
+                                    max="2.5"
+                                    step="0.01"
+                                    value={cropDraft.cropZoom}
+                                    onChange={(e) => updateCropDraft(img.imageId, 'cropZoom', e.target.value)}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+
+                            <div>
+                              <div style={{ fontSize: 11, opacity: 0.55, marginBottom: 8 }}>Homepage crop preview</div>
+                              <CropPreview image={img} crop={cropDraft} aspectRatio="3 / 2" maxHeight={220} />
+                              <div style={{ marginTop: 10, fontSize: 11, opacity: 0.55 }}>
+                                This is the frame visitors will see before opening the zoomed modal.
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                             <button
-                              key={`${img.imageId}-${row.id}`}
                               type="button"
-                              style={{
-                                display: 'block',
-                                width: '100%',
-                                textAlign: 'left',
-                                padding: '8px 10px',
-                                border: 'none',
-                                background: 'rgba(255,255,255,0.04)',
-                                color: 'inherit',
-                                cursor: 'pointer',
-                                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                              }}
-                              onClick={() =>
-                                addParticipantChip(img.imageId, row.id, (img.participants || []).map((p) => p.userId))
-                              }
+                              style={ghostBtnStyle}
+                              onClick={() => resetCropDraft(img)}
                             >
-                              <div style={{ fontWeight: 600 }}>{row.name}</div>
-                              <div style={{ fontSize: 11, opacity: 0.55 }}>{row.username}</div>
+                              Reset crop
                             </button>
-                          ))}
+                            <button
+                              type="button"
+                              style={{ ...primaryBtnStyle, opacity: savingImageId === img.imageId ? 0.7 : 1 }}
+                              disabled={savingImageId === img.imageId}
+                              onClick={() => saveImageCrop(img)}
+                            >
+                              {savingImageId === img.imageId ? 'Saving...' : 'Save crop'}
+                            </button>
+                          </div>
                         </div>
                       ) : null}
-                      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {(img.participants || []).map((p) => (
-                          <button
-                            type="button"
-                            key={`${img.imageId}-p-${p.userId}`}
-                            onClick={() =>
-                              removeParticipantChip(img.imageId, p.userId, (img.participants || []).map((x) => x.userId))
-                            }
-                            style={{
-                              borderRadius: 999,
-                              padding: '3px 8px',
-                              border: '1px solid rgba(255,255,255,0.15)',
-                              background: 'rgba(255,255,255,0.06)',
-                              fontSize: 12,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            {p.name || p.username} ✕
-                          </button>
-                        ))}
-                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             {!detail.images?.length ? <div style={{ marginTop: 12, opacity: 0.6, fontSize: 13 }}>No slides yet.</div> : null}

@@ -34,7 +34,15 @@ def create_access_token(
     subject: str,
     role: str | None = None,
     expires_delta: timedelta | None = None,
+    extra_claims: dict[str, Any] | None = None,
 ) -> str:
+    """Create a signed JWT.
+
+    `extra_claims` is merged into the payload — used by the Sidequest
+    booth_volunteer flow to carry a `booth_id` so the booth tool can
+    enforce that a volunteer awards only at their assigned booth.
+    Reserved keys (`sub`, `exp`, `role`) are not overwritable via this arg.
+    """
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
@@ -42,6 +50,11 @@ def create_access_token(
     to_encode: dict[str, Any] = {"sub": subject, "exp": expire}
     if role is not None:
         to_encode["role"] = role
+    if extra_claims:
+        for k, v in extra_claims.items():
+            if k in {"sub", "exp", "role"}:
+                continue
+            to_encode[k] = v
     return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 

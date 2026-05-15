@@ -15,7 +15,7 @@ _MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _SAFE_FILENAME_RE = re.compile(r"[^\w\-]")
 
 from app.api.deps import get_admin_only, get_admin_or_em, get_current_admin, get_scanner_or_above
-from app.db.supabase_client import get_supabase
+from app.db.supabase_client import first_row, get_supabase
 from app.models.admin import Admin
 from app.schemas.admin_panel import (
     AdminUserCreate,
@@ -27,6 +27,8 @@ from app.schemas.admin_panel import (
     EventMealsUpdate,
     EventStatsItem,
     EventUpdateRequest,
+    ManualEnrollRequest,
+    ManualEnrollResponse,
     MealEntryResponse,
     MyEventItem,
     ParticipantItem,
@@ -74,6 +76,7 @@ from app.services.admin_panel_service import (
 from app.services.bulk_enroll_service import (
     bulk_enroll,
     find_uncovered_users,
+    manual_enroll,
     parse_upload,
     regenerate_passwords_for_ids,
 )
@@ -86,6 +89,8 @@ class _CoveredEmailsBody(BaseModel):
 
 class _RegenerateIdsBody(BaseModel):
     user_ids: list[str] = []
+
+
 from app.services.credentials_service import (
     list_requested_members,
     update_requested_member_status,
@@ -103,6 +108,7 @@ from app.services.mirage_pipeline_service import (
     update_mirage_job_image_review,
 )
 from app.services.announcement_service import list_announcements
+from app.services.cache_service import auth_aware_cache_key_builder
 
 router = APIRouter()
 
@@ -220,10 +226,40 @@ async def post_regenerate_uncovered(
     return await regenerate_passwords_for_ids(supabase, body.user_ids)
 
 
+# ── Manual single-participant entry ────────────────────────────────────────────────────
+
+@router.post("/registrations/manual", response_model=ManualEnrollResponse, status_code=201)
+async def manual_registration(
+    body: ManualEnrollRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> ManualEnrollResponse:
+    """
+    Manually add a single participant to an event.
+
+    - Creates the user account if the email is new (password is hashed server-side).
+    - Adds the event to an existing user's registrations (409 if already enrolled).
+    - team_mode: 'none' | 'existing' | 'new'
+    Admin role only.
+    """
+    data = await manual_enroll(
+        supabase,
+        name=body.name,
+        email=body.email,
+        plain_password=body.password,
+        event_id=body.event_id,
+        team_mode=body.team_mode,
+        existing_team_name=body.existing_team_name,
+        existing_member_name=body.existing_member_name,
+        new_team_name=body.new_team_name,
+    )
+    return ManualEnrollResponse(**data)
+
+
 # ── Overview ──────────────────────────────────────────────────────────────────
 
 @router.get("/stats", response_model=StatsResponse)
-@cache(expire=60)
+@cache(expire=60, key_builder=auth_aware_cache_key_builder)
 async def overview_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -238,7 +274,7 @@ async def overview_stats(
 
 
 @router.get("/events/stats", response_model=list[EventStatsItem])
-@cache(expire=60)
+@cache(expire=60, key_builder=auth_aware_cache_key_builder)
 async def events_stats(
     supabase: AsyncClient = Depends(get_supabase),
     admin: Admin = Depends(get_admin_or_em),  # Scanner blocked
@@ -572,6 +608,7 @@ async def create_admin(
         mail=body.mail,
         phone=body.phone,
         events=body.events,
+        booth_id=body.booth_id,
     )
     return AdminUserResponse(**data)
 
@@ -596,6 +633,9 @@ async def update_admin(
         mail=body.mail,
         phone=body.phone,
         events=body.events,
+        booth_id=body.booth_id,
+        # Pydantic v2 — distinguish "field omitted" from "explicit null"
+        booth_id_provided="booth_id" in body.model_fields_set,
     )
     return AdminUserResponse(**data)
 
@@ -606,12 +646,35 @@ async def delete_admin(
     supabase: AsyncClient = Depends(get_supabase),
     current_admin: Admin = Depends(get_admin_only),
 ) -> AdminUserResponse:
-    """
-    Remove an admin account.
-    Admin role only.
-    """
+    """Soft-deactivate an admin account. Admin role only."""
     data = await delete_admin_user(supabase, uid, current_admin.uid)
     return AdminUserResponse(**data)
+
+
+@router.post("/admin-users/{uid}/restore", response_model=AdminUserResponse)
+async def restore_admin(
+    uid: int,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> AdminUserResponse:
+    """Reactivate a previously deactivated admin account. Admin role only."""
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", uid)
+        .limit(1)
+        .execute()
+    )
+    row = first_row(resp)
+    if row is None:
+        raise HTTPException(404, "Admin not found")
+    await supabase.table("admins").update({"deleted_at": None}).eq("uid", uid).execute()
+    return AdminUserResponse(
+        uid=row["uid"], username=row["username"], name=row["name"],
+        role=row["role"], phone=row.get("phone"), mail=row["mail"],
+        events=row.get("events") or [],
+        message="Admin restored successfully",
+    )
 
 
 # ── Meals management ──────────────────────────────────────────────────────────
@@ -842,26 +905,6 @@ async def admin_publish_mirage_job(
     return MirageJobStatusResponse(**item)
 
 
-@router.get("/mirage/moments", response_model=list[MirageMomentAdminResponse])
-async def admin_list_mirage_moments(
-    supabase: AsyncClient = Depends(get_supabase),
-    _: Admin = Depends(get_admin_only),
-) -> list[MirageMomentAdminResponse]:
-    items = await mirage_pipeline_service.list_mirage_moments(supabase)
-    return [MirageMomentAdminResponse(**item) for item in items]
-
-
-@router.post("/mirage/moments", response_model=MirageMomentAdminResponse, status_code=201)
-async def admin_create_mirage_moment(
-    body: MirageMomentCreateRequest,
-    supabase: AsyncClient = Depends(get_supabase),
-    admin: Admin = Depends(get_admin_only),
-) -> MirageMomentAdminResponse:
-    payload = body.model_dump(exclude_none=True)
-    item = await mirage_pipeline_service.create_mirage_moment(supabase, admin, payload)
-    return MirageMomentAdminResponse(**item)
-
-
 @router.get("/mirage/moments/{moment_id}", response_model=MirageMomentAdminResponse)
 async def admin_get_mirage_moment_detail(
     moment_id: str,
@@ -881,6 +924,26 @@ async def admin_patch_mirage_moment(
 ) -> MirageMomentAdminResponse:
     raw = body.model_dump(exclude_unset=True)
     item = await mirage_pipeline_service.patch_mirage_moment(supabase, admin, moment_id, raw)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.get("/mirage/moments", response_model=list[MirageMomentAdminResponse])
+async def admin_list_mirage_moments(
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> list[MirageMomentAdminResponse]:
+    items = await mirage_pipeline_service.list_mirage_moments(supabase)
+    return [MirageMomentAdminResponse(**item) for item in items]
+
+
+@router.post("/mirage/moments", response_model=MirageMomentAdminResponse, status_code=201)
+async def admin_create_mirage_moment(
+    body: MirageMomentCreateRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    payload = body.model_dump(exclude_none=True)
+    item = await mirage_pipeline_service.create_mirage_moment(supabase, admin, payload)
     return MirageMomentAdminResponse(**item)
 
 

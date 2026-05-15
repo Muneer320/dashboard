@@ -323,7 +323,7 @@ export default function Landing() {
             Backed by the ones who build.
           </h2>
         </div>
-        {/* <SponsorStrip isMobile={isMobile} /> */}
+      <SponsorStrip isMobile={isMobile} />
       </section>
 
       <Footer />
@@ -364,18 +364,51 @@ function Rings() {
   );
 }
 
+const s3Base = "https://ascent-users.s3.ap-south-1.amazonaws.com/sponsors";
+const SPONSORS_LIST = [
+  { name: 'Red Bull',              logo: `${s3Base}/RedBull.svg`,             tier: 'ENERGY' },
+  { name: 'Google for Developers', logo: `${s3Base}/Google%20for%20Developers.svg`, tier: 'GOLD' },
+  { name: 'Meta Cognition',        logo: `${s3Base}/MetaCognition.svg`,       tier: 'GOLD' },
+  { name: 'Vorflux.AI',            logo: `${s3Base}/Vorflux.svg`,             tier: 'GOLD' },
+  { name: 'Together Fund',         logo: `${s3Base}/TogetherFund.svg`,        tier: 'SILVER' },
+  { name: 'CodeCrafters',          logo: `${s3Base}/CodeCrafters.svg`,        tier: 'SILVER' },
+  { name: 'Dymension',             logo: `${s3Base}/Dymension.svg`,           tier: 'SILVER' },
+  { name: 'Omium AI',              logo: `${s3Base}/Omium.svg`,               tier: 'SILVER' },
+  { name: 'Fueler',                logo: `${s3Base}/Fueler.svg`,              tier: 'SILVER' },
+  { name: 'Eyecandy Robotics',     logo: `${s3Base}/EyeCandy%20Robotics.svg`, tier: 'ROBOTICS' },
+  { name: 'CCCL Claude Community', logo: `${s3Base}/CCCL.svg`,                tier: 'COMMUNITY' },
+];
+
 function Marquee() {
-  const items = ['VORFLUX.AI',' ',  '★', ' ', 'Google for Developers', ' ', '★', ' ', 'Slikk', ' ', '★',, ' ',  'Together Fund', ' ', '★', ' '];
+  const all = [...SPONSORS_LIST, ...SPONSORS_LIST, ...SPONSORS_LIST];
   return (
-    <div style={{ display: 'flex', gap: 48, whiteSpace: 'nowrap', animation: 'marq 20s linear infinite' }}>
-      <style>{`@keyframes marq { to { transform: translateX(-50%); } }`}</style>
-      {[...items, ...items].map((t, i) => (
-        <span key={i} style={{
-          fontFamily: 'var(--f-display)',
-          fontSize: 24, fontWeight: 500,
-          color: t === '★' ? 'var(--violet)' : 'var(--ink-dim)',
-          letterSpacing: t === '★' ? 0 : '0.04em',
-        }}>{t}</span>
+    <div style={{ 
+      display: 'flex', 
+      gap: 64, 
+      alignItems: 'center', 
+      whiteSpace: 'nowrap', 
+      animation: 'marq 40s linear infinite',
+      width: 'fit-content'
+    }}>
+      <style>{`@keyframes marq { from { transform: translateX(0); } to { transform: translateX(-33.333%); } }`}</style>
+      {all.map((s, i) => (
+        <React.Fragment key={i}>
+          {s.logo ? (
+            <img 
+              src={s.logo} 
+              alt={s.name} 
+              style={{ height: 26, opacity: 0.7, objectFit: 'contain' }} 
+            />
+          ) : (
+            <span style={{
+              fontFamily: 'var(--f-display)',
+              fontSize: 20, fontWeight: 500,
+              color: 'var(--ink-dim)',
+              letterSpacing: '0.04em',
+            }}>{s.name}</span>
+          )}
+          <span style={{ color: 'var(--violet)', fontSize: 18, opacity: 0.5 }}>★</span>
+        </React.Fragment>
       ))}
     </div>
   );
@@ -383,43 +416,63 @@ function Marquee() {
 
 function SponsorStrip({ isMobile }) {
   const tiers = [
-    { label: 'TITLE', names: ['NIMBUS/AI', 'HELIOS'] },
-    { label: 'PLATINUM', names: ['MONORAIL', 'GRIDLOCK', 'UMBRA'] },
-    { label: 'GOLD', names: ['FORMA', 'KERNEL', 'QUANTA', 'REFRACT', 'SPINDLE'] },
-    { label: 'COMMUNITY', names: ['DEVSTACK', 'LOOPCO', 'MOSAIC', 'PARAGON', 'ATLAS', 'VIREO'] },
+    { label: 'ENERGY', key: 'ENERGY' },
+    { label: 'GOLD', key: 'GOLD' },
+    { label: 'SILVER', key: 'SILVER' },
+    { label: 'ROBOTICS', key: 'ROBOTICS' },
+    { label: 'COMMUNITY', key: 'COMMUNITY' },
   ];
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {tiers.map(tier => (
-        <div key={tier.label} style={{
-          display: isMobile ? 'flex' : 'grid',
-          flexDirection: isMobile ? 'column' : undefined,
-          gridTemplateColumns: isMobile ? undefined : '120px 1fr',
-          padding: isMobile ? '20px 20px' : '24px 48px',
-          borderTop: '1px solid var(--glass-border)',
-          alignItems: isMobile ? 'flex-start' : 'center',
-          gap: isMobile ? 10 : 0,
-        }}>
-          <div className="eyebrow" style={{ color: 'var(--ink-mute)', minWidth: isMobile ? undefined : 120 }}>{tier.label}</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? 16 : 32, rowGap: 14 }}>
-            {tier.names.map(n => (
-              <div key={n} style={{
-                fontFamily: 'var(--f-display)',
-                fontSize: tier.label === 'TITLE' ? (isMobile ? 22 : 32) : tier.label === 'PLATINUM' ? (isMobile ? 18 : 24) : (isMobile ? 15 : 18),
-                fontWeight: 600,
-                color: tier.label === 'TITLE' ? 'var(--ink)' : 'var(--ink-dim)',
-                letterSpacing: '-0.01em',
-                cursor: 'pointer', transition: 'color .2s, text-shadow .2s',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'var(--violet)'; e.currentTarget.style.textShadow = '0 0 24px rgba(127,119,221,0.5)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = tier.label === 'TITLE' ? 'var(--ink)' : 'var(--ink-dim)'; e.currentTarget.style.textShadow = 'none'; }}
-              >
-                {n}
-              </div>
-            ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {tiers.map(tier => {
+        const sponsors = SPONSORS_LIST.filter(s => s.tier === tier.key);
+        if (sponsors.length === 0) return null;
+        return (
+          <div key={tier.label} style={{
+            display: isMobile ? 'flex' : 'grid',
+            flexDirection: isMobile ? 'column' : undefined,
+            gridTemplateColumns: isMobile ? undefined : '160px 1fr',
+            padding: isMobile ? '24px 20px' : '32px 48px',
+            borderTop: '1px solid var(--glass-border)',
+            alignItems: isMobile ? 'flex-start' : 'center',
+            gap: isMobile ? 14 : 0,
+            background: tier.key === 'ENERGY' ? 'rgba(127,119,221,0.03)' : 'transparent',
+          }}>
+            <div className="eyebrow" style={{ color: 'var(--ink-mute)', minWidth: isMobile ? undefined : 160 }}>{tier.label}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? 24 : 48, rowGap: 20, alignItems: 'center' }}>
+              {sponsors.map(s => (
+                <div key={s.name} style={{ transition: 'transform .2s', cursor: 'pointer' }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  {s.logo ? (
+                    <img 
+                      src={s.logo} 
+                      alt={s.name} 
+                      style={{ 
+                        height: tier.key === 'ENERGY' ? (isMobile ? 32 : 44) : tier.key === 'GOLD' ? (isMobile ? 24 : 32) : (isMobile ? 20 : 26), 
+                        opacity: 0.9, 
+                        maxWidth: isMobile ? 140 : 200,
+                        objectFit: 'contain'
+                      }} 
+                    />
+                  ) : (
+                    <div style={{
+                      fontFamily: 'var(--f-display)',
+                      fontSize: tier.key === 'ENERGY' ? (isMobile ? 22 : 32) : tier.key === 'GOLD' ? (isMobile ? 18 : 24) : (isMobile ? 15 : 18),
+                      fontWeight: 600,
+                      color: 'var(--ink)',
+                      letterSpacing: '-0.01em',
+                    }}>
+                      {s.name}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

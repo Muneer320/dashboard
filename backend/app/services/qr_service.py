@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
 from supabase import AsyncClient
 
@@ -47,35 +50,86 @@ def _next_meal_key(food: dict) -> tuple[str, int]:
     return f"meal{claimed + 1}", claimed
 
 
-async def scan_food(supabase: AsyncClient, user: User) -> str:
+async def scan_food(supabase: AsyncClient, user: User, event_id: str) -> str:
     """
-    Claim the next meal slot for the user.
+    Increment meal_count for the user in a specific event.
 
-    Logic: allowance = sum(event.meals_count) over the events the user is
-    registered for. Claimed = number of ``True`` entries in ``users.food``.
-    If claimed < allowance, assign ``food["meal{claimed+1}"] = True`` and
-    succeed. Otherwise reject with a clear message so the scanner UI can
-    show a red alert.
+    Logic:
+    1. Check if user is registered for this event
+    2. Get event's meals_count limit
+    3. Get current meal_count for this event (or 0)
+    4. If current < limit, increment and save
+    5. Otherwise reject
+
+    Data structure: users.food = { "event_id": { "meal_count": 2 }, ... }
     """
-    allowance = await _user_meal_allowance(supabase, user)
-    if allowance <= 0:
+    # Check if user is registered for this event
+    if event_id not in (user.events or {}):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User is not registered for any event — no meal allowance",
+            detail="User is not registered for this event",
         )
 
+    # Get the event to check meals_count limit
+    resp = await (
+        supabase.table("events")
+        .select("meals_count")
+        .eq("id", event_id)
+        .execute()
+    )
+    rows = supabase_rows(resp)
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found",
+        )
+
+    event_limit = int(rows[0].get("meals_count") if rows[0].get("meals_count") is not None else DEFAULT_EVENT_MEALS_COUNT)
+
+    # Get current food object and extract fields for this event
     food = dict(user.food or {})
-    next_key, claimed = _next_meal_key(food)
+    event_food = food.get(event_id, {})
+    if not isinstance(event_food, dict):
+        event_food = {}
 
-    if claimed >= allowance:
+    current_count = event_food.get("meal_count", 0)
+
+    # ── 1-hour cooldown between meal claims ──────────────────────────────────
+    COOLDOWN_MINUTES = 60
+    last_claim_raw = event_food.get("last_claim_time")
+    if last_claim_raw:
+        try:
+            last_claim_dt = datetime.fromisoformat(last_claim_raw)
+            # Make timezone-aware if stored as naive UTC
+            if last_claim_dt.tzinfo is None:
+                last_claim_dt = last_claim_dt.replace(tzinfo=timezone.utc)
+            now_utc = datetime.now(timezone.utc)
+            elapsed_minutes = (now_utc - last_claim_dt).total_seconds() / 60
+            if elapsed_minutes < COOLDOWN_MINUTES:
+                wait = math.ceil(COOLDOWN_MINUTES - elapsed_minutes)
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=(
+                        f"Meal already claimed recently. "
+                        f"Please wait {wait} more minute{'s' if wait != 1 else ''} before the next claim."
+                    ),
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # Malformed timestamp — let the claim proceed
+
+    # ── Meal limit check ─────────────────────────────────────────────────────
+    if current_count >= event_limit:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"No meals left — already claimed {claimed}/{allowance}"
-            ),
+            detail=f"Already claimed all meals for this event ({current_count}/{event_limit})",
         )
 
-    food[next_key] = True
+    # ── Increment and record timestamp ───────────────────────────────────────
+    event_food["meal_count"]      = current_count + 1
+    event_food["last_claim_time"] = datetime.now(timezone.utc).isoformat()
+    food[event_id] = event_food
     user.food = food
 
     await (
@@ -84,7 +138,9 @@ async def scan_food(supabase: AsyncClient, user: User) -> str:
         .eq("id", str(user.id))
         .execute()
     )
-    return f"Meal {next_key} marked as consumed ({claimed + 1}/{allowance})"
+
+    next_count = current_count + 1
+    return f"Meal claimed ({next_count}/{event_limit})"
 
 
 async def scan_college_entry(supabase: AsyncClient, user: User) -> str:
@@ -114,6 +170,13 @@ async def scan_event_entry(
     """
     user_events = user.events or {}
     event_key = str(event.id)
+
+    # SECURITY: User must have passed main gate entry first
+    if not user.is_attending:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User has not completed main gate entry. Cannot mark event attendance without gate entry.",
+        )
 
     event_entry = user_events.get(event_key)
     if not event_entry:

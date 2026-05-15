@@ -6,17 +6,40 @@ import Landing from './components/landing';
 import { Credentials, Login } from './components/auth';
 import { Dashboard, EventDetail } from './components/dashboard';
 import { Explore, Schedule, Leaderboard } from './components/discover';
+import MerchStore from './components/merch';
 import { Mirage, Announcements, LostFound } from './components/community';
 import { MirageProfilePage } from './components/MirageEnrollmentCard';
 import { Rating, Feedback, Report } from './components/forms';
 import AdminApp from './admin-panel/App';
 import FAQ from './components/faq';
+import {
+  CoinsHomePage,
+  UGCSubmitPage,
+  RewardsPage,
+  CoinHistoryPage,
+  MyQRPage,
+  GuidePage,
+  TermsPage,
+  DisputesPage,
+} from './components/sidequest';
+import RedemptionBooth from './components/redemption';
+import Sponsors from './components/sponsors';
+import Tour from './components/tour';
 
 /** Blocks access to protected user pages — redirects to /login if not authed. */
 function RequireAuth({ children }) {
   const { user, ready } = useUserAuth();
   if (!ready) return null; // wait for token check before rendering
   return user ? children : <Navigate to="/login" replace />;
+}
+
+/** Blocks /coins/* for users whose is_attending flag is false. */
+function RequireAttending({ children }) {
+  const { user, ready } = useUserAuth();
+  if (!ready) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!user.is_attending) return <Navigate to="/dashboard" replace />;
+  return children;
 }
 
 /** Prevents logged-in users from seeing login page again. Redirects to respective dashboards. */
@@ -45,6 +68,9 @@ export default function App() {
         <Route path="/faq"           element={<FAQ />} />
         <Route path="/schedule"      element={<Schedule />}/>
         <Route path="/explore"       element={<Explore />}/>
+        <Route path="/merch"         element={<MerchStore />}/>
+        <Route path="/sponsors"      element={<Sponsors />}/>
+        <Route path="/tour"          element={<Tour />}/>
 
 
         {/* Protected user app */}
@@ -58,6 +84,19 @@ export default function App() {
         <Route path="/rating"        element={<RequireAuth><Rating /></RequireAuth>} />
         <Route path="/feedback"      element={<RequireAuth><Feedback /></RequireAuth>} />
         {/* <Route path="/report"        element={<RequireAuth><Report /></RequireAuth>} /> */}
+
+        {/* Redemption Booth — has its own auth (redemption_volunteer JWT) */}
+        <Route path="/redemption"        element={<RedemptionBooth />} />
+
+        {/* Sidequest — Ascent Coins */}
+        <Route path="/coins"             element={<RequireAttending><CoinsHomePage /></RequireAttending>} />
+        <Route path="/coins/submit"      element={<RequireAttending><UGCSubmitPage /></RequireAttending>} />
+        <Route path="/coins/rewards"     element={<RequireAttending><RewardsPage /></RequireAttending>} />
+        <Route path="/coins/qr"          element={<RequireAttending><MyQRPage /></RequireAttending>} />
+        <Route path="/coins/history"     element={<RequireAttending><CoinHistoryPage /></RequireAttending>} />
+        <Route path="/coins/guide"       element={<RequireAttending><GuidePage /></RequireAttending>} />
+        <Route path="/coins/terms"       element={<RequireAttending><TermsPage /></RequireAttending>} />
+        <Route path="/coins/disputes"    element={<RequireAttending><DisputesPage /></RequireAttending>} />
 
         <Route path="*"              element={<Navigate to="/" replace />} />
       </Routes>

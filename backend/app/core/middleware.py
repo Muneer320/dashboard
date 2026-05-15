@@ -20,6 +20,8 @@ PUBLIC_PATHS = {
     "/api/v1/auth/login",
     "/api/v1/auth/admin/login",
     "/api/v1/auth/register",
+    # Public self-registration for walk-in visitors — no token exists yet.
+    "/api/v1/auth/visitor-signup",
     "/api/v1/openapi.json",
     "/docs",
     "/redoc",
@@ -34,6 +36,11 @@ PUBLIC_PATHS = {
     "/api/v1/credentials-requests/events/",
     "/api/v1/events/public",
     "/api/v1/events/public/",
+    # Sidequest: Power Hour status is intentionally public so the dashboard
+    # banner and any kiosk/lobby screen can poll it without a token.
+    "/api/v1/coins/power-hour-status",
+    "/api/v1/coins/power-hour-status/",
+    "/api/v1/mirage/moment",
 }
 
 
@@ -73,7 +80,13 @@ class AccessControlMiddleware(BaseHTTPMiddleware):
         role = payload.get("role")
         request.state.token_payload = payload
 
-        _admin_roles = {"admin", "eventManager", "Scanner"}
+        # Sidequest extends the admin role set so PRM and ops volunteers can
+        # reach /api/v1/admin/* — fine-grained enforcement happens at the
+        # route layer via get_prm_volunteer_or_above / get_prm_lead_or_above.
+        _admin_roles = {
+            "admin", "eventManager", "Scanner",
+            "prm_volunteer", "prm_lead", "ops_lead",
+        }
         if path.startswith("/api/v1/admin") and role not in _admin_roles:
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,

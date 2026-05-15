@@ -447,12 +447,16 @@ const cBtnStyle = { background:'none', border:'none', cursor:'pointer', color:'#
 // ── Sub-tab: Participants ─────────────────────────────────────────────────────
 
 function ParticipantsTab({ eventId, eventName }) {
-  const { participants, updateParticipantStatus } = useData()
+  const { participants, participantsLoading, loadParticipants, updateParticipantStatus } = useData()
   const [search, setSearch] = useState('')
   const [confirmState, setConfirmState] = useState(null)
   const [modalP, setModalP] = useState(null)
   const [page, setPage] = useState(1)
   const PER_PAGE = 10
+
+  useEffect(() => {
+    loadParticipants()
+  }, [loadParticipants])
 
   const evParts = participants.filter(p => p.eventId === eventId)
   const filtered = evParts.filter(p => {
@@ -477,7 +481,9 @@ function ParticipantsTab({ eventId, eventName }) {
         <span className="badge badge-info">{evParts.length} registered</span>
       </div>
 
-      {filtered.length === 0 ? (
+      {participantsLoading && evParts.length === 0 ? (
+        <div className="empty-state"><p>Loading participants…</p></div>
+      ) : filtered.length === 0 ? (
         <div className="empty-state"><p>{search ? 'No participants match your search.' : 'No participants registered yet.'}</p></div>
       ) : (
         <>
@@ -536,7 +542,18 @@ const viewBtnSt = { display:'inline-flex', alignItems:'center', gap:4, padding:'
 // ── Sub-tab: Meals ────────────────────────────────────────────────────────────
 
 function MealsTab({ event }) {
-  const { eventsMealsCount, userMeals, participants, updateEventMealsCount, addMealEntry, removeMealEntry, loadMeals } = useData()
+  const {
+    eventsMealsCount,
+    mealsLoading,
+    userMeals,
+    participants,
+    participantsLoading,
+    updateEventMealsCount,
+    addMealEntry,
+    removeMealEntry,
+    loadMeals,
+    loadParticipants,
+  } = useData()
   const [busy, setBusy] = useState(false)
   const [err, setErr]   = useState('')
   const [search, setSearch] = useState('')
@@ -544,6 +561,10 @@ function MealsTab({ event }) {
   const evMeals = eventsMealsCount.find(e => e.id === event.id)
   const [draft, setDraft] = useState(evMeals?.meals_count ?? 0)
   useEffect(() => { setDraft(evMeals?.meals_count ?? 0) }, [evMeals?.meals_count])
+  useEffect(() => {
+    loadMeals()
+    loadParticipants()
+  }, [loadMeals, loadParticipants])
 
   // Only show users registered for this event
   const evUserIds = new Set(
@@ -575,7 +596,7 @@ function MealsTab({ event }) {
         <div style={{display:'flex',alignItems:'center',gap:10}}>
           <input className="input-field" type="number" min="0" max="20" value={draft} onChange={e=>setDraft(e.target.value)} style={{width:80}} disabled={busy} />
           <button className="btn btn-primary" onClick={handleSaveCount} disabled={busy || Number(draft)===evMeals?.meals_count}>{busy?'Saving…':'Save'}</button>
-          <button className="btn btn-ghost" onClick={loadMeals} disabled={busy}>Refresh</button>
+          <button className="btn btn-ghost" onClick={() => loadMeals({ force: true })} disabled={busy}>Refresh</button>
         </div>
       </div>
       {err && <div className="ed-alert ed-alert-err">{err}</div>}
@@ -588,7 +609,9 @@ function MealsTab({ event }) {
         <span className="badge badge-info">{filteredUsers.length} participants</span>
       </div>
 
-      {mealIds.length === 0 ? (
+      {(mealsLoading || participantsLoading) && filteredUsers.length === 0 ? (
+        <div className="empty-state"><p>Loading meal matrix…</p></div>
+      ) : mealIds.length === 0 ? (
         <div className="empty-state"><p>Set meal slots above to see the claim matrix.</p></div>
       ) : (
         <div className="table-responsive" style={{marginTop:12}}>
@@ -648,7 +671,7 @@ export default function EventDetail() {
   const { eventId } = useParams()
   const navigate    = useNavigate()
   const { user, isAdmin } = useAuth()
-  const { events, participants } = useData()
+  const { events } = useData()
 
   const [event, setEvent]       = useState(null)
   const [loading, setLoading]   = useState(true)

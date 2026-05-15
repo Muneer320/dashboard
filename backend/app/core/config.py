@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,6 +12,10 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Ascent Dashboard Backend"
     VERSION: str = "0.1.0"
     API_V1_PREFIX: str = "/api/v1"
+
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8000
+    DEBUG: bool = False
 
     JWT_SECRET_KEY: str = "change-this-in-env"
     JWT_ALGORITHM: str = "HS256"
@@ -54,6 +59,30 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     SMTP_USE_TLS: bool = True
     SMTP_FROM_EMAIL: str | None = None
+    REDIS_URL: str | None = None
+    CACHE_PREFIX: str = "ascent-cache"
+    REDIS_SOCKET_CONNECT_TIMEOUT_SECONDS: float = 2.0
+    LEADERBOARD_CACHE_TTL_SECONDS: int = 1800
+    WEB_CONCURRENCY: int = 2
+    UVICORN_KEEP_ALIVE_TIMEOUT_SECONDS: int = 20
+    UVICORN_BACKLOG: int = 2048
+    UVICORN_LIMIT_MAX_REQUESTS: int = 5000
+
+    # AWS S3 — UGC proof image storage
+    AWS_S3_REGION: str = "ap-south-1"
+    AWS_S3_UGC_BUCKET: str | None = None
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def _parse_debug(cls, value):  # type: ignore[no-untyped-def]
+        # Some deployment environments set DEBUG to strings like "release".
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"release", "prod", "production"}:
+                return False
+            if lowered in {"debug", "dev", "development"}:
+                return True
+        return value
 
 
 @lru_cache

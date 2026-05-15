@@ -233,6 +233,9 @@ def _check_database(settings: Settings) -> bool:
 
 
 def build_worker(settings: Settings, payload: ProcessJobRequest | None = None) -> MirageWorker:
+    from .face import FaceEngine
+    from .worker import AnchorIndexCache, MirageWorker
+
     payload = payload or ProcessJobRequest()
     db = MirageDatabase(settings)
     faces = FaceEngine(settings)
@@ -595,10 +598,6 @@ def create_app(
                 worker = worker_factory() if worker_factory is not None else build_worker(settings, payload)
                 attach_telemetry(worker, telemetry)
                 db = getattr(worker, "db", None)
-                if payload.retryRejectedAnchors and db is not None and hasattr(db, "reset_retryable_anchor_images"):
-                    db.reset_retryable_anchor_images()
-                if db is not None and hasattr(db, "reset_processing_anchor_images"):
-                    db.reset_processing_anchor_images(payload.userId)
                 if db is not None and hasattr(db, "get_job_asset_counts"):
                     asset_counts = db.get_job_asset_counts(job_id)
                     total_assets = int(asset_counts.get("total", 0))

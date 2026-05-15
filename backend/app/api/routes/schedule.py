@@ -10,6 +10,7 @@ PUT  /schedule/events/{event_id}   → replace event schedule                (ad
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi_cache.decorator import cache
 from supabase import AsyncClient
 
 from app.api.deps import get_admin_only, get_current_user
@@ -29,6 +30,7 @@ from app.services.schedule_service import (
     set_event_schedule,
     upsert_global_schedule,
 )
+from app.services.cache_service import auth_aware_cache_key_builder
 
 router = APIRouter()
 
@@ -36,6 +38,7 @@ router = APIRouter()
 # ── Global schedule ────────────────────────────────────────────────────────────
 
 @router.get("/global", response_model=list[GlobalScheduleItem])
+@cache(expire=120, key_builder=auth_aware_cache_key_builder)
 async def get_full_global_schedule(
     supabase: AsyncClient = Depends(get_supabase),
 ) -> list[GlobalScheduleItem]:
@@ -45,6 +48,7 @@ async def get_full_global_schedule(
 
 
 @router.get("/global/{day}", response_model=GlobalScheduleItem)
+@cache(expire=120, key_builder=auth_aware_cache_key_builder)
 async def get_global_schedule_day(
     day: date,
     supabase: AsyncClient = Depends(get_supabase),
@@ -70,6 +74,7 @@ async def upsert_global_schedule_day(
 # ── Event-specific schedule ────────────────────────────────────────────────────
 
 @router.get("/events/{event_id}", response_model=EventScheduleResponse)
+@cache(expire=120, key_builder=auth_aware_cache_key_builder)
 async def get_event_schedule_route(
     event_id: str,
     supabase: AsyncClient = Depends(get_supabase),

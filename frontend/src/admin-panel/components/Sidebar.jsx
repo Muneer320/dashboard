@@ -145,6 +145,51 @@ const NAV_ITEMS = [
       </svg>
     )
   },
+
+  // ── Sidequest section ──────────────────────────────────────────────
+  {
+    section: 'Sidequest',
+    key: 'ugcQueue', label: 'UGC Verification Queue',
+    path: '/admin/dashboard/ugc-queue',
+    access: ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>,
+  },
+  {
+    key: 'boothMonitor', label: 'Booth Monitor',
+    path: '/admin/dashboard/booth-monitor',
+    access: ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,
+  },
+  {
+    key: 'engagement', label: 'Engagement',
+    path: '/admin/dashboard/engagement',
+    access: ['admin', 'prm_lead', 'ops_lead'],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+  },
+  {
+    key: 'disputes', label: 'Disputes',
+    path: '/admin/dashboard/disputes',
+    access: ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+  },
+  {
+    key: 'inventory', label: 'Rewards',
+    path: '/admin/dashboard/inventory',
+    access: ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>,
+  },
+  {
+    key: 'auditLog', label: 'Audit Log',
+    path: '/admin/dashboard/audit-log',
+    access: ['admin', 'ops_lead'],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
+  },
+  {
+    key: 'coinsOverview', label: 'Coins Overview',
+    path: '/admin/dashboard/coins-overview',
+    access: ['admin', 'prm_lead', 'ops_lead'],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="9"/><path d="M9 9.5C9 8.1 10.3 7 12 7s3 1.1 3 2.5c0 1.8-2 2.5-3 3.5m0 2.5v.5"/></svg>,
+  },
 ]
 
 export default function Sidebar({ isOpen, onClose }) {
@@ -153,8 +198,16 @@ export default function Sidebar({ isOpen, onClose }) {
 
   const visibleItems = NAV_ITEMS.filter(item => item.access.includes(user?.role))
 
-  const roleLabel = { admin: 'Administrator', eventManager: 'Event Manager', Scanner: 'Scanner' }
-  const roleBadge = { admin: 'badge-accent', eventManager: 'badge-info', Scanner: 'badge-warning' }
+  const roleLabel = {
+    admin: 'Administrator', eventManager: 'Event Manager', Scanner: 'Scanner',
+    prm_volunteer: 'PRM Volunteer', prm_lead: 'PRM Lead', ops_lead: 'Ops Lead',
+    booth_volunteer: 'Booth Volunteer', redemption_volunteer: 'Redemption Volunteer',
+  }
+  const roleBadge = {
+    admin: 'badge-accent', eventManager: 'badge-info', Scanner: 'badge-warning',
+    prm_volunteer: 'badge-info', prm_lead: 'badge-accent', ops_lead: 'badge-accent',
+    booth_volunteer: 'badge-warning', redemption_volunteer: 'badge-success',
+  }
 
   function handleLogout() {
     logout()
@@ -191,19 +244,21 @@ export default function Sidebar({ isOpen, onClose }) {
 
       {/* Nav */}
       <nav className="sidebar-nav">
-        <p className="nav-section-label">Navigation</p>
+        {visibleItems.length > 0 && <p className="nav-section-label">Navigation</p>}
         {visibleItems.map(item => (
-          <NavLink
-            key={item.key}
-            to={item.path}
-            onClick={onClose}
-            className={({ isActive }) =>
-              `nav-item${isActive ? ' active' : ''}`
-            }
-          >
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-label">{item.label}</span>
-          </NavLink>
+          <React.Fragment key={item.key}>
+            {item.section && (
+              <p className="nav-section-label" style={{ marginTop: 14 }}>{item.section}</p>
+            )}
+            <NavLink
+              to={item.path}
+              onClick={onClose}
+              className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              <span className="nav-label">{item.label}</span>
+            </NavLink>
+          </React.Fragment>
         ))}
       </nav>
 

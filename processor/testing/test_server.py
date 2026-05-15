@@ -303,6 +303,9 @@ class ProcessorServerTests(unittest.TestCase):
         self.assertTrue(payload["backendDatabaseConnected"])
         self.assertFalse(payload["localDatabaseConnected"])
         self.assertIsNone(payload["backendDatabaseError"])
+        self.assertTrue(payload["autoAnchor"]["enabled"])
+        self.assertEqual(payload["autoAnchor"]["intervalSeconds"], AUTO_ANCHOR_INTERVAL_SECONDS)
+        self.assertIsNotNone(payload["autoAnchor"]["nextRunAt"])
         self.assertGreater(payload["autoAnchor"]["nextRunAt"], 0)
 
     def test_unpublish_job_endpoint_calls_database(self):
