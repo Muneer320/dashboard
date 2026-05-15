@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class MiragePhotoItem(BaseModel):
@@ -91,6 +91,7 @@ class MirageUserProfileResponse(BaseModel):
     approvedAnchorCount: int = 0
     requiredAnchorCount: int = 6
     maxAnchorCount: int = 10
+    anchorRevisionLivesRemaining: int = 3
     readyForSubmission: bool = False
     images: list[MirageAnchorImageItem] = Field(default_factory=list)
 
@@ -270,3 +271,146 @@ class MirageFaceMatchReviewResponse(BaseModel):
 class MirageJobStatusResponse(BaseModel):
     jobId: str
     status: str
+
+
+class MirageSearchPersonItem(BaseModel):
+    userId: str
+    name: Optional[str] = None
+    username: Optional[str] = None
+    email: Optional[str] = None
+    photoCount: int = 0
+    coverPhoto: Optional[MiragePhotoItem] = None
+    latestPhotoAt: Optional[str] = None
+
+
+class MirageSearchPeopleResponse(BaseModel):
+    query: str
+    people: list[MirageSearchPersonItem] = Field(default_factory=list)
+
+
+class MirageSearchPersonDetailResponse(BaseModel):
+    participant: MirageSearchPersonItem
+    photos: list[MiragePhotoItem] = Field(default_factory=list)
+
+
+class MirageMomentParticipantItem(BaseModel):
+    userId: str
+    name: Optional[str] = None
+    username: Optional[str] = None
+
+
+class MirageMomentImageItem(BaseModel):
+    imageId: str
+    displayOrder: int
+    storagePath: str
+    filename: str
+    mimeType: str
+    isCover: bool = False
+    imageUrl: Optional[str] = None
+    thumbnailUrl: Optional[str] = None
+    slideTitle: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    participants: list[MirageMomentParticipantItem] = Field(default_factory=list)
+
+
+class MirageMomentResponse(BaseModel):
+    momentId: str
+    title: str
+    subtitle: Optional[str] = None
+    dayLabel: str
+    status: Literal["draft", "published", "unpublished"] = "draft"
+    publishedAt: Optional[str] = None
+    images: list[MirageMomentImageItem] = Field(default_factory=list)
+
+
+class MirageMomentAdminResponse(MirageMomentResponse):
+    createdByAdminId: Optional[int] = None
+    updatedByAdminId: Optional[int] = None
+    createdAt: Optional[str] = None
+    updatedAt: Optional[str] = None
+
+
+class MirageMomentCreateRequest(BaseModel):
+    """Create a Mirage Moment (always starts as draft)."""
+
+    title: str
+    subtitle: Optional[str] = None
+    dayLabel: Optional[str] = None
+
+    @field_validator("title")
+    @classmethod
+    def _reject_blank_title(cls, value: str) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("must not be blank")
+        return value.strip()
+
+    @field_validator("subtitle", "dayLabel", mode="before")
+    @classmethod
+    def _trim_optional_strings(cls, value):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        return stripped or None
+
+
+class MirageMomentPatchRequest(BaseModel):
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    dayLabel: Optional[str] = None
+
+    @field_validator("title")
+    @classmethod
+    def _patch_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError("string required")
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("title must not be blank when provided")
+        return stripped
+
+    @field_validator("subtitle", mode="before")
+    @classmethod
+    def _patch_subtitle(cls, value):  # clear with null or blanks
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        return stripped or None
+
+    @field_validator("dayLabel")
+    @classmethod
+    def _patch_day_label(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError("string required")
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("dayLabel must not be blank when provided")
+        return stripped
+
+
+class MirageMomentImagePatchRequest(BaseModel):
+    slideTitle: Optional[str] = None
+    displayOrder: Optional[int] = Field(default=None, ge=1)
+    isCover: Optional[bool] = None
+
+    @field_validator("slideTitle")
+    @classmethod
+    def _trim_slide(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        return stripped or None
+
+
+class MirageMomentImageParticipantsRequest(BaseModel):
+    participantUserIds: list[str] = Field(default_factory=list)

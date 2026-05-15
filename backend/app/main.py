@@ -78,7 +78,6 @@ ANVIL_HTML = Path(__file__).resolve().parents[1] / "anvil.html"
 async def anvil_page():
     return FileResponse(ANVIL_HTML, media_type="text/html")
 
-
 def main() -> None:
     """Entrypoint for the `ascent-api` console script declared in pyproject.toml."""
     import uvicorn

@@ -14,7 +14,9 @@ from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from supabase import AsyncClient
 
+from app.core.config import settings
 from app.core.security import TokenError, decode_access_token
+from app.db.postgres import db_connection
 from app.db.supabase_client import first_row, get_supabase
 from app.models.admin import Admin
 from app.models.user import User
@@ -89,6 +91,35 @@ async def get_current_user_from_header_or_query(
     return await _resolve_user_from_token(token, supabase)
 
 
+async def _fetch_admin_by_uid_supabase(
+    supabase: AsyncClient,
+    admin_uid: int,
+) -> dict | None:
+    resp = await (
+        supabase.table("admins")
+        .select("*")
+        .eq("uid", admin_uid)
+        .limit(1)
+        .execute()
+    )
+    return first_row(resp)
+
+
+async def _fetch_admin_by_uid(
+    supabase: AsyncClient,
+    admin_uid: int,
+) -> dict | None:
+    try:
+        return await _fetch_admin_by_uid_supabase(supabase, admin_uid)
+    except Exception as exc:
+        if not settings.DATABASE_URL:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_upstream_unreachable_detail(exc),
+            ) from exc
+        return await _fetch_admin_by_uid_postgres(admin_uid)
+
+
 async def get_current_admin(
     supabase: AsyncClient = Depends(get_supabase),
     token: str = Depends(oauth2_scheme),
@@ -115,14 +146,7 @@ async def get_current_admin(
             detail="Invalid token payload",
         ) from exc
 
-    resp = await (
-        supabase.table("admins")
-        .select("*")
-        .eq("uid", admin_uid)
-        .limit(1)
-        .execute()
-    )
-    row = first_row(resp)
+    row = await _fetch_admin_by_uid(supabase, admin_uid)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")
@@ -178,6 +202,21 @@ _PRM_LEAD_ROLES = {"prm_lead", "ops_lead", "admin"}
 _OPS_LEAD_ROLES = {"ops_lead", "admin"}
 
 
+def _upstream_unreachable_detail(exc: Exception) -> str:
+    return (
+        "Database REST API unreachable (PostgREST/Supabase). "
+        "Check SUPABASE_URL and that the REST gateway is running. "
+        f"Original error: {exc}"
+    )
+
+
+async def _fetch_admin_by_uid_postgres(admin_uid: int) -> dict | None:
+    async with db_connection() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM public.admins WHERE uid = $1 LIMIT 1",
+            admin_uid,
+        )
+        return dict(row) if row is not None else None
 async def get_prm_volunteer_or_above(
     admin: Admin = Depends(get_current_admin),
 ) -> Admin:
@@ -250,14 +289,7 @@ async def get_booth_volunteer(
             detail="Invalid token payload",
         ) from exc
 
-    resp = await (
-        supabase.table("admins")
-        .select("*")
-        .eq("uid", admin_uid)
-        .limit(1)
-        .execute()
-    )
-    row = first_row(resp)
+    row = await _fetch_admin_by_uid(supabase, admin_uid)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin not found")

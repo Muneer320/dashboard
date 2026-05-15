@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date, datetime
 from typing import Any
@@ -46,3 +47,17 @@ def coerce_date(value: Any) -> date | None:
         return date.fromisoformat(str(value))
     except ValueError:
         return None
+
+
+def coerce_json_object(value: Any, *, default: dict | None = None) -> dict:
+    if value is None:
+        return {} if default is None else default
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {} if default is None else default
+        return parsed if isinstance(parsed, dict) else ({} if default is None else default)
+    return {} if default is None else default

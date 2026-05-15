@@ -49,7 +49,9 @@ async def scan_qr(
                 detail="event_id is required for food distribution",
             )
         message = await scan_food(supabase, target_user, payload.event_id)
-        status_text = "accepted" if "claimed" in message.lower() else "rejected"
+        status_text = "accepted" if any(
+            word in message.lower() for word in ("claimed", "marked")
+        ) else "rejected"
         return QRScanResponse(message=message, status=status_text)
 
     # Event-attendance mode

@@ -58,8 +58,6 @@ export function AuthProvider({ children }) {
       manageRegistrations: ['admin'],
       announcements:       ['admin'],
       requestedMembers:    ['admin'],
-
-      // Sidequest features
       ugcQueue:     ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
       boothMonitor: ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
       engagement:   ['admin', 'prm_lead', 'ops_lead'],
@@ -67,6 +65,7 @@ export function AuthProvider({ children }) {
       inventory:    ['admin', 'prm_volunteer', 'prm_lead', 'ops_lead'],
       auditLog:      ['admin', 'ops_lead'],
       coinsOverview: ['admin', 'prm_lead', 'ops_lead'],
+      mirageMoments:       ['admin'],
     }
     return (matrix[feature] || []).includes(user.role)
   }

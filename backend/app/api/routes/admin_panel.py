@@ -49,6 +49,11 @@ from app.schemas.mirage import (
     MirageJobImageReviewResponse,
     MirageJobListItem,
     MirageJobStatusResponse,
+    MirageMomentAdminResponse,
+    MirageMomentCreateRequest,
+    MirageMomentPatchRequest,
+    MirageMomentImagePatchRequest,
+    MirageMomentImageParticipantsRequest,
 )
 from app.services.admin_panel_service import (
     create_admin_user,
@@ -84,10 +89,13 @@ class _CoveredEmailsBody(BaseModel):
 
 class _RegenerateIdsBody(BaseModel):
     user_ids: list[str] = []
+
+
 from app.services.credentials_service import (
     list_requested_members,
     update_requested_member_status,
 )
+from app.services import mirage_pipeline_service as mirage_pipeline_service
 from app.services.mirage_pipeline_service import (
     approve_mirage_job,
     create_mirage_job,
@@ -249,7 +257,21 @@ async def manual_registration(
     return ManualEnrollResponse(**data)
 
 
-# ── Team lookup (by teammate email + event) ────────────────────────────────────
+class _RemoveMemberBody(BaseModel):
+    team_id: str
+    user_id: str
+    event_id: str
+
+
+class _ResetPasswordBody(BaseModel):
+    email: str
+    new_password: str
+
+
+class _SelectPhaseBody(BaseModel):
+    event_id: str
+    emails: list[str]
+
 
 @router.get("/team/lookup")
 async def team_lookup(
@@ -258,19 +280,10 @@ async def team_lookup(
     supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ):
-    """
-    Given a teammate's email and an event_id, return the team they belong to
-    for that event, including member names.
-
-    Returns:
-        { found: true,  team_id, team_name, member_count, members: [{id, name}] }
-     OR { found: false, reason: str }
-    """
     norm_email = (email or "").strip().lower()
     if not norm_email:
         return {"found": False, "reason": "Email is required"}
 
-    # 1. Find the user
     u_resp = await (
         supabase.table("users")
         .select("id, name, events")
@@ -292,7 +305,6 @@ async def team_lookup(
     if not team_id:
         return {"found": False, "reason": "User is not in a team for this event"}
 
-    # 2. Fetch team
     t_resp = await (
         supabase.table("teams")
         .select("id, name, member_ids")
@@ -307,11 +319,10 @@ async def team_lookup(
     team = t_rows[0]
     member_ids: list[str] = [str(m) for m in (team.get("member_ids") or [])]
 
-    # 3. Fetch member names + emails in one query (batch, 414-safe)
     members: list[dict] = []
-    _BATCH = 50
-    for i in range(0, len(member_ids), _BATCH):
-        chunk = member_ids[i : i + _BATCH]
+    batch_size = 50
+    for index in range(0, len(member_ids), batch_size):
+        chunk = member_ids[index:index + batch_size]
         m_resp = await (
             supabase.table("users")
             .select("id, name, username")
@@ -320,25 +331,19 @@ async def team_lookup(
         )
         members.extend(m_resp.data or [])
 
-    # Preserve the order from member_ids
     member_map = {str(m["id"]): m for m in members}
     ordered = [member_map[mid] for mid in member_ids if mid in member_map]
 
     return {
         "found": True,
-        "team_id":      str(team["id"]),
-        "team_name":    team["name"],
+        "team_id": str(team["id"]),
+        "team_name": team["name"],
         "member_count": len(member_ids),
-        "members":      [{"id": str(m["id"]), "name": m["name"], "email": m.get("username", "")} for m in ordered],
+        "members": [
+            {"id": str(m["id"]), "name": m["name"], "email": m.get("username", "")}
+            for m in ordered
+        ],
     }
-
-
-# ── Remove a member from a team ───────────────────────────────────────────────
-
-class _RemoveMemberBody(BaseModel):
-    team_id: str
-    user_id: str
-    event_id: str
 
 
 @router.post("/team/remove-member")
@@ -347,12 +352,6 @@ async def remove_team_member(
     supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ):
-    """
-    Remove a member from a team.
-    - Removes user_id from teams.member_ids
-    - Clears teamId in user.events[event_id] (user stays registered, just solo)
-    """
-    # 1. Fetch team
     t_resp = await (
         supabase.table("teams")
         .select("id, member_ids")
@@ -366,7 +365,10 @@ async def remove_team_member(
 
     current_members = [str(m) for m in (t_rows[0].get("member_ids") or [])]
     if body.user_id not in current_members:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User is not a member of this team.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a member of this team.",
+        )
 
     updated_members = [m for m in current_members if m != body.user_id]
     await (
@@ -376,7 +378,6 @@ async def remove_team_member(
         .execute()
     )
 
-    # 2. Clear teamId from user's event entry
     u_resp = await (
         supabase.table("users")
         .select("id, events")
@@ -400,14 +401,12 @@ async def remove_team_member(
                 .execute()
             )
 
-    return {"removed": True, "team_id": body.team_id, "user_id": body.user_id, "remaining": len(updated_members)}
-
-
-# ── Reset a user's password ──────────────────────────────────────────────────────────
-
-class _ResetPasswordBody(BaseModel):
-    email: str
-    new_password: str
+    return {
+        "removed": True,
+        "team_id": body.team_id,
+        "user_id": body.user_id,
+        "remaining": len(updated_members),
+    }
 
 
 @router.post("/users/reset-password")
@@ -416,18 +415,16 @@ async def reset_user_password(
     supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ):
-    """
-    Reset a participant's password. Admin only.
-    Hashes the new password server-side and updates users.password_hash.
-    """
-    import asyncio as _asyncio
     from app.core.security import get_password_hash
 
     norm_email = (body.email or "").strip().lower()
     if not norm_email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required.")
     if len(body.new_password) < 6:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters.",
+        )
 
     u_resp = await (
         supabase.table("users")
@@ -438,10 +435,13 @@ async def reset_user_password(
     )
     u_rows = u_resp.data or []
     if not u_rows:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No user found with email '{norm_email}'.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No user found with email '{norm_email}'.",
+        )
 
     user_row = u_rows[0]
-    hashed = await _asyncio.to_thread(get_password_hash, body.new_password)
+    hashed = await asyncio.to_thread(get_password_hash, body.new_password)
     await (
         supabase.table("users")
         .update({"password_hash": hashed})
@@ -452,48 +452,22 @@ async def reset_user_password(
     return {"reset": True, "name": user_row["name"], "email": norm_email}
 
 
-# ── Select Participants (phase = 1) ───────────────────────────────────────────
-
-class _SelectPhaseBody(BaseModel):
-    event_id: str
-    emails: list[str]
-
-
 @router.post("/registrations/select-phase")
 async def select_phase(
     body: _SelectPhaseBody,
     supabase: AsyncClient = Depends(get_supabase),
     _: Admin = Depends(get_admin_only),
 ):
-    """
-    Given a list of emails and an event_id, set phase = 1 inside
-    ``users.events[event_id]`` for each user found and registered.
-
-    Returns:
-        {
-          "updated":    <int>,
-          "edge_cases": [{"email": ..., "reason": ...}, ...]
-        }
-
-    Edge-case reasons:
-      - "User not found"
-      - "Not registered for this event"
-    """
-    updated    = 0
+    updated = 0
     edge_cases = []
-
-    # Normalise emails once
-    normalised = [e.strip().lower() for e in body.emails if e.strip()]
-
+    normalised = [email.strip().lower() for email in body.emails if email.strip()]
     if not normalised:
         return {"updated": 0, "edge_cases": []}
 
-    # Fetch matching users in batches of 50 to avoid HTTP 414 (URI Too Large).
-    # PostgREST encodes .in_() as a URL query param — large lists blow nginx's limit.
-    _BATCH = 50
+    batch_size = 50
     db_rows: list[dict] = []
-    for i in range(0, len(normalised), _BATCH):
-        chunk = normalised[i : i + _BATCH]
+    for index in range(0, len(normalised), batch_size):
+        chunk = normalised[index:index + batch_size]
         try:
             resp = await (
                 supabase.table("users")
@@ -506,14 +480,13 @@ async def select_phase(
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Database query failed (batch {i // _BATCH + 1}): {exc}",
-            )
+                detail=f"Database query failed (batch {index // batch_size + 1}): {exc}",
+            ) from exc
 
-    # Index by normalised username for O(1) lookup
     found = {
-        r["username"].strip().lower(): r
-        for r in db_rows
-        if isinstance(r.get("username"), str)
+        row["username"].strip().lower(): row
+        for row in db_rows
+        if isinstance(row.get("username"), str)
     }
 
     for email in normalised:
@@ -527,7 +500,6 @@ async def select_phase(
             edge_cases.append({"email": email, "reason": "Not registered for this event"})
             continue
 
-        # Safely copy event entry — guard against None / non-dict values in production
         raw_entry = events_col[body.event_id]
         event_entry = dict(raw_entry) if isinstance(raw_entry, dict) else {}
         event_entry["phase"] = 1
@@ -1194,3 +1166,124 @@ async def admin_publish_mirage_job(
 ) -> MirageJobStatusResponse:
     item = await publish_mirage_job(supabase, job_id)
     return MirageJobStatusResponse(**item)
+
+
+@router.get("/mirage/moments/{moment_id}", response_model=MirageMomentAdminResponse)
+async def admin_get_mirage_moment_detail(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.get_mirage_moment_detail(supabase, moment_id)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.patch("/mirage/moments/{moment_id}", response_model=MirageMomentAdminResponse)
+async def admin_patch_mirage_moment(
+    moment_id: str,
+    body: MirageMomentPatchRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    raw = body.model_dump(exclude_unset=True)
+    item = await mirage_pipeline_service.patch_mirage_moment(supabase, admin, moment_id, raw)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.get("/mirage/moments", response_model=list[MirageMomentAdminResponse])
+async def admin_list_mirage_moments(
+    supabase: AsyncClient = Depends(get_supabase),
+    _: Admin = Depends(get_admin_only),
+) -> list[MirageMomentAdminResponse]:
+    items = await mirage_pipeline_service.list_mirage_moments(supabase)
+    return [MirageMomentAdminResponse(**item) for item in items]
+
+
+@router.post("/mirage/moments", response_model=MirageMomentAdminResponse, status_code=201)
+async def admin_create_mirage_moment(
+    body: MirageMomentCreateRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    payload = body.model_dump(exclude_none=True)
+    item = await mirage_pipeline_service.create_mirage_moment(supabase, admin, payload)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.post("/mirage/moments/{moment_id}/images", response_model=MirageMomentAdminResponse)
+async def admin_add_mirage_moment_images(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+    images: list[UploadFile] = File(..., description="One or more images for this moment"),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.add_mirage_moment_images(supabase, admin, moment_id, images)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.patch("/mirage/moment-images/{image_id}", response_model=MirageMomentAdminResponse)
+async def admin_patch_mirage_moment_image(
+    image_id: str,
+    body: MirageMomentImagePatchRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    raw = body.model_dump(exclude_unset=True)
+    item = await mirage_pipeline_service.patch_mirage_moment_image(supabase, admin, image_id, raw)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.delete("/mirage/moment-images/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_mirage_moment_image(
+    image_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> Response:
+    await mirage_pipeline_service.delete_mirage_moment_image(supabase, admin, image_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.put("/mirage/moment-images/{image_id}/participants", response_model=MirageMomentAdminResponse)
+async def admin_put_mirage_moment_image_participants(
+    image_id: str,
+    body: MirageMomentImageParticipantsRequest,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.replace_mirage_moment_image_participants(
+        supabase,
+        admin,
+        image_id,
+        body.participantUserIds,
+    )
+    return MirageMomentAdminResponse(**item)
+
+
+@router.post("/mirage/moments/{moment_id}/publish", response_model=MirageMomentAdminResponse)
+async def admin_publish_mirage_moment(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.publish_mirage_moment(supabase, admin, moment_id)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.post("/mirage/moments/{moment_id}/unpublish", response_model=MirageMomentAdminResponse)
+async def admin_unpublish_mirage_moment(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> MirageMomentAdminResponse:
+    item = await mirage_pipeline_service.unpublish_mirage_moment(supabase, admin, moment_id)
+    return MirageMomentAdminResponse(**item)
+
+
+@router.delete("/mirage/moments/{moment_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_mirage_moment(
+    moment_id: str,
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_only),
+) -> Response:
+    await mirage_pipeline_service.delete_mirage_moment(supabase, admin, moment_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

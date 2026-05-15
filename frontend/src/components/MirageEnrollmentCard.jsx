@@ -20,7 +20,17 @@ function toneForStatus(status) {
   return 'rgba(255,255,255,0.05)';
 }
 
-export function MirageEnrollmentCard({ defaultExpanded = false, standalone = false }) {
+function mirageUploadsOpenNow() {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Kolkata',
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? '0');
+  return hour >= 10 && hour < 20;
+}
+
+export function MirageEnrollmentCard({ defaultExpanded = false, standalone = false, heroAligned = false, compact = false }) {
   const navigate = useNavigate();
   const { user } = useUserAuth();
   const [expanded, setExpanded] = React.useState(defaultExpanded);
@@ -52,10 +62,10 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
   }, []);
 
   React.useEffect(() => {
-    if (expanded) {
+    if (expanded || compact) {
       loadProfile();
     }
-  }, [expanded, loadProfile]);
+  }, [compact, expanded, loadProfile]);
 
   React.useEffect(() => {
     if (!notice) return undefined;
@@ -66,6 +76,11 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
   async function handleUpload(event) {
     const files = Array.from(event.target.files || []);
     if (!files.length) return;
+    if (!mirageUploadsOpenNow()) {
+      setError('Mirage anchor uploads are open only between 10:00 AM and 8:00 PM IST.');
+      event.target.value = '';
+      return;
+    }
 
     setUploading(true);
     setError('');
@@ -120,29 +135,81 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
   const maxAnchorCount = profile?.maxAnchorCount || 10;
   const readyForSubmission = Boolean(profile?.readyForSubmission);
   const canUploadMore = images.length < maxAnchorCount;
+  const mappingsLive = status === 'ready';
+  const uploadWindowOpen = mirageUploadsOpenNow();
+
+  if (compact && !expanded) {
+    return (
+      <div
+        className="glass"
+        style={{
+          padding: '12px 14px',
+          borderRadius: 16,
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.055), rgba(8, 10, 18, 0.74))',
+          border: `1px solid ${mappingsLive ? 'rgba(29,158,117,0.35)' : 'rgba(220,80,80,0.34)'}`,
+          display: 'grid',
+          gridTemplateColumns: 'auto minmax(0, 1fr) auto',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            width: 12,
+            height: 12,
+            borderRadius: 999,
+            background: mappingsLive ? '#1d9e75' : '#dc5050',
+            boxShadow: mappingsLive
+              ? '0 0 0 5px rgba(29,158,117,0.14), 0 0 22px rgba(29,158,117,0.36)'
+              : '0 0 0 5px rgba(220,80,80,0.14), 0 0 22px rgba(220,80,80,0.28)',
+          }}
+        />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: mappingsLive ? '#83e3bd' : '#f0aaa6' }}>
+            {mappingsLive ? 'Mappings live' : 'Mappings not live'}
+          </div>
+          <div style={{ marginTop: 3, color: 'var(--ink-dim)', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {loading ? 'Checking Mirage enrollment...' : STATUS_COPY[status] || STATUS_COPY.draft}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn sm"
+          onClick={() => navigate('/mirage/profile')}
+          style={{ padding: '8px 12px', fontSize: 11 }}
+        >
+          Face profile
+        </button>
+      </div>
+    );
+  }
 
   if (!expanded) {
     return (
       <div
         className="glass"
         style={{
-          padding: 20,
+          padding: heroAligned ? 26 : 20,
           background: 'linear-gradient(135deg, rgba(127,119,221,0.14), rgba(9, 10, 18, 0.88))',
           border: '1px solid rgba(255,255,255,0.1)',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
+          flexDirection: heroAligned ? 'column' : 'row',
+          alignItems: heroAligned ? 'flex-start' : 'center',
+          justifyContent: heroAligned ? 'space-between' : 'space-between',
+          gap: heroAligned ? 22 : 16,
           flexWrap: 'wrap',
+          minHeight: heroAligned ? 340 : undefined,
+          height: heroAligned ? '100%' : undefined,
         }}
       >
         <div>
           <div className="eyebrow">Mirage Enrollment</div>
-          <div style={{ marginTop: 8, color: 'var(--ink-dim)', fontSize: 14, lineHeight: 1.6 }}>
+          <div style={{ marginTop: 12, color: 'var(--ink-dim)', fontSize: heroAligned ? 16 : 14, lineHeight: heroAligned ? 1.75 : 1.6, maxWidth: heroAligned ? 420 : undefined }}>
             Build your private face profile so Mirage can find your event photos after admin approval.
           </div>
         </div>
-        <button type="button" className="btn primary" onClick={() => navigate('/mirage/profile')}>
+        <button type="button" className="btn primary" onClick={() => navigate('/mirage/profile')} style={heroAligned ? { marginTop: 'auto' } : undefined}>
           Build face profile
         </button>
       </div>
@@ -204,6 +271,34 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
         <StatPill label="Consent" value={consentEnabled ? 'enabled' : 'required'} />
       </div>
 
+      <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: 'var(--f-mono)', fontSize: 10, opacity: 0.55 }}>Revision chances</span>
+        {[0, 1, 2].map((i) => {
+          const remaining = Math.min(
+            3,
+            Math.max(0, profile?.anchorRevisionLivesRemaining ?? 3),
+          );
+          const filled = i < remaining;
+          return (
+            <span
+              key={i}
+              title={`${remaining} chance${remaining === 1 ? '' : 's'} left to revise your photos after mistaken approvals`}
+              style={{
+                fontSize: 20,
+                lineHeight: 1,
+                color: filled ? '#ff6b8a' : 'rgba(255,255,255,0.22)',
+              }}
+              aria-hidden
+            >
+              {filled ? '♥' : '♡'}
+            </span>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ink-mute)', maxWidth: 620, lineHeight: 1.55 }}>
+        Three revision chances: after your enrollment is live, each additional photo that gets approved consumes one heart so you can replace mistaken uploads.
+      </div>
+
       <div
         style={{
           marginTop: 18,
@@ -218,34 +313,72 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
         {STATUS_COPY[status] || STATUS_COPY.draft}
       </div>
 
-      <div style={{ marginTop: 18, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <label
-          className="btn primary"
-          style={{
-            display: canUploadMore ? 'inline-flex' : 'none',
-            cursor: uploading ? 'wait' : 'pointer',
-            opacity: uploading ? 0.65 : 1,
-          }}
-        >
-          {uploading ? 'Uploading...' : 'Add Mirage Anchors'}
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleUpload}
-            disabled={uploading}
-            style={{ display: 'none' }}
-          />
-        </label>
-        {!canUploadMore && (
-          <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
-            You have reached the {maxAnchorCount}-image anchor limit.
+      <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <label
+            className="btn primary"
+            style={{
+              display: canUploadMore ? 'inline-flex' : 'none',
+              cursor: uploading ? 'wait' : (!uploadWindowOpen ? 'not-allowed' : 'pointer'),
+              opacity: uploading || !uploadWindowOpen ? 0.65 : 1,
+            }}
+          >
+            {uploading ? 'Uploading...' : 'Add photo'}
+            <input
+              type="file"
+              accept="image/*"
+              capture="user"
+              onChange={handleUpload}
+              disabled={uploading || !uploadWindowOpen}
+              aria-label="Take a new photo or choose one from your gallery"
+              style={{ display: 'none' }}
+            />
+          </label>
+          {!canUploadMore && (
+            <div style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
+              You&apos;ve reached the {maxAnchorCount}-photo limit for this enrollment.
+            </div>
+          )}
+          {status === 'ready' && (
+            <button type="button" className="btn sm" onClick={() => navigate('/mirage')}>
+              Open Mirage
+            </button>
+          )}
+        </div>
+        {canUploadMore && (
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 520,
+              padding: '12px 14px',
+              borderRadius: 14,
+              border: `1px solid ${uploadWindowOpen ? 'rgba(255,224,161,0.34)' : 'rgba(220,80,80,0.34)'}`,
+              background: uploadWindowOpen ? 'rgba(255,224,161,0.10)' : 'rgba(220,80,80,0.12)',
+              boxShadow: uploadWindowOpen
+                ? '0 0 0 1px rgba(255,224,161,0.06) inset'
+                : '0 0 0 1px rgba(220,80,80,0.06) inset',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'var(--f-mono)',
+                fontSize: 10,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                color: uploadWindowOpen ? '#ffe0a1' : '#f0aaa6',
+              }}
+            >
+              Upload timing
+            </div>
+            <div style={{ marginTop: 6, fontSize: 13, color: 'var(--ink)', lineHeight: 1.55 }}>
+              Anchor photo uploads are allowed only between <strong>10:00 AM</strong> and <strong>8:00 PM IST</strong>.
+            </div>
+            <div style={{ marginTop: 6, fontSize: 11, color: uploadWindowOpen ? 'var(--ink-dim)' : '#f3c3c0', lineHeight: 1.55 }}>
+              {uploadWindowOpen
+                ? 'On phones this can open your camera directly, or let you choose a photo from your gallery.'
+                : 'Uploads are currently closed. Please come back during the allowed window.'}
+            </div>
           </div>
-        )}
-        {status === 'ready' && (
-          <button type="button" className="btn sm" onClick={() => navigate('/mirage')}>
-            Open Mirage
-          </button>
         )}
       </div>
 

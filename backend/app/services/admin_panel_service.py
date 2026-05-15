@@ -21,7 +21,9 @@ from fastapi import HTTPException, status
 from supabase import AsyncClient
 
 from app.api.routes.booth import BOOTH_SOURCE_MAP
+from app.core.config import settings
 from app.core.security import get_password_hash
+from app.db.postgres import db_connection
 from app.db.supabase_client import first_row, rows
 from app.models.admin import Admin, AdminRole
 from app.models.event import DEFAULT_EVENT_MEALS_COUNT, Event
@@ -153,7 +155,6 @@ def _build_participant_dict(
         "isAttending": bool(entry.get("isAttending", False)),
         "foodClaimed": any(food.values()),
         "entryScanned": bool(user.is_attending),
-        "phase": int(entry.get("phase") or 0),
         "submitted": _has_any_submission(entry),
         "submissionData": sub if isinstance(sub, dict) else None,
     }
@@ -176,25 +177,40 @@ _TEAMS_LEAN_COLS = "id,member_ids"
 
 
 _PAGE_SIZE = 1000  # Supabase default max per request
+_POSTGRES_TABLES = {"events", "users", "teams", "admins"}
 
 
 async def _fetch_all(supabase: AsyncClient, table: str, cols: str = "*") -> list[dict]:
     """Paginate a Supabase table query to bypass the 1 000-row default limit."""
-    all_rows: list[dict] = []
-    offset = 0
-    while True:
-        resp = await (
-            supabase.table(table)
-            .select(cols)
-            .range(offset, offset + _PAGE_SIZE - 1)
-            .execute()
-        )
-        page = rows(resp)
-        all_rows.extend(page)
-        if len(page) < _PAGE_SIZE:
-            break
-        offset += _PAGE_SIZE
-    return all_rows
+    async def _fetch_supabase() -> list[dict]:
+        all_rows: list[dict] = []
+        offset = 0
+        while True:
+            resp = await (
+                supabase.table(table)
+                .select(cols)
+                .range(offset, offset + _PAGE_SIZE - 1)
+                .execute()
+            )
+            page = rows(resp)
+            all_rows.extend(page)
+            if len(page) < _PAGE_SIZE:
+                break
+            offset += _PAGE_SIZE
+        return all_rows
+
+    try:
+        return await _fetch_supabase()
+    except Exception:
+        if not settings.DATABASE_URL:
+            raise
+        if table not in _POSTGRES_TABLES:
+            raise RuntimeError(f"Unsupported Postgres table fetch: {table}")
+        selected_cols = cols if cols.strip() != "*" else "*"
+        query = f"SELECT {selected_cols} FROM public.{table}"
+        async with db_connection() as conn:
+            result = await conn.fetch(query)
+        return [dict(row) for row in result]
 
 
 async def _all_events(supabase: AsyncClient) -> list[Event]:

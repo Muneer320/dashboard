@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from app.models._util import coerce_datetime, coerce_uuid
+from app.models._util import coerce_datetime, coerce_json_object, coerce_uuid
 
 
 def _default_food() -> dict:
@@ -58,9 +58,9 @@ class User:
             name=row["name"],
             unstop_id=row.get("unstop_id"),
             is_attending=bool(row.get("is_attending", False)),
-            details=row.get("details") or {},
-            events=row.get("events") or {},
-            food=row.get("food") or _default_food(),
+            details=coerce_json_object(row.get("details")),
+            events=coerce_json_object(row.get("events")),
+            food=coerce_json_object(row.get("food"), default=_default_food()),
             is_profile_complete=bool(row.get("is_profile_complete", False)),
             cents=int(row.get("cents") or 0),
             role=row.get("role") or "participant",
