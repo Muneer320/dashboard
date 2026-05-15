@@ -37,6 +37,16 @@
   min-width: 260px;
 }
 
+.qr-toast.error {
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 0 60px rgba(239, 68, 68, 0.2), 0 20px 60px rgba(0,0,0,0.5);
+}
+
+.qr-toast.warn {
+  border-color: rgba(245, 158, 11, 0.35);
+  box-shadow: 0 0 60px rgba(245, 158, 11, 0.2), 0 20px 60px rgba(0,0,0,0.5);
+}
+
 .qr-toast-icon {
   color: var(--success, #10b981);
   margin-bottom: 6px;
