@@ -413,7 +413,7 @@ export function MirageGallery() {
   const imageSrc = React.useCallback((photo, mode = 'preview') => {
     if (!photo) return '';
     if (mode === 'thumb') {
-      return photo.thumbnailUrl || photo.url;
+      return photo.url || photo.thumbnailUrl || '';
     }
     return photo.url || photo.thumbnailUrl || '';
   }, []);
@@ -2169,7 +2169,7 @@ function DownloadIcon() {
 }
 
 function MiragePhotoCard({ image, collection, isMobile, onOpen, onToggleLike, onShare }) {
-  const cardSrc = image.thumbnailUrl || image.url;
+  const cardSrc = image.url || image.thumbnailUrl || '';
   return (
     <div
       style={{
