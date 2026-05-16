@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     MIRAGE_S3_REGION: str = "ap-south-1"
     MIRAGE_S3_PUBLIC_BASE_URL: str = "https://ascent-users.s3.ap-south-1.amazonaws.com/"
     MIRAGE_S3_ENDPOINT_URL: str | None = None
-    MIRAGE_S3_SIGNED_URL_EXPIRES_SECONDS: int = 3600
+    MIRAGE_S3_SIGNED_URL_EXPIRES_SECONDS: int = 604800
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None
     AWS_SESSION_TOKEN: str | None = None
