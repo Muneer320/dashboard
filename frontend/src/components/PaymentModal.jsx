@@ -13,11 +13,12 @@ import {
 const TIMER_SECONDS = 300;
 
 const TERMS = [
+  "Availability is restricted exclusively to SST students due to high demand.",
   "All sales are final — no refunds or exchanges after payment.",
   "Management reserves the right to cancel suspicious or duplicate orders. In case of cancellation due to management constraints, a refund will be initiated.",
   "Email confirmation will be sent within 12 hours after payment verification.",
-  "Items must be collected from the Ascent booth during fest hours only. We are not responsible for delivery of items. Failure to collect during fest hours will not entitle you to a refund.",
-  "Email confirmation mail with QR is mandatory to collect your merchandise from the merch desk during fest hours.",
+  "Items must be collected from the front desk reception from 22nd May onwards. We are not responsible for delivery of items. Failure to collect will not entitle you to a refund.",
+  "Email confirmation mail with QR is mandatory to collect your merchandise from the front desk reception.",
   "Prices shown are inclusive of all taxes and printing charges.",
   "QR code expires after 5 minutes — refresh and retry if it times out.",
 ];

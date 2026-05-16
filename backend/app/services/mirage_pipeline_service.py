@@ -2697,8 +2697,12 @@ async def _load_mirage_moment_images(
             url_via_storage = None
         image_url_cell = image.get("image_url")
         thumb_cell = image.get("thumbnail_url")
-        primary_url = image_url_cell or url_via_storage
-        thumb_url_out = thumb_cell or primary_url
+        # Always prefer a freshly-signed URL from storage_path. The cached
+        # image_url/thumbnail_url columns hold transient presigned URLs that
+        # expire after MIRAGE_S3_SIGNED_URL_EXPIRES_SECONDS; only fall back to
+        # them when storage_path is missing (legacy rows).
+        primary_url = url_via_storage or image_url_cell
+        thumb_url_out = primary_url or thumb_cell
         images_by_moment.setdefault(str(image["moment_id"]), []).append(
             {
                 "imageId": image_id,
@@ -3353,38 +3357,6 @@ async def _resequence_moment_image_orders(
         )
 
 
-async def _hydrate_signed_urls_for_moment_images(
-    supabase: AsyncClient,
-    *,
-    rows_to_update: list[dict[str, object]],
-) -> None:
-    for row in rows_to_update:
-        path = row.get("storage_path")
-        if not path:
-            continue
-        resolved = mirage_public_url(path)
-        if resolved is None:
-            continue
-        if _use_mirage_postgres():
-            async with mirage_connection() as connection:
-                await connection.execute(
-                    """
-                    UPDATE public.mirage_moment_images
-                    SET image_url = $2, thumbnail_url = $2
-                    WHERE id = $1::uuid
-                    """,
-                    row["id"],
-                    resolved,
-                )
-            continue
-        await (
-            supabase.table("mirage_moment_images")
-            .update({"image_url": resolved, "thumbnail_url": resolved})
-            .eq("id", row["id"])
-            .execute()
-        )
-
-
 async def add_mirage_moment_images(
     supabase: AsyncClient,
     admin: Admin,
@@ -3421,7 +3393,6 @@ async def add_mirage_moment_images(
     max_order = max((int(r.get("display_order") or 0) for r in existing_rows), default=0)
     has_cover = any(bool(r.get("is_cover")) for r in existing_rows)
     inserts: list[dict] = []
-    storage_rows: list[dict[str, object]] = []
     now_dt = _utcnow()
     now = now_dt.isoformat()
 
@@ -3439,7 +3410,8 @@ async def add_mirage_moment_images(
         stored = await save_mirage_image(prefix, upload)
         display_order = max_order + offset
         image_row_id = str(uuid.uuid4())
-        resolved_url = mirage_public_url(stored.object_key)
+        # Do not persist a presigned URL into image_url/thumbnail_url — those
+        # URLs expire. The read path re-signs from storage_path on every fetch.
         inserts.append(
             {
                 "id": image_row_id,
@@ -3452,13 +3424,12 @@ async def add_mirage_moment_images(
                 "display_order": display_order,
                 "width": None,
                 "height": None,
-                "image_url": resolved_url,
-                "thumbnail_url": resolved_url,
+                "image_url": None,
+                "thumbnail_url": None,
                 "created_at": now,
                 "updated_at": now,
             }
         )
-        storage_rows.append({"id": image_row_id, "storage_path": stored.object_key})
         has_cover = has_cover or inserts[-1]["is_cover"]
 
     if _use_mirage_postgres():
@@ -3507,7 +3478,6 @@ async def add_mirage_moment_images(
             )
     else:
         await supabase.table("mirage_moment_images").insert(inserts).execute()
-        await _hydrate_signed_urls_for_moment_images(supabase, rows_to_update=storage_rows)
 
     bump = {"updated_at": now, "updated_by_admin_id": admin.uid}
     if not _use_mirage_postgres():
