@@ -263,6 +263,26 @@ async def reserve_reward_endpoint(
             f"Need {threshold} coins to reserve {tier} (you have {bal})",
         )
 
+    # Tier-gate: NOTEBOOK_MUG and TOTE_BAG unlock only after the student
+    # has spent coins on BADGE_STICKER (i.e. has a pending or claimed
+    # reservation for it). This makes the redemption ladder match the
+    # journey-map UI on /coins/rewards.
+    if tier in ("NOTEBOOK_MUG", "TOTE_BAG"):
+        badge_resp = await (
+            supabase.table("reward_redemptions")
+            .select("id")
+            .eq("student_id", str(user.id))
+            .eq("tier", "BADGE_STICKER")
+            .in_("status", ["pending", "claimed"])
+            .limit(1)
+            .execute()
+        )
+        if not first_row(badge_resp):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Spend on Badge + Stickers first to unlock this tier",
+            )
+
     existing = await (
         supabase.table("reward_redemptions")
         .select("id")

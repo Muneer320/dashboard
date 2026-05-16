@@ -41,6 +41,10 @@ const _BANNER_MAP = {
     "https://res.cloudinary.com/dt1hemzmb/image/upload/f_auto,q_auto/1000126955_jjytt0",
   "tech play zone":
     "https://res.cloudinary.com/dglvt0iom/image/upload/v1776878463/Tech_play_zone_emyf1q.png",
+  'ascent of intellect':
+    'https://res.cloudinary.com/dt1hemzmb/image/upload/v1778866017/7681f82f-e3dd-44aa-8e0d-0a7f9e85d3c3_mvbily.jpg',
+  'promptwars':
+    'https://res.cloudinary.com/dt1hemzmb/image/upload/v1778158104/WhatsApp_Image_2026-05-07_at_5.53.28_PM_x7bgrl.jpg'
 };
 
 export function getEventBannerUrl(name) {
@@ -90,7 +94,7 @@ function EventCard({ ev, index, navigate, isMobile, showStatus, user }) {
       eliminated: "#D97777",
     }[status?.status] ?? "var(--ink-mute)";
 
-  const bannerUrl = getEventBannerUrl(ev.name);
+  const bannerUrl = ev.image_url || getEventBannerUrl(ev.name);
 
   const unstopUrls = {
     impulse:

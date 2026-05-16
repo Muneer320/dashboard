@@ -58,6 +58,12 @@ function PhaseQuestionsEditor({ questions, onChange, canEdit }) {
     onChange([...questions, { question_id: `q${Date.now()}`, question_text: '', question_type: 'text', required: true }])
   }
   
+  function remove(idx) {
+    const updated = [...questions]
+    updated.splice(idx, 1)
+    onChange(updated)
+  }
+  
   function update(idx, field, val) {
     const updated = [...questions]
     updated[idx] = { ...updated[idx], [field]: val }
