@@ -2080,6 +2080,7 @@ function ActionIconButton({
   label,
   active = false,
   accent = '#f1efe8',
+  size = 38,
   onClick,
   href,
   children,
@@ -2093,8 +2094,8 @@ function ActionIconButton({
   }, [onClick]);
 
   const commonStyle = {
-    width: 38,
-    height: 38,
+    width: size,
+    height: size,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2220,15 +2221,16 @@ function MiragePhotoCard({ image, collection, isMobile, onOpen, onToggleLike, on
         }}>
           {image.name}
         </div>
-        <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
-          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)' }}>
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: isMobile ? 8 : 10 }}>
+          <div style={{ fontFamily: 'var(--f-mono)', fontSize: 10, color: 'var(--ink-mute)', flex: '1 1 56px', minWidth: 0, lineHeight: 1.3 }}>
             {image.likeCount || 0} likes
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: isMobile ? 6 : 8, flex: '0 0 auto', marginLeft: 'auto', maxWidth: '100%' }}>
             <ActionIconButton
               label={image.liked ? 'Unlike photo' : 'Like photo'}
               active={Boolean(image.liked)}
               accent="#ffb7bc"
+              size={isMobile ? 34 : 38}
               onClick={() => onToggleLike(image.photoId)}
             >
               <HeartIcon filled={Boolean(image.liked)} />
@@ -2236,6 +2238,7 @@ function MiragePhotoCard({ image, collection, isMobile, onOpen, onToggleLike, on
             <ActionIconButton
               label="Share photo link"
               accent="#cfc7ff"
+              size={isMobile ? 34 : 38}
               onClick={() => onShare(image, collection)}
             >
               <ShareIcon />
@@ -2245,6 +2248,7 @@ function MiragePhotoCard({ image, collection, isMobile, onOpen, onToggleLike, on
                 label="Download photo"
                 href={image.downloadUrl}
                 accent="#ffe0a1"
+                size={isMobile ? 34 : 38}
               >
                 <DownloadIcon />
               </ActionIconButton>
