@@ -197,11 +197,11 @@ export default function QrScanner({
         return
       }
 
-      // Food gate: participant must have completed main-gate entry first
-      if (actionLabelRef.current === 'Food' && !p.entryScanned) {
+      // Food/Attendance gate: participant must have completed main-gate entry first
+      if ((actionLabelRef.current === 'Food' || actionLabelRef.current === 'Attendance') && !p.entryScanned) {
         setResult({
           type: 'error',
-          msg: `${p.name} has not completed main gate entry. Entry scan required before food can be claimed.`,
+          msg: `${p.name} has not completed main gate entry. Entry scan required before ${actionLabelRef.current.toLowerCase()} can be marked.`,
           participant: p,
         })
         return

@@ -76,6 +76,55 @@ function buildCSV(header, rows) {
   return all.map(r => r.map(csvCell).join(',')).join('\r\n')
 }
 
+function normalizeHeaderKey(s) {
+  return (s || '').toString().trim().toLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+/**
+ * Convert Hack2Skill sheet headers into backend-canonical roster columns.
+ * Keeps only fields the backend parser knows how to map.
+ */
+function mapHack2SkillCSV(text) {
+  const { header, rows } = parseCSVRows(text)
+  if (!header.length || !rows.length) {
+    throw new Error('CSV is empty or has no header row.')
+  }
+
+  const findIdx = (...aliases) => {
+    const aliasSet = new Set(aliases)
+    return header.findIndex(h => aliasSet.has(normalizeHeaderKey(h)))
+  }
+
+  const emailIdx = findIdx('emailid', 'emailaddress', 'email', 'username')
+  if (emailIdx < 0) {
+    throw new Error('Hack2Skill CSV is missing an email column (Email ID or Email Address).')
+  }
+
+  const nameIdx = findIdx('fullname', 'name')
+  const phoneIdx = findIdx('contactnumber', 'phone', 'mobilenumber', 'mobile')
+  const collegeIdx = findIdx('nameofcollegeinstitution', 'college', 'institution', 'institute', 'university')
+  const genderIdx = findIdx('gender', 'sex')
+  const emergencyIdx = findIdx('emergencycontact', 'emergency', 'guardiancontact', 'parentcontact')
+
+  const mappedHeader = ['email', 'name', 'phone', 'college', 'gender', 'emergency_contact']
+  const mappedRows = rows
+    .map(r => [
+      (r[emailIdx] ?? '').toString().trim(),
+      nameIdx >= 0 ? (r[nameIdx] ?? '').toString().trim() : '',
+      phoneIdx >= 0 ? (r[phoneIdx] ?? '').toString().trim() : '',
+      collegeIdx >= 0 ? (r[collegeIdx] ?? '').toString().trim() : '',
+      genderIdx >= 0 ? (r[genderIdx] ?? '').toString().trim() : '',
+      emergencyIdx >= 0 ? (r[emergencyIdx] ?? '').toString().trim() : '',
+    ])
+    .filter(r => r[0] && r[0].includes('@'))
+
+  if (!mappedRows.length) {
+    throw new Error('No valid email rows found in Hack2Skill CSV.')
+  }
+
+  return { header: mappedHeader, rows: mappedRows }
+}
+
 /** Parse the credentials CSV the backend returns into row dicts (legacy shape). */
 function parseCSV(text) {
   const { header, rows } = parseCSVRows(text)
@@ -106,17 +155,23 @@ export default function ManageRegistrations() {
   const [selectedEvent, setSelectedEvent] = useState('')
   const [file, setFile] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [hackSelectedEvent, setHackSelectedEvent] = useState('')
+  const [hackFile, setHackFile] = useState(null)
+  const [isHackLoading, setIsHackLoading] = useState(false)
   const [stats, setStats] = useState(null)
   const [users, setUsers] = useState([])           // parsed credential rows (new + existing)
   const [uploadErrors, setUploadErrors] = useState([]) // errors_detail from backend
   const [emailProgress, setEmailProgress] = useState({}) // { email: 'pending'|'sending'|'sent'|'failed' }
+  const [lastUploadSource, setLastUploadSource] = useState('default')
   const [isSending, setIsSending] = useState(false)
   const [showPassword, setShowPassword] = useState({})
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
   const fileInputRef = React.useRef(null)
+  const hackFileInputRef = React.useRef(null)
   // { current, total, status }  — surfaces "Batch 2 of 4 · uploading…" in the UI
   const [batchProgress, setBatchProgress] = useState(null)
+  const [hackBatchProgress, setHackBatchProgress] = useState(null)
 
   // ── "Find users missing from your CSV" workflow state ───────────────────
   const [coveredFile, setCoveredFile]         = useState(null)
@@ -140,6 +195,10 @@ export default function ManageRegistrations() {
 
   const handleFileChange = (e) => {
     if (e.target.files?.[0]) setFile(e.target.files[0])
+  }
+
+  const handleHackFileChange = (e) => {
+    if (e.target.files?.[0]) setHackFile(e.target.files[0])
   }
 
   // Send one batch (or the whole file for small uploads / xlsx). Returns the
@@ -185,33 +244,36 @@ export default function ManageRegistrations() {
     return { stats, errorsDetail, csvText, parsed }
   }
 
-  const handleUpload = async () => {
-    if (!file)          { alert('Please select a file.'); return }
-    if (!selectedEvent) { alert('Please select an event.'); return }
-
-    setIsLoading(true)
+  async function runBulkUpload({
+    uploadFile,
+    eventId,
+    setLoading,
+    setProgress,
+    source,
+    mapCSV,
+  }) {
+    setLoading(true)
     setStats(null)
     setUsers([])
     setUploadErrors([])
     setEmailProgress({})
-    setBatchProgress(null)
+    setProgress(null)
+    setLastUploadSource(source)
 
     try {
-      const isCSV = /\.csv$/i.test(file.name)
+      const isCSV = /\.csv$/i.test(uploadFile.name)
 
       // Batch only for CSV. XLSX would need a client-side parser (SheetJS) we
       // don't ship; if someone uploads a giant XLSX we still send it whole and
       // they're back to the timeout risk — keep XLSX uploads small for now.
       let batches = []  // [{ file: File, range: [startRow, endRow] }]
-      let totalDataRows = 0
 
       if (isCSV) {
-        const text = await file.text()
-        const { header, rows } = parseCSVRows(text)
+        const text = await uploadFile.text()
+        const { header, rows } = mapCSV ? mapCSV(text) : parseCSVRows(text)
         if (!header.length || !rows.length) {
           throw new Error('CSV is empty or has no header row.')
         }
-        totalDataRows = rows.length
 
         for (let i = 0; i < rows.length; i += BATCH_SIZE) {
           const slice = rows.slice(i, i + BATCH_SIZE)
@@ -219,26 +281,26 @@ export default function ManageRegistrations() {
           const blob  = new Blob([csv], { type: 'text/csv' })
           const partFile = new File(
             [blob],
-            file.name.replace(/\.csv$/i, `__batch${(i / BATCH_SIZE) + 1}.csv`),
+            uploadFile.name.replace(/\.csv$/i, `__batch${(i / BATCH_SIZE) + 1}.csv`),
             { type: 'text/csv' },
           )
           batches.push({ file: partFile, range: [i + 1, Math.min(i + BATCH_SIZE, rows.length)] })
         }
       } else {
         // XLSX / XLS — single shot. Subject to proxy timeout for huge files.
-        batches = [{ file, range: null }]
+        batches = [{ file: uploadFile, range: null }]
       }
 
       // Aggregators across batches
-      const totalStats   = { created: 0, altered: 0, duplicates: 0, errors: 0 }
-      const allErrors    = []
-      const allParsed    = []   // user rows for the on-screen table
-      const csvParts     = []   // per-batch credential CSV bodies for the merged download
+      const totalStats    = { created: 0, altered: 0, duplicates: 0, errors: 0 }
+      const allErrors     = []
+      const allParsed     = []   // user rows for the on-screen table
+      const csvParts      = []   // per-batch credential CSV bodies for the merged download
       const failedBatches = []
 
       for (let b = 0; b < batches.length; b++) {
         const { file: batchFile, range } = batches[b]
-        setBatchProgress({
+        setProgress({
           current: b + 1,
           total:   batches.length,
           status:  range
@@ -247,7 +309,7 @@ export default function ManageRegistrations() {
         })
 
         try {
-          const { stats: bStats, errorsDetail, csvText, parsed } = await uploadOneBatch(batchFile, selectedEvent)
+          const { stats: bStats, errorsDetail, csvText, parsed } = await uploadOneBatch(batchFile, eventId)
           totalStats.created    += bStats.created
           totalStats.altered    += bStats.altered
           totalStats.duplicates += bStats.duplicates
@@ -269,7 +331,7 @@ export default function ManageRegistrations() {
         }
       }
 
-      setBatchProgress({ current: batches.length, total: batches.length, status: 'Done.' })
+      setProgress({ current: batches.length, total: batches.length, status: 'Done.' })
 
       // ── Surface aggregated state ─────────────────────────────────────────
       setStats({
@@ -321,16 +383,50 @@ export default function ManageRegistrations() {
         )
       }
 
-      setFile(null)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-
+      return true
     } catch (e) {
       console.error(e)
       alert(e.message || 'Upload error.')
+      return false
     } finally {
-      setIsLoading(false)
+      setLoading(false)
       // Hide the per-batch label after a short delay so the user sees "Done."
-      setTimeout(() => setBatchProgress(null), 1500)
+      setTimeout(() => setProgress(null), 1500)
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!file)          { alert('Please select a file.'); return }
+    if (!selectedEvent) { alert('Please select an event.'); return }
+
+    const ok = await runBulkUpload({
+      uploadFile: file,
+      eventId: selectedEvent,
+      setLoading: setIsLoading,
+      setProgress: setBatchProgress,
+      source: 'default',
+    })
+    if (ok) {
+      setFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleHack2SkillUpload = async () => {
+    if (!hackFile)          { alert('Please select a file.'); return }
+    if (!hackSelectedEvent) { alert('Please select an event.'); return }
+
+    const ok = await runBulkUpload({
+      uploadFile: hackFile,
+      eventId: hackSelectedEvent,
+      setLoading: setIsHackLoading,
+      setProgress: setHackBatchProgress,
+      source: 'hack2skill',
+      mapCSV: mapHack2SkillCSV,
+    })
+    if (ok) {
+      setHackFile(null)
+      if (hackFileInputRef.current) hackFileInputRef.current.value = ''
     }
   }
 
@@ -543,7 +639,7 @@ export default function ManageRegistrations() {
                   className="input-field"
                   value={selectedEvent}
                   onChange={e => setSelectedEvent(e.target.value)}
-                  disabled={isLoading}
+                  disabled={isLoading || isHackLoading}
                 >
                   <option value="">— Choose an Event —</option>
                   {events.map(ev => (
@@ -562,7 +658,7 @@ export default function ManageRegistrations() {
                   onChange={handleFileChange}
                   className="input-field"
                   style={{ paddingTop: 8, paddingBottom: 8 }}
-                  disabled={isLoading}
+                  disabled={isLoading || isHackLoading}
                   ref={fileInputRef}
                 />
               </div>
@@ -570,7 +666,7 @@ export default function ManageRegistrations() {
               <button
                 className="btn btn-primary"
                 onClick={handleUpload}
-                disabled={!file || !selectedEvent || isLoading}
+                disabled={!file || !selectedEvent || isLoading || isHackLoading}
                 style={{ height: 42, minWidth: 200, position: 'relative', overflow: 'hidden' }}
               >
                 {isLoading ? (
@@ -631,7 +727,111 @@ export default function ManageRegistrations() {
             ` }} />
 
             {/* Stats */}
-            {stats && (
+            {stats && lastUploadSource === 'default' && (
+              <div style={{ marginTop: 24, padding: 18, background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                <h4 style={{ margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>🎉 Upload Successful</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
+                  {[
+                    { label: 'New Entries',       value: stats.created,    color: '#10b981' },
+                    { label: 'Rows Altered',       value: stats.altered,    color: '#3b82f6' },
+                    { label: 'Duplicates Evaded',  value: stats.duplicates, color: '#f59e0b' },
+                    { label: 'Errors Skipped',     value: stats.errors,     color: '#ef4444' },
+                  ].map(s => (
+                    <div key={s.label} style={{ padding: 14, background: 'var(--bg-card)', borderRadius: 8, borderLeft: `3px solid ${s.color}` }}>
+                      <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>{s.label}</div>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="card" style={{ maxWidth: 860, marginBottom: 28 }}>
+            <h3 style={{ marginBottom: 10 }}>Hack2Skill CSV Upload</h3>
+            <p style={{ marginBottom: 22, color: 'var(--text-secondary)', fontSize: 13 }}>
+              Upload Hack2Skill CSVs with headers like Timestamp, Email Address, Full Name, Gender, Contact Number,
+              and Name of College/Institution. We auto-map them to the same bulk-registration pipeline.
+            </p>
+
+            <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <label style={labelStyle}>1. Select Event</label>
+                <select
+                  className="input-field"
+                  value={hackSelectedEvent}
+                  onChange={e => setHackSelectedEvent(e.target.value)}
+                  disabled={isHackLoading || isLoading}
+                >
+                  <option value="">— Choose an Event —</option>
+                  {events.map(ev => (
+                    <option key={ev.eventId || ev.id} value={ev.eventId || ev.id}>
+                      {ev.name || ev.eventName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <label style={labelStyle}>2. Choose Hack2Skill CSV</label>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleHackFileChange}
+                  className="input-field"
+                  style={{ paddingTop: 8, paddingBottom: 8 }}
+                  disabled={isHackLoading || isLoading}
+                  ref={hackFileInputRef}
+                />
+              </div>
+
+              <button
+                className="btn btn-primary"
+                onClick={handleHack2SkillUpload}
+                disabled={!hackFile || !hackSelectedEvent || isHackLoading || isLoading}
+                style={{ height: 42, minWidth: 220, position: 'relative', overflow: 'hidden' }}
+              >
+                {isHackLoading ? (
+                  <>
+                    <span style={{ position: 'relative', zIndex: 2 }}>
+                      {hackBatchProgress
+                        ? `Batch ${hackBatchProgress.current} of ${hackBatchProgress.total}…`
+                        : 'Processing…'}
+                    </span>
+                    <div style={{
+                      position: 'absolute', top: 0, left: 0, bottom: 0,
+                      width: hackBatchProgress
+                        ? `${(hackBatchProgress.current / hackBatchProgress.total) * 100}%`
+                        : '100%',
+                      background: 'rgba(255,255,255,0.18)',
+                      transition: hackBatchProgress ? 'width 0.3s' : 'none',
+                      animation: hackBatchProgress ? 'none' : 'progress-indeterminate 1.5s infinite linear',
+                    }} />
+                  </>
+                ) : 'Upload Hack2Skill Registrations'}
+              </button>
+            </div>
+
+            {isHackLoading && hackBatchProgress && (
+              <div style={{
+                marginTop: 14, padding: '10px 14px', borderRadius: 8,
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+                fontSize: 12, color: 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <span style={{
+                  width: 10, height: 10, borderRadius: '50%',
+                  background: '#3b82f6',
+                  boxShadow: '0 0 0 0 rgba(59,130,246,0.6)',
+                  animation: 'pulse-dot 1.2s infinite',
+                  flexShrink: 0,
+                }} />
+                <span>{hackBatchProgress.status}</span>
+              </div>
+            )}
+
+            {stats && lastUploadSource === 'hack2skill' && (
               <div style={{ marginTop: 24, padding: 18, background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border-color)' }}>
                 <h4 style={{ margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>🎉 Upload Successful</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
