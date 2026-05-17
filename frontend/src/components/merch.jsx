@@ -72,7 +72,7 @@ const TSHIRT_IDS = ["tshirt", "tshirt-name"];
 const isTshirt = (id) => TSHIRT_IDS.includes(id);
 
 // ── Cart Drawer ────────────────────────────────────────────────
-function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout, buyerName, buyerEmail, onNameChange, onEmailChange }) {
+function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout, buyerName, buyerEmail, isSSTStudent, onNameChange, onEmailChange, onSSTChange }) {
   const isMobile = useMobile();
   const [showChart, setShowChart] = useState(false);
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -84,7 +84,8 @@ function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout
     missingSize.length === 0 &&
     missingPrint.length === 0 &&
     buyerName.trim().length > 0 &&
-    emailValid;
+    emailValid &&
+    isSSTStudent;
 
   return (
     <>
@@ -254,6 +255,31 @@ function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout
                   />
                 ))}
               </div>
+
+              {/* SST student confirmation */}
+              <label
+                htmlFor="sst-student-check"
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 10, marginTop: 10, padding: "10px 12px",
+                  borderRadius: 8, background: "rgba(255,255,255,0.04)",
+                  border: `1.5px solid ${isSSTStudent ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.14)"}`,
+                  cursor: "pointer", userSelect: "none",
+                }}
+              >
+                <input
+                  id="sst-student-check"
+                  type="checkbox"
+                  checked={isSSTStudent}
+                  onChange={(e) => onSSTChange(e.target.checked)}
+                  style={{ marginTop: 2, accentColor: "var(--violet)", cursor: "pointer", flexShrink: 0 }}
+                />
+                <span style={{ fontSize: 12, color: "var(--ink)", lineHeight: 1.5 }}>
+                  I confirm I am a <strong>Scaler Student</strong>.
+                  <div style={{ fontSize: 10.5, color: "var(--ink-dim)", marginTop: 2 }}>
+                    Merch is currently open to Scaler Students only.
+                  </div>
+                </span>
+              </label>
             </div>
 
             {/* Validation warning */}
@@ -262,7 +288,8 @@ function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout
                 ⚠ {missingSize.length > 0 && `Select size for: ${missingSize.map(i => i.name).join(", ")}. `}
                 {missingPrint.length > 0 && `Enter name to print for T-Shirt with Name. `}
                 {!buyerName.trim() && `Enter your name. `}
-                {buyerName.trim() && !emailValid && `Enter a valid email.`}
+                {buyerName.trim() && !emailValid && `Enter a valid email. `}
+                {buyerName.trim() && emailValid && !isSSTStudent && `Confirm you are a Scaler Student.`}
               </div>
             )}
 
@@ -452,6 +479,7 @@ export default function MerchStore() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [buyerName, setBuyerName] = useState("");
   const [buyerEmail, setBuyerEmail] = useState("");
+  const [isSSTStudent, setIsSSTStudent] = useState(false);
   const [orderId, setOrderId] = useState("");
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
@@ -516,8 +544,10 @@ export default function MerchStore() {
           onCheckout={handleCheckout}
           buyerName={buyerName}
           buyerEmail={buyerEmail}
+          isSSTStudent={isSSTStudent}
           onNameChange={setBuyerName}
           onEmailChange={setBuyerEmail}
+          onSSTChange={setIsSSTStudent}
         />
       )}
 
