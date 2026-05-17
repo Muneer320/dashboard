@@ -27,8 +27,8 @@ const SPONSORS = [
 ];
 
 const STATS = [
-  { value: '5,000+', label: 'Registered attendees' },
-  { value: '24',     label: 'Events across 6 tracks' },
+  { value: '6,000+', label: 'Registered attendees' },
+  { value: '15',     label: 'Events across 6 tracks' },
   { value: '48h',    label: 'Of continuous hacking' },
   { value: '6L+',    label: 'Total prize pool' },
   { value: '800+',   label: 'Live demo audience' },
