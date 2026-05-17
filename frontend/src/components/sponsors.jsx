@@ -6,26 +6,24 @@ import { useMobile, NavBar, PageBackground, Footer } from './shared';
 
 const s3Base = "https://ascent-users.s3.ap-south-1.amazonaws.com/sponsors";
 
-const SPONSORS = [
-  { name: 'Red Bull',              logo: `${s3Base}/RedBull.svg`,             tier: 'ENERGY',    color: '#CC1E10', desc: 'Official Energy Partner of Ascent 2026 — fuelling 48 hours of non-stop building.' },
-  { name: 'Google for Developers', logo: `${s3Base}/Google%20for%20Developers.svg`, tier: 'GOLD', color: '#4285F4', desc: 'Empowering developers worldwide with tools, platforms and community.' },
-  { name: 'Meta Cognition',        logo: `${s3Base}/MetaCognition.svg`,       tier: 'GOLD',      color: '#7C3AED', desc: 'Advancing the frontier of human-AI collaboration and reasoning.' },
-  { name: 'Vorflux.AI',            logo: `${s3Base}/Vorflux.svg`,             tier: 'GOLD',      color: '#7F77DD', desc: 'Building next-generation AI infrastructure for the modern web.' },
-  { name: 'Together Fund',         logo: `${s3Base}/TogetherFund.svg`,        tier: 'SILVER',    color: '#1D9E75', desc: 'Backing the builders of tomorrow through community-led investment.' },
-  { name: 'CodeCrafters',          logo: `${s3Base}/CodeCrafters.svg`,        tier: 'SILVER',    color: '#7F77DD', desc: 'The platform where engineers learn by rebuilding real-world software.' },
-  { name: 'Dymension',             logo: `${s3Base}/Dymension.svg`,           tier: 'SILVER',    color: '#818CF8', desc: 'The future of fashion, an AI-driven clothing brand redefining style through generative design.' },
-  { name: 'Omium AI',              logo: `${s3Base}/Omium.svg`,               tier: 'SILVER',    color: '#1D9E75', desc: 'AI-first solutions for a smarter, more connected world.' },
-  { name: 'Fueler',                logo: `${s3Base}/Fueler.svg`,              tier: 'SILVER',    color: '#E8B974', desc: 'Proof-of-work portfolios for developers, designers, and creators.' },
-  { name: 'Eyecandy Robotics',     logo: `${s3Base}/EyeCandy%20Robotics.svg`, tier: 'ROBOTICS',  color: '#EC4899', desc: 'Pushing the edge of embedded systems and autonomous hardware.' },
-  { name: 'CCCL Claude Community', logo: `${s3Base}/CCCL.svg`,                tier: 'COMMUNITY', color: '#D97706', desc: 'A thriving community of builders exploring the limits of large language models.' },
+const GROUPS = [
+  { id: 'platform', label: 'Platform & Infrastructure', accent: '#4285F4', desc: 'The foundational technologies powering the next generation of applications.' },
+  { id: 'ecosystem', label: 'Ecosystem & Innovation', accent: '#1D9E75', desc: 'Organisations investing in and accelerating student builders.' },
+  { id: 'culture', label: 'Culture & Community', accent: '#F59E0B', desc: 'Brands bringing energy, lifestyle, and community to Ascent 2026.' }
 ];
 
-const TIERS = [
-  { key: 'ENERGY',    label: 'Energy Partner',   accent: '#CC1E10' },
-  { key: 'GOLD',      label: 'Gold Sponsors',     accent: '#F59E0B' },
-  { key: 'SILVER',    label: 'Silver Sponsors',   accent: '#94A3B8' },
-  { key: 'ROBOTICS',  label: 'Robotics Partner',  accent: '#EC4899' },
-  { key: 'COMMUNITY', label: 'Community Partner', accent: '#D97706' },
+const SPONSORS = [
+  { name: 'Red Bull',              group: 'culture',   logo: `${s3Base}/RedBull.svg`,             label: 'Energy Partner',    color: '#CC1E10', desc: 'Official Energy Partner of Ascent 2026 — fuelling 48 hours of non-stop building.' },
+  { name: 'Google for Developers', group: 'platform',  logo: `${s3Base}/Google%20for%20Developers.svg`, label: 'Platform Partner', color: '#4285F4', desc: 'Empowering developers worldwide with tools, platforms and community.' },
+  { name: 'Meta Cognition',        group: 'platform',  logo: `${s3Base}/MetaCognition.svg`,       label: 'AI Partner',      color: '#7C3AED', desc: 'Advancing the frontier of human-AI collaboration and reasoning.' },
+  { name: 'Vorflux.AI',            group: 'platform',  logo: `${s3Base}/Vorflux.svg`,             label: 'Infrastructure Partner',      color: '#7F77DD', desc: 'Building next-generation AI infrastructure for the modern web.' },
+  { name: 'Together Fund',         group: 'ecosystem', logo: `${s3Base}/TogetherFund.svg`,        label: 'Venture Partner',    color: '#1D9E75', desc: 'Backing the builders of tomorrow through community-led investment.' },
+  { name: 'CodeCrafters',          group: 'ecosystem', logo: `${s3Base}/CodeCrafters.svg`,        label: 'Learning Partner',    color: '#7F77DD', desc: 'The platform where engineers learn by rebuilding real-world software.' },
+  { name: 'Dymension',             group: 'culture',   logo: `${s3Base}/Dymension.svg`,           label: 'Clothing Partner',    color: '#818CF8', desc: 'The future of fashion, an AI-driven clothing brand redefining style through generative design.' },
+  { name: 'Omium AI',              group: 'platform',  logo: `${s3Base}/Omium.svg`,               label: 'Technology Partner',    color: '#1D9E75', desc: 'AI-first solutions for a smarter, more connected world.' },
+  { name: 'Fueler',                group: 'ecosystem', logo: `${s3Base}/Fueler.svg`,              label: 'Portfolio Partner',    color: '#E8B974', desc: 'Proof-of-work portfolios for developers, designers, and creators.' },
+  { name: 'Eyecandy Robotics',     group: 'ecosystem', logo: `${s3Base}/EyeCandy%20Robotics.svg`, label: 'Robotics Partner',  color: '#EC4899', desc: 'Pushing the edge of embedded systems and autonomous hardware.' },
+  { name: 'CCCL Claude Community', group: 'culture',   logo: `${s3Base}/CCCL.svg`,                label: 'Community Partner', color: '#D97706', desc: 'A thriving community of builders exploring the limits of large language models.' },
 ];
 
 const STATS = [
@@ -81,17 +79,17 @@ function SponsorMarquee({ reverse = false }) {
 
 // ─── Sponsor card (large featured) ───────────────────────────────────────────
 
-function FeaturedCard({ sponsor, wide = false, isMobile }) {
+function FeaturedCard({ sponsor, isMobile }) {
   return (
     <div style={{
-      gridColumn: wide && !isMobile ? 'span 2' : 'span 1',
+      gridColumn: 'span 1',
       borderRadius: 20,
       border: '1px solid var(--glass-border)',
       background: 'rgba(255,255,255,0.025)',
       backdropFilter: 'blur(14px)',
       overflow: 'hidden',
       position: 'relative',
-      minHeight: wide ? 220 : 200,
+      minHeight: 200,
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'flex-end',
@@ -137,7 +135,7 @@ function FeaturedCard({ sponsor, wide = false, isMobile }) {
           border: `1px solid ${sponsor.color}44`,
           padding: '3px 10px', borderRadius: 999,
           background: `${sponsor.color}0D`,
-        }}>{sponsor.tier}</span>
+        }}>{sponsor.label}</span>
       </div>
 
       {/* Large index number */}
@@ -150,11 +148,11 @@ function FeaturedCard({ sponsor, wide = false, isMobile }) {
       {/* Content */}
       <div style={{ position: 'relative', zIndex: 2 }}>
         {sponsor.logo ? (
-          <img src={sponsor.logo} alt={sponsor.name} style={{ height: wide ? 48 : 36, marginBottom: 16, maxWidth: '100%', objectFit: 'contain', objectPosition: 'left' }} />
+          <img src={sponsor.logo} alt={sponsor.name} style={{ height: 36, marginBottom: 16, maxWidth: '100%', objectFit: 'contain', objectPosition: 'left' }} />
         ) : (
           <div style={{
             fontFamily: 'var(--f-display)',
-            fontSize: wide ? (isMobile ? 28 : 40) : (isMobile ? 22 : 30),
+            fontSize: isMobile ? 22 : 30,
             fontWeight: 800,
             letterSpacing: '-0.02em',
             color: 'var(--ink)',
@@ -164,7 +162,7 @@ function FeaturedCard({ sponsor, wide = false, isMobile }) {
         )}
         <div style={{
           fontSize: 12.5, color: 'var(--ink-dim)',
-          lineHeight: 1.55, maxWidth: wide ? 560 : 320,
+          lineHeight: 1.55, maxWidth: 320,
         }}>{sponsor.desc}</div>
       </div>
     </div>
@@ -205,12 +203,6 @@ function PerkCard({ perk, idx }) {
 export default function Sponsors() {
   const isMobile = useMobile();
   const hPad = isMobile ? '20px' : '48px';
-
-  const byTier = {};
-  SPONSORS.forEach(s => {
-    if (!byTier[s.tier]) byTier[s.tier] = [];
-    byTier[s.tier].push(s);
-  });
 
   return (
     <PageBackground>
@@ -299,41 +291,45 @@ export default function Sponsors() {
       </section>
 
       {/* ── SPONSOR SHOWCASE ── */}
-      {TIERS.filter(t => byTier[t.key]).map((tier, ti) => {
-        const sponsors = byTier[tier.key];
-        const isEnergy = tier.key === 'ENERGY';
+      {GROUPS.map((group, groupIdx) => {
+        const groupSponsors = SPONSORS.filter(s => s.group === group.id);
+        if (groupSponsors.length === 0) return null;
+        
         return (
-          <section key={tier.key} style={{
-            padding: isMobile ? '0 20px 50px' : '0 48px 70px',
+          <section key={group.id} style={{
+            padding: isMobile ? '30px 20px' : '50px 48px',
           }}>
             <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-              {/* Tier header */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20,
-                paddingTop: 10,
-              }}>
+              <div style={{ marginBottom: 32 }}>
                 <div style={{
-                  fontFamily: 'var(--f-mono)', fontSize: 9.5,
-                  letterSpacing: '0.18em', textTransform: 'uppercase',
-                  color: tier.accent,
-                }}>§ 0{ti + 2} · {tier.label.toUpperCase()}</div>
-                <div style={{
-                  flex: 1, height: 1,
-                  background: `linear-gradient(90deg, ${tier.accent}44, transparent)`,
-                }} />
+                  display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12,
+                }}>
+                  <div style={{
+                    fontFamily: 'var(--f-mono)', fontSize: 9.5,
+                    letterSpacing: '0.18em', textTransform: 'uppercase',
+                    color: group.accent,
+                  }}>§ 0{groupIdx + 2} · {group.label.toUpperCase()}</div>
+                  <div style={{
+                    flex: 1, height: 1,
+                    background: `linear-gradient(90deg, ${group.accent}44, transparent)`,
+                  }} />
+                </div>
+                <div style={{ 
+                  color: 'var(--ink-dim)', fontSize: 14, maxWidth: 500, lineHeight: 1.6 
+                }}>
+                  {group.desc}
+                </div>
               </div>
 
-              {/* Cards */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: isEnergy || isMobile ? '1fr' : (sponsors.length === 1 ? '1fr' : 'repeat(2,1fr)'),
-                gap: 14,
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+                gap: 16,
               }}>
-                {sponsors.map((sp, i) => (
+                {groupSponsors.map((sp, i) => (
                   <FeaturedCard
                     key={sp.name}
                     sponsor={sp}
-                    wide={isEnergy || (sponsors.length === 1)}
                     isMobile={isMobile}
                   />
                 ))}
