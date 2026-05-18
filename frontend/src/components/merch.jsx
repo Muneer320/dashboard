@@ -7,7 +7,7 @@ import { submitOrderForm, generateOrderId } from "../utils/payment";
 
 // ── Stock toggle ───────────────────────────────────────────────
 // Set to true to mark everything sold out (no cart). Flip to false when restocked.
-const MERCH_SOLD_OUT = false;
+const MERCH_SOLD_OUT = true;
 
 const ITEMS = [
   {
