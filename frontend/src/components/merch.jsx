@@ -7,7 +7,7 @@ import { submitOrderForm, generateOrderId } from "../utils/payment";
 
 // ── Stock toggle ───────────────────────────────────────────────
 // Set to true to mark everything sold out (no cart). Flip to false when restocked.
-const MERCH_SOLD_OUT = false;
+const MERCH_SOLD_OUT = true;
 
 const ITEMS = [
   {
@@ -570,7 +570,7 @@ export default function MerchStore() {
             </p>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 999, fontSize: 12, color: "var(--ink-dim)", fontFamily: "var(--f-mono)" }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: MERCH_SOLD_OUT ? "#f87171" : "#4ade80", boxShadow: MERCH_SOLD_OUT ? "0 0 6px #f87171" : "0 0 6px #4ade80", flexShrink: 0 }} />
-              {MERCH_SOLD_OUT ? "Sold out · Techfest 2026" : "Available only for SST students · Techfest 2026"}
+              {MERCH_SOLD_OUT ? "Sold out · Techfest 2026" : "Available only for Scaler Students · Techfest 2026"}
             </div>
           </div>
 
@@ -601,7 +601,7 @@ export default function MerchStore() {
                 Important Update
               </div>
               <div style={{ fontSize: isMobile ? 13 : 14, color: "var(--ink)", lineHeight: 1.55 }}>
-                Due to high demand, availability is now restricted <strong style={{ color: "#fbbf24" }}>exclusively to SST students</strong>.
+                Due to high demand, availability is now restricted <strong style={{ color: "#fbbf24" }}>exclusively to Scaler Students</strong>.
               </div>
             </div>
           </div>
