@@ -218,6 +218,7 @@ export const adminPanel = {
   eventsMealsCount: () => get('/admin-panel/events/meals-count', { adminAuth: true }),
   setEventMealsCount: (eventId, mealsCount) =>
     patch(`/admin-panel/events/${eventId}/meals-count`, { meals_count: mealsCount }, { adminAuth: true }),
+  foodStats: () => get('/admin-panel/meals/food-stats', { adminAuth: true }),
   userMeals: () => get('/admin-panel/meals/users', { adminAuth: true }),
   addUserMeal: (userId, mealId) =>
     post(`/admin-panel/meals/users/${userId}/${mealId}`, {}, { adminAuth: true }),

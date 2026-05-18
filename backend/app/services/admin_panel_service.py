@@ -340,7 +340,12 @@ async def get_overview_stats(supabase: AsyncClient, admin: Admin) -> dict:
             if user.is_attending:
                 entry_scanned += 1
             food = user.food or {}
-            if any(food.values()):
+            # New format: { event_id: { "meal_count": N, "last_claim_time": "..." } }
+            # A user has claimed food if any event entry has meal_count > 0
+            if any(
+                isinstance(v, dict) and int(v.get("meal_count") or 0) > 0
+                for v in food.values()
+            ):
                 food_claimed += 1
 
     return {
@@ -1012,9 +1017,11 @@ async def list_user_meals(supabase: AsyncClient) -> dict:
     """
     Per-user meals matrix:
       - Each user's allowance = sum(events.meals_count) over their registered events.
-      - ``claimed`` = number of True entries currently in ``users.food``.
+      - ``claimed`` = total meal_count claimed across all events in ``users.food``.
       - ``claims`` expands to meal1..meal{allowance} with claimed flags (absent
         keys → False) so the admin UI can still toggle any slot up to the cap.
+
+    Food format: users.food = { event_id: { "meal_count": N, "last_claim_time": "..." } }
 
     Also returns the global cap (``max_meals_count`` = sum of every event's
     meals_count) so the UI can size its table safely for the power-user case.
@@ -1036,12 +1043,23 @@ async def list_user_meals(supabase: AsyncClient) -> dict:
         for eid in (user.events or {}).keys():
             allowance += event_meal_map.get(str(eid), 0)
 
-        claimed_count = sum(1 for v in food.values() if v)
+        # New format: { event_id: { "meal_count": N, ... } }
+        claimed_count = sum(
+            int(v.get("meal_count") or 0)
+            for v in food.values()
+            if isinstance(v, dict)
+        )
 
+        # Build synthetic meal1..mealN claim list for UI compatibility
         claims: list[dict] = []
-        for i in range(1, allowance + 1):
-            mid = f"meal{i}"
-            claims.append({"meal_id": mid, "claimed": bool(food.get(mid))})
+        slot = 0
+        for eid in (user.events or {}).keys():
+            ev_limit = event_meal_map.get(str(eid), 0)
+            ev_food = food.get(str(eid), {})
+            ev_claimed = int(ev_food.get("meal_count", 0)) if isinstance(ev_food, dict) else 0
+            for i in range(1, ev_limit + 1):
+                slot += 1
+                claims.append({"meal_id": f"meal{slot}", "claimed": i <= ev_claimed})
 
         users_payload.append({
             "user_id": str(user.id),
@@ -1055,6 +1073,69 @@ async def list_user_meals(supabase: AsyncClient) -> dict:
     return {
         "max_meals_count": max_meals_count,
         "users": users_payload,
+    }
+
+
+async def get_food_stats(supabase: AsyncClient, admin: Admin) -> dict:
+    """
+    Aggregate food/meal claim statistics for the Meals admin tab.
+
+    Returns:
+      - total_claims: total sum of all meal_count values across all users & events
+      - total_people_claimed: number of distinct users who have claimed at least 1 meal
+      - per_event: list of { event_id, event_name, meals_count (limit),
+                             total_claims, people_claimed } sorted by event name
+
+    Food format: users.food = { event_id: { "meal_count": N, "last_claim_time": "..." } }
+    """
+    all_events, all_users = await asyncio.gather(
+        _all_events_lean(supabase),
+        _all_users_lean(supabase),
+    )
+    all_event_ids = [str(e.id) for e in all_events]
+    scoped_ids = set(_get_scoped_event_ids(admin, all_event_ids))
+    scoped_events = [e for e in all_events if str(e.id) in scoped_ids]
+
+    # Per-event accumulators
+    event_total_claims: dict[str, int] = {eid: 0 for eid in scoped_ids}
+    event_people_claimed: dict[str, set] = {eid: set() for eid in scoped_ids}
+
+    total_claims = 0
+    people_claimed_global: set[str] = set()
+
+    for user in all_users:
+        food = user.food or {}
+        user_total = 0
+        for eid, ev_food in food.items():
+            if eid not in scoped_ids:
+                continue
+            if not isinstance(ev_food, dict):
+                continue
+            count = int(ev_food.get("meal_count") or 0)
+            if count > 0:
+                event_total_claims[eid] = event_total_claims.get(eid, 0) + count
+                event_people_claimed[eid].add(str(user.id))
+                user_total += count
+
+        if user_total > 0:
+            total_claims += user_total
+            people_claimed_global.add(str(user.id))
+
+    per_event = []
+    for event in sorted(scoped_events, key=lambda e: e.name.lower()):
+        eid = str(event.id)
+        per_event.append({
+            "event_id": eid,
+            "event_name": event.name,
+            "meals_limit": _event_meals_count(event),
+            "total_claims": event_total_claims.get(eid, 0),
+            "people_claimed": len(event_people_claimed.get(eid, set())),
+        })
+
+    return {
+        "total_claims": total_claims,
+        "total_people_claimed": len(people_claimed_global),
+        "per_event": per_event,
     }
 
 

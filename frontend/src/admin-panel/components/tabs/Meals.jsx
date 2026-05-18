@@ -9,6 +9,15 @@ function MealsSkeleton() {
         <div className="sk-line sk-h-6 sk-w-1-4" />
         <div className="sk-line sk-h-8" style={{ width: 90, borderRadius: 8 }} />
       </div>
+      {/* Stats skeleton */}
+      <div className="sk-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', marginBottom: 24 }}>
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="sk-card" style={{ padding: 16 }}>
+            <div className="sk-line sk-h-4 sk-w-3-4" style={{ marginBottom: 8 }} />
+            <div className="sk-line sk-h-8 sk-w-1-2" />
+          </div>
+        ))}
+      </div>
       <div className="sk-card" style={{ marginBottom: 24 }}>
         <div className="sk-line sk-h-5 sk-w-3-4" style={{ marginBottom: 8 }} />
         <div className="sk-line sk-h-4 sk-w-full" />
@@ -39,6 +48,7 @@ function MealsSkeleton() {
 export default function Meals() {
   const {
     eventsMealsCount,
+    foodStats,
     loading,
     mealsLoading,
     updateEventMealsCount,
@@ -89,7 +99,90 @@ export default function Meals() {
         </button>
       </div>
 
-      {/* Per-event meals_count list */}
+      {/* ── Food Stats Summary Cards ── */}
+      {foodStats && (
+        <div className="meals-stats-grid">
+          <div className="meals-stat-card">
+            <span className="meals-stat-icon">🍽️</span>
+            <div className="meals-stat-body">
+              <div className="meals-stat-value">{foodStats.total_claims}</div>
+              <div className="meals-stat-label">Total Claims</div>
+            </div>
+          </div>
+          <div className="meals-stat-card">
+            <span className="meals-stat-icon">👥</span>
+            <div className="meals-stat-body">
+              <div className="meals-stat-value">{foodStats.total_people_claimed}</div>
+              <div className="meals-stat-label">People Claimed</div>
+            </div>
+          </div>
+          <div className="meals-stat-card">
+            <span className="meals-stat-icon">🎟️</span>
+            <div className="meals-stat-body">
+              <div className="meals-stat-value">{totalEventsAllowance}</div>
+              <div className="meals-stat-label">Total Slots (allowance)</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Per-event food breakdown table ── */}
+      {foodStats && foodStats.per_event && foodStats.per_event.length > 0 && (
+        <div className="meals-breakdown-section">
+          <h3 className="meals-section-heading">Food Claims by Event</h3>
+          <div className="meals-breakdown-table-wrap">
+            <table className="meals-breakdown-table">
+              <thead>
+                <tr>
+                  <th className="meals-bd-name-col">Event</th>
+                  <th className="meals-bd-num-col">Limit / Person</th>
+                  <th className="meals-bd-num-col">Total Claims</th>
+                  <th className="meals-bd-num-col">People Claimed</th>
+                  <th className="meals-bd-bar-col">Fill Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {foodStats.per_event.map(ev => {
+                  // Max possible = limit × (number registered for that event)
+                  // We don't have registered count here, so just show claims vs 0-baseline
+                  const fillPct = ev.meals_limit > 0 && ev.people_claimed > 0
+                    ? Math.min(100, Math.round((ev.total_claims / (ev.meals_limit * Math.max(ev.people_claimed, 1))) * 100))
+                    : 0
+                  return (
+                    <tr key={ev.event_id}>
+                      <td className="meals-bd-name-cell">{ev.event_name}</td>
+                      <td className="meals-bd-num-cell">
+                        <span className="meals-bd-badge">{ev.meals_limit}</span>
+                      </td>
+                      <td className="meals-bd-num-cell">
+                        <span className={`meals-bd-badge ${ev.total_claims > 0 ? 'active' : ''}`}>
+                          {ev.total_claims}
+                        </span>
+                      </td>
+                      <td className="meals-bd-num-cell">
+                        <span className={`meals-bd-badge ${ev.people_claimed > 0 ? 'active' : ''}`}>
+                          {ev.people_claimed}
+                        </span>
+                      </td>
+                      <td className="meals-bd-bar-cell">
+                        <div className="meals-bd-bar-track">
+                          <div
+                            className="meals-bd-bar-fill"
+                            style={{ width: `${fillPct}%` }}
+                          />
+                        </div>
+                        <span className="meals-bd-bar-pct">{fillPct}%</span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Per-event meals_count allowance config ── */}
       <div className="meals-config-card">
         <div className="meals-config-info">
           <h3 className="meals-config-title">Per-event meal allowance</h3>

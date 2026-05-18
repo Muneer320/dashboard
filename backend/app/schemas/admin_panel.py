@@ -238,6 +238,22 @@ class MealEntryResponse(BaseModel):
     message: str
 
 
+class FoodEventStats(BaseModel):
+    """Per-event food claim breakdown."""
+    event_id: str
+    event_name: str
+    meals_limit: int      # max meals allowed per user per this event
+    total_claims: int     # total number of individual meal claims
+    people_claimed: int   # distinct users who claimed at least 1 meal
+
+
+class FoodStatsResponse(BaseModel):
+    """Response for GET /admin-panel/meals/food-stats."""
+    total_claims: int           # grand total meal claims across all events
+    total_people_claimed: int   # distinct users with >= 1 claim
+    per_event: list[FoodEventStats]
+
+
 # ── Bulk Enroll ───────────────────────────────────────────────────────────────
 
 class BulkEnrollCredential(BaseModel):
