@@ -27,6 +27,7 @@ from app.schemas.admin_panel import (
     EventMealsUpdate,
     EventStatsItem,
     EventUpdateRequest,
+    FoodStatsResponse,
     ManualEnrollRequest,
     ManualEnrollResponse,
     MealEntryResponse,
@@ -62,6 +63,7 @@ from app.services.admin_panel_service import (
     get_event_detail,
     get_events_meals_counts,
     get_events_with_stats,
+    get_food_stats,
     get_my_events,
     get_participants_list,
     list_user_meals,
@@ -961,6 +963,22 @@ async def patch_event_meals(
     """
     data = await update_event_meals_count(supabase, event_id, body.meals_count)
     return EventMealsItem(**data)
+
+
+@router.get("/meals/food-stats", response_model=FoodStatsResponse)
+async def food_stats(
+    supabase: AsyncClient = Depends(get_supabase),
+    admin: Admin = Depends(get_admin_or_em),
+) -> FoodStatsResponse:
+    """
+    Aggregate food/meal statistics:
+      - total_claims: sum of all meal_count values across all users & events
+      - total_people_claimed: distinct users with >= 1 meal claimed
+      - per_event: per-event breakdown with limit, claims, and people counts
+    admin → all events; eventManager → assigned events only.
+    """
+    data = await get_food_stats(supabase, admin)
+    return FoodStatsResponse(**data)
 
 
 @router.get("/meals/users", response_model=UserMealsResponse)

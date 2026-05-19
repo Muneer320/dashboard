@@ -2,6 +2,156 @@
 
 .meals-page { padding-bottom: 40px; }
 
+/* ── Food Stats Summary Cards ─────────────────────────────────────────────── */
+.meals-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+  margin-bottom: 20px;
+}
+
+.meals-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  transition: border-color 0.15s ease;
+}
+.meals-stat-card:hover { border-color: var(--accent); }
+
+.meals-stat-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.meals-stat-body { display: flex; flex-direction: column; gap: 2px; }
+
+.meals-stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.meals-stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+/* ── Per-event breakdown table ────────────────────────────────────────────── */
+.meals-breakdown-section { margin-bottom: 20px; }
+
+.meals-section-heading {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 8px 0;
+}
+
+.meals-breakdown-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: auto;
+  background: var(--bg-card);
+}
+
+.meals-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.meals-breakdown-table thead th {
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.meals-bd-name-col  { min-width: 200px; }
+.meals-bd-num-col   { text-align: center !important; min-width: 110px; }
+.meals-bd-bar-col   { min-width: 180px; }
+
+.meals-breakdown-table tbody td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.meals-breakdown-table tbody tr:last-child td { border-bottom: none; }
+.meals-breakdown-table tbody tr:hover { background: var(--bg-hover); }
+
+.meals-bd-name-cell {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.meals-bd-num-cell { text-align: center; }
+
+.meals-bd-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.meals-bd-badge.active {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+.meals-bd-bar-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meals-bd-bar-track {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 999px;
+  overflow: hidden;
+  min-width: 80px;
+}
+
+.meals-bd-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.meals-bd-bar-pct {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 34px;
+  text-align: right;
+}
+
+
+
 /* Config card ──────────────────────────────────────────────────────────────── */
 .meals-config-card {
   display: flex;

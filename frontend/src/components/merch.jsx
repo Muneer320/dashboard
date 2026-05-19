@@ -72,7 +72,7 @@ const TSHIRT_IDS = ["tshirt", "tshirt-name"];
 const isTshirt = (id) => TSHIRT_IDS.includes(id);
 
 // ── Cart Drawer ────────────────────────────────────────────────
-function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout, buyerName, buyerEmail, onNameChange, onEmailChange }) {
+function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout, buyerName, buyerEmail, isSSTStudent, onNameChange, onEmailChange, onSSTChange }) {
   const isMobile = useMobile();
   const [showChart, setShowChart] = useState(false);
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -84,7 +84,8 @@ function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout
     missingSize.length === 0 &&
     missingPrint.length === 0 &&
     buyerName.trim().length > 0 &&
-    emailValid;
+    emailValid &&
+    isSSTStudent;
 
   return (
     <>
@@ -254,6 +255,31 @@ function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout
                   />
                 ))}
               </div>
+
+              {/* SST student confirmation */}
+              <label
+                htmlFor="sst-student-check"
+                style={{
+                  display: "flex", alignItems: "flex-start", gap: 10, marginTop: 10, padding: "10px 12px",
+                  borderRadius: 8, background: "rgba(255,255,255,0.04)",
+                  border: `1.5px solid ${isSSTStudent ? "rgba(139,92,246,0.5)" : "rgba(255,255,255,0.14)"}`,
+                  cursor: "pointer", userSelect: "none",
+                }}
+              >
+                <input
+                  id="sst-student-check"
+                  type="checkbox"
+                  checked={isSSTStudent}
+                  onChange={(e) => onSSTChange(e.target.checked)}
+                  style={{ marginTop: 2, accentColor: "var(--violet)", cursor: "pointer", flexShrink: 0 }}
+                />
+                <span style={{ fontSize: 12, color: "var(--ink)", lineHeight: 1.5 }}>
+                  I confirm I am a <strong>Scaler Student</strong>.
+                  <div style={{ fontSize: 10.5, color: "var(--ink-dim)", marginTop: 2 }}>
+                    Merch is currently open to Scaler Students only.
+                  </div>
+                </span>
+              </label>
             </div>
 
             {/* Validation warning */}
@@ -262,7 +288,8 @@ function CartDrawer({ cart, onClose, onRemove, onChangeQty, onUpdate, onCheckout
                 ⚠ {missingSize.length > 0 && `Select size for: ${missingSize.map(i => i.name).join(", ")}. `}
                 {missingPrint.length > 0 && `Enter name to print for T-Shirt with Name. `}
                 {!buyerName.trim() && `Enter your name. `}
-                {buyerName.trim() && !emailValid && `Enter a valid email.`}
+                {buyerName.trim() && !emailValid && `Enter a valid email. `}
+                {buyerName.trim() && emailValid && !isSSTStudent && `Confirm you are a Scaler Student.`}
               </div>
             )}
 
@@ -452,6 +479,7 @@ export default function MerchStore() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [buyerName, setBuyerName] = useState("");
   const [buyerEmail, setBuyerEmail] = useState("");
+  const [isSSTStudent, setIsSSTStudent] = useState(false);
   const [orderId, setOrderId] = useState("");
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
@@ -516,8 +544,10 @@ export default function MerchStore() {
           onCheckout={handleCheckout}
           buyerName={buyerName}
           buyerEmail={buyerEmail}
+          isSSTStudent={isSSTStudent}
           onNameChange={setBuyerName}
           onEmailChange={setBuyerEmail}
+          onSSTChange={setIsSSTStudent}
         />
       )}
 
@@ -540,7 +570,7 @@ export default function MerchStore() {
             </p>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "8px 16px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 999, fontSize: 12, color: "var(--ink-dim)", fontFamily: "var(--f-mono)" }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: MERCH_SOLD_OUT ? "#f87171" : "#4ade80", boxShadow: MERCH_SOLD_OUT ? "0 0 6px #f87171" : "0 0 6px #4ade80", flexShrink: 0 }} />
-              {MERCH_SOLD_OUT ? "Sold out · Techfest 2026" : "Available on-site · Techfest 2026"}
+              {MERCH_SOLD_OUT ? "Sold out · Techfest 2026" : "Available only for Scaler Students · Techfest 2026"}
             </div>
           </div>
 
@@ -551,7 +581,43 @@ export default function MerchStore() {
           )}
         </div>
 
-        <div style={{ height: 1, background: "rgba(255,255,255,0.06)", marginBottom: isMobile ? 28 : 40 }} />
+        {/* Important Notice */}
+        <div
+          style={{
+            marginBottom: isMobile ? 28 : 40,
+            padding: isMobile ? "16px 18px" : "20px 24px",
+            background: "linear-gradient(135deg, rgba(251,191,36,0.08), rgba(139,92,246,0.08))",
+            border: "1px solid rgba(251,191,36,0.28)",
+            borderRadius: 14,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <span style={{ fontSize: 18, lineHeight: 1.2, flexShrink: 0 }}>⚠️</span>
+            <div>
+              <div style={{ fontFamily: "var(--f-mono)", fontSize: 10, color: "#fbbf24", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>
+                Important Update
+              </div>
+              <div style={{ fontSize: isMobile ? 13 : 14, color: "var(--ink)", lineHeight: 1.55 }}>
+                Due to high demand, availability is now restricted <strong style={{ color: "#fbbf24" }}>exclusively to Scaler Students</strong>.
+              </div>
+            </div>
+          </div>
+          <div style={{ height: 1, background: "rgba(255,255,255,0.08)" }} />
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <span style={{ fontSize: 18, lineHeight: 1.2, flexShrink: 0 }}>📦</span>
+            <div>
+              <div style={{ fontFamily: "var(--f-mono)", fontSize: 10, color: "var(--violet)", letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700, marginBottom: 4 }}>
+                Collection
+              </div>
+              <div style={{ fontSize: isMobile ? 13 : 14, color: "var(--ink)", lineHeight: 1.55 }}>
+                Available at the <strong style={{ color: "#fff" }}>front desk reception</strong> from <strong style={{ color: "#fff" }}>22nd May</strong> onwards.
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* Grid */}
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: isMobile ? 12 : 20 }}>

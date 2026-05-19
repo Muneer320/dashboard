@@ -1,20 +1,145 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useData } from '../../context/DataContext'
 import './Overview.css'
 
-function StatCard({ icon, label, value, sub, colorClass }) {
+// ── Stat Card ─────────────────────────────────────────────────────────────────
+function StatCard({ icon, label, value, sub, colorClass, onClick }) {
   return (
-    <div className={`stat-card ${colorClass}`}>
+    <div
+      className={`stat-card ${colorClass}${onClick ? ' stat-card-clickable' : ''}`}
+      onClick={onClick}
+      title={onClick ? `Click for detailed ${label} breakdown` : undefined}
+    >
       <div className="stat-icon">{icon}</div>
       <div className="stat-body">
         <span className="stat-value">{value}</span>
         <span className="stat-label">{label}</span>
         {sub && <span className="stat-sub">{sub}</span>}
       </div>
+      {onClick && (
+        <span className="stat-card-drill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </span>
+      )}
     </div>
   )
 }
 
+// ── Food Detail Modal ─────────────────────────────────────────────────────────
+function FoodModal({ foodStats, onClose }) {
+  // Close on Escape key
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const totalClaims   = foodStats?.total_claims         ?? 0
+  const totalPeople   = foodStats?.total_people_claimed ?? 0
+  const perEvent      = foodStats?.per_event            ?? []
+
+  // Max claims among all events — used to scale fill bars
+  const maxClaims = Math.max(...perEvent.map(e => e.total_claims), 1)
+
+  return (
+    <div className="food-modal-backdrop" onClick={onClose}>
+      <div className="food-modal" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="food-modal-header">
+          <div className="food-modal-title-row">
+            <span className="food-modal-icon">🍽️</span>
+            <div>
+              <h2 className="food-modal-title">Food Claims</h2>
+              <p className="food-modal-sub">Detailed meal redemption breakdown</p>
+            </div>
+          </div>
+          <button className="food-modal-close" onClick={onClose}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Summary pills */}
+        <div className="food-modal-summary">
+          <div className="food-summary-pill">
+            <span className="food-pill-value">{totalClaims}</span>
+            <span className="food-pill-label">Total Claims</span>
+          </div>
+          <div className="food-summary-pill food-pill-accent">
+            <span className="food-pill-value">{totalPeople}</span>
+            <span className="food-pill-label">People Claimed</span>
+          </div>
+          <div className="food-summary-pill">
+            <span className="food-pill-value">{perEvent.length}</span>
+            <span className="food-pill-label">Events</span>
+          </div>
+        </div>
+
+        {/* Per-event table */}
+        <div className="food-modal-table-wrap">
+          {perEvent.length === 0 ? (
+            <p className="food-modal-empty">No food claims recorded yet.</p>
+          ) : (
+            <table className="food-modal-table">
+              <thead>
+                <tr>
+                  <th className="fmt-name-col">Event</th>
+                  <th className="fmt-num-col">Limit</th>
+                  <th className="fmt-num-col">Claims</th>
+                  <th className="fmt-num-col">People</th>
+                  <th className="fmt-bar-col">Volume</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perEvent.map(ev => {
+                  const barPct = maxClaims > 0
+                    ? Math.round((ev.total_claims / maxClaims) * 100)
+                    : 0
+                  const claimsPerPerson = ev.people_claimed > 0
+                    ? (ev.total_claims / ev.people_claimed).toFixed(1)
+                    : '—'
+
+                  return (
+                    <tr key={ev.event_id}>
+                      <td className="fmt-name-cell">
+                        <span className="fmt-event-name">{ev.event_name}</span>
+                        <span className="fmt-event-avg">avg {claimsPerPerson} / person</span>
+                      </td>
+                      <td className="fmt-num-cell">
+                        <span className="fmt-badge">{ev.meals_limit}</span>
+                      </td>
+                      <td className="fmt-num-cell">
+                        <span className={`fmt-badge ${ev.total_claims > 0 ? 'fmt-badge-active' : ''}`}>
+                          {ev.total_claims}
+                        </span>
+                      </td>
+                      <td className="fmt-num-cell">
+                        <span className={`fmt-badge ${ev.people_claimed > 0 ? 'fmt-badge-people' : ''}`}>
+                          {ev.people_claimed}
+                        </span>
+                      </td>
+                      <td className="fmt-bar-cell">
+                        <div className="fmt-bar-track">
+                          <div className="fmt-bar-fill" style={{ width: `${barPct}%` }} />
+                        </div>
+                        <span className="fmt-bar-label">{barPct}%</span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
 function OverviewSkeleton() {
   return (
     <div className="overview-page fade-in">
@@ -43,8 +168,13 @@ function OverviewSkeleton() {
   )
 }
 
+// ── Overview page ─────────────────────────────────────────────────────────────
 export default function Overview() {
-  const { stats, events, loading } = useData()
+  const { stats, events, foodStats, loading, loadMeals } = useData()
+  const [showFoodModal, setShowFoodModal] = useState(false)
+
+  // Pre-fetch food stats when Overview mounts so the modal is ready
+  useEffect(() => { loadMeals() }, [loadMeals])
 
   if (loading) return <OverviewSkeleton />
 
@@ -82,7 +212,8 @@ export default function Overview() {
           colorClass="stat-amber"
           label="Food Claimed"
           value={stats.foodClaimed}
-          sub="meal vouchers used"
+          sub="click for details"
+          onClick={() => setShowFoodModal(true)}
           icon={<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>}
         />
         <StatCard
@@ -155,6 +286,14 @@ export default function Overview() {
           </tbody>
         </table>
       </div>
+
+      {/* Food Detail Modal */}
+      {showFoodModal && (
+        <FoodModal
+          foodStats={foodStats}
+          onClose={() => setShowFoodModal(false)}
+        />
+      )}
     </div>
   )
 }

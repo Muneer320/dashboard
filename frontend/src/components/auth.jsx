@@ -43,7 +43,7 @@ export function Login() {
   async function handleLogin(e) {
     e.preventDefault();
     setLoading(true);
-    const ok = await login(email.trim(), pw);
+    const ok = await login(email.trim().toLowerCase(), pw);
     setLoading(false);
     if (ok) navigate('/dashboard');
   }
@@ -77,17 +77,32 @@ export function Login() {
             <div style={{ marginTop: 30 }}>
               <label className="label">Email or username</label>
               <input
-                className="input" type="text" placeholder="archived-efc0ee75d9@example.invalid or username"
-                value={email} onChange={e => { setError?.(''); setEmail(e.target.value); }}
-                required autoComplete="username"
+                className="input"
+                type="email"
+                inputMode="email"
+                placeholder="archived-efc0ee75d9@example.invalid or username"
+                value={email}
+                onChange={e => { setError?.(''); setEmail(e.target.value.toLowerCase()); }}
+                required
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </div>
             <div style={{ marginTop: 18 }}>
               <label className="label">Password</label>
               <input
-                className="input" type="password" placeholder="••••••••••"
-                value={pw} onChange={e => { setError?.(''); setPw(e.target.value); }}
-                required autoComplete="current-password"
+                className="input"
+                type="password"
+                placeholder="••••••••••"
+                value={pw}
+                onChange={e => { setError?.(''); setPw(e.target.value); }}
+                required
+                autoComplete="current-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
               />
             </div>
 
@@ -131,7 +146,7 @@ function VisitorSignupForm({ isMobile, onSwitchToLogin, navigate }) {
     name: '', email: '', password: '', confirmPassword: '',
     phone: '', college: '', city: '', branch: '', year: '', gender: '', emergency_contact: '',
   });
-  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  const set = (k, transform) => (e) => setForm(f => ({ ...f, [k]: transform ? transform(e.target.value) : e.target.value }));
 
   const BRANCH_OPTIONS = [
     'B.Tech/BE (Bachelor of Technology/Bachelor of Engineering)',
@@ -232,14 +247,48 @@ function VisitorSignupForm({ isMobile, onSwitchToLogin, navigate }) {
             <input className="input" placeholder="Aarav Rao" value={form.name} onChange={set('name')} required />
           </Field>
           <Field label="Email *">
-            <input className="input" type="email" placeholder="you@example.com" value={form.email} onChange={set('email')} required autoComplete="email" />
+            <input
+              className="input"
+              type="email"
+              inputMode="email"
+              placeholder="you@example.com"
+              value={form.email}
+              onChange={set('email', v => v.toLowerCase())}
+              required
+              autoComplete="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+            />
           </Field>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
             <Field label="Password *">
-              <input className="input" type="password" placeholder="Min. 8 characters" value={form.password} onChange={set('password')} required autoComplete="new-password" />
+              <input
+                className="input"
+                type="password"
+                placeholder="Min. 8 characters"
+                value={form.password}
+                onChange={set('password')}
+                required
+                autoComplete="new-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
             </Field>
             <Field label="Confirm password *">
-              <input className="input" type="password" placeholder="Repeat password" value={form.confirmPassword} onChange={set('confirmPassword')} required />
+              <input
+                className="input"
+                type="password"
+                placeholder="Repeat password"
+                value={form.confirmPassword}
+                onChange={set('confirmPassword')}
+                required
+                autoComplete="new-password"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+              />
             </Field>
           </div>
         </div>

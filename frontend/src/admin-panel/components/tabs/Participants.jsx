@@ -163,7 +163,7 @@ export default function Participants() {
                 </thead>
                 <tbody>
                   {paginatedData.map((p, idx) => (
-                    <tr key={p.id}>
+                    <tr key={`${p.id}-${p.eventId}`}>
                       <td style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>{(currentPage - 1) * itemsPerPage + idx + 1}</td>
                       <td style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{p.name}</td>
                       <td style={{ fontSize: '0.8rem' }}>{p.username}</td>
@@ -181,7 +181,7 @@ export default function Participants() {
                       </td>
                       <td>
                         <button
-                          id={`status-toggle-${p.id}`}
+                          id={`status-toggle-${p.id}-${p.eventId}`}
                           className={`btn btn-sm ${p.status === 'active' ? 'btn-danger' : 'btn-success'}`}
                           onClick={() => handleStatusToggle(p)}
                         >

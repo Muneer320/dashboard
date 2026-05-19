@@ -24,6 +24,7 @@ export function DataProvider({ children }) {
   const [eventsMealsCount, setEventsMealsCount] = useState([])  // [{ id, name, meals_count }]
   const [maxMealsCount, setMaxMealsCount]       = useState(0)   // cap = sum of all events' meals_count
   const [userMeals, setUserMeals]               = useState([])  // UserMealsRow[]
+  const [foodStats, setFoodStats]               = useState(null) // FoodStatsResponse | null
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState(null)
   const [participantsLoading, setParticipantsLoading] = useState(false)
@@ -113,21 +114,24 @@ export function DataProvider({ children }) {
       setEventsMealsCount([])
       setMaxMealsCount(0)
       setUserMeals([])
+      setFoodStats(null)
       setMealsLoaded(false)
       return null
     }
-    if (!force && mealsLoaded) return { eventsMealsCount, maxMealsCount, userMeals }
+    if (!force && mealsLoaded) return { eventsMealsCount, maxMealsCount, userMeals, foodStats }
     setMealsLoading(true)
     try {
-      const [perEvent, perUser] = await Promise.all([
+      const [perEvent, perUser, fStats] = await Promise.all([
         adminPanel.eventsMealsCount(),
         adminPanel.userMeals(),
+        adminPanel.foodStats(),
       ])
       setEventsMealsCount(perEvent ?? [])
       setMaxMealsCount(perUser?.max_meals_count ?? 0)
       setUserMeals(perUser?.users ?? [])
+      setFoodStats(fStats ?? null)
       setMealsLoaded(true)
-      return { perEvent: perEvent ?? [], perUser: perUser ?? { max_meals_count: 0, users: [] } }
+      return { perEvent: perEvent ?? [], perUser: perUser ?? { max_meals_count: 0, users: [] }, foodStats: fStats }
     } catch (e) {
       if (e?.status !== 403) {
         console.error('Meals fetch failed:', e.message)
@@ -136,7 +140,7 @@ export function DataProvider({ children }) {
     } finally {
       setMealsLoading(false)
     }
-  }, [eventsMealsCount, maxMealsCount, mealsLoaded, user?.role, userMeals])
+  }, [eventsMealsCount, maxMealsCount, mealsLoaded, user?.role, userMeals, foodStats])
 
   const loadAll = useCallback(async () => {
     if (!user) return
@@ -158,6 +162,7 @@ export function DataProvider({ children }) {
     setEventsMealsCount([])
     setMaxMealsCount(0)
     setUserMeals([])
+    setFoodStats(null)
     setMealsLoaded(false)
   }, [user?.username, user?.role])
 
@@ -265,7 +270,7 @@ export function DataProvider({ children }) {
   return (
     <DataContext.Provider value={{
       events: eventsWithMeals, adminUsers, participants, stats,
-      eventsMealsCount, maxMealsCount, userMeals,
+      eventsMealsCount, maxMealsCount, userMeals, foodStats,
       loading, error,
       participantsLoading, adminUsersLoading, mealsLoading,
       reload:               loadAll,
