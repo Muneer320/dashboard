@@ -11,7 +11,7 @@ export function Mirage() {
 
   const isMobile = useMobile();
   const { user } = useUserAuth();
-  const locked = !user?.is_attending;
+  const locked = false;
   const [days, setDays] = React.useState([]);
   const [selectedDay, setSelectedDay] = React.useState('All');
   const [loading, setLoading] = React.useState(!locked);
@@ -84,10 +84,10 @@ export function Mirage() {
             letterSpacing: '0.12em', color: 'var(--ink)',
             textTransform: 'uppercase', fontWeight: 700,
           }}>
-            Unlocks at Round 2
+            Mirage is live
           </div>
           <div style={{ fontSize: 14, color: 'var(--ink-mute)', maxWidth: 320, lineHeight: 1.6 }}>
-            Mirage opens its doors after Round 1. Come back for the full photo archive.
+            The photo archive is now open for every signed-in user.
           </div>
         </div>
       )}
@@ -261,7 +261,7 @@ function MirageLegacy() {
   const isMobile = useMobile();
   const navigate = useNavigate();
   const { user } = useUserAuth();
-  const locked = !user?.is_attending;
+  const locked = false;
   const cats = ['All', 'Hack Night', 'Circuit Rush', 'Keynote', 'Opening', 'Campus'];
   const [cat, setCat] = React.useState('All');
   const [lightbox, setLightbox] = React.useState(null);
@@ -293,10 +293,10 @@ function MirageLegacy() {
             letterSpacing: '0.12em', color: 'var(--ink)',
             textTransform: 'uppercase', fontWeight: 700,
           }}>
-            Unlocks at Round 2
+            Mirage is live
           </div>
           <div style={{ fontSize: 14, color: 'var(--ink-mute)', maxWidth: 320, lineHeight: 1.6 }}>
-            Mirage opens its doors after Round 1. Come back for the full photo archive.
+            The photo archive is now open for every signed-in user.
           </div>
         </div>
       )}

@@ -1,8 +1,7 @@
 import React from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { users } from '../lib/api';
-import { useUserAuth } from '../lib/UserAuthContext';
 import { NavBar, PageBackground, useMobile } from './shared';
 
 const STATUS_COPY = {
@@ -32,7 +31,6 @@ function mirageUploadsOpenNow() {
 
 export function MirageEnrollmentCard({ defaultExpanded = false, standalone = false, heroAligned = false, compact = false }) {
   const navigate = useNavigate();
-  const { user } = useUserAuth();
   const [expanded, setExpanded] = React.useState(defaultExpanded);
   const [profile, setProfile] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
@@ -41,11 +39,6 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
   const [consentEnabled, setConsentEnabled] = React.useState(false);
   const [error, setError] = React.useState('');
   const [notice, setNotice] = React.useState('');
-  const canUseMirage = Boolean(user?.is_attending);
-
-  if (!canUseMirage) {
-    return null;
-  }
 
   const loadProfile = React.useCallback(async () => {
     setLoading(true);
@@ -533,11 +526,6 @@ export function MirageEnrollmentCard({ defaultExpanded = false, standalone = fal
 
 export function MirageProfilePage() {
   const isMobile = useMobile();
-  const { user } = useUserAuth();
-
-  if (user && !user.is_attending) {
-    return <Navigate to="/mirage" replace />;
-  }
 
   return (
     <PageBackground>
