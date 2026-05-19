@@ -9,7 +9,6 @@ import { NavBar, PageBackground, useMobile } from './shared';
 export function MirageGallery() {
   const isMobile = useMobile();
   const { user } = useUserAuth();
-  const locked = !user?.is_attending;
   const [overview, setOverview] = React.useState({
     totalPhotos: 0,
     totalCollections: 0,
@@ -22,7 +21,7 @@ export function MirageGallery() {
   const [myPhotos, setMyPhotos] = React.useState([]);
   const [loadingMyPhotos, setLoadingMyPhotos] = React.useState(false);
   const [selectedDay, setSelectedDay] = React.useState('All');
-  const [loading, setLoading] = React.useState(!locked);
+  const [loading, setLoading] = React.useState(true);
   const [loadingCollection, setLoadingCollection] = React.useState(false);
   const [error, setError] = React.useState('');
   const [selectedCollectionId, setSelectedCollectionId] = React.useState(null);
@@ -39,21 +38,6 @@ export function MirageGallery() {
 
   React.useEffect(() => {
     let cancelled = false;
-    if (locked) {
-      setOverview({
-        totalPhotos: 0,
-        totalCollections: 0,
-        dayLabels: [],
-        highlights: [],
-        trending: [],
-        featuredCollections: [],
-        collectionsByDay: [],
-      });
-      setSelectedDay('All');
-      setLoading(false);
-      return () => { cancelled = true; };
-    }
-
     setLoading(true);
     setError('');
     mirageApi.overview()
@@ -89,14 +73,10 @@ export function MirageGallery() {
       });
 
     return () => { cancelled = true; };
-  }, [locked, user?.id]);
+  }, [user?.id]);
 
   React.useEffect(() => {
     let cancelled = false;
-    if (locked) {
-      setHeroMoment(null);
-      return () => { cancelled = true; };
-    }
     mirageApi
       .momentHero()
       .then((data) => {
@@ -107,11 +87,11 @@ export function MirageGallery() {
         if (!cancelled) setHeroMoment(null);
       });
     return () => { cancelled = true; };
-  }, [locked, user?.id]);
+  }, [user?.id]);
 
   React.useEffect(() => {
     let cancelled = false;
-    if (locked || !user?.id) {
+    if (!user?.id) {
       setMyPhotos([]);
       return () => { cancelled = true; };
     }
@@ -129,11 +109,11 @@ export function MirageGallery() {
       });
 
     return () => { cancelled = true; };
-  }, [locked, user?.id]);
+  }, [user?.id]);
 
   React.useEffect(() => {
     let cancelled = false;
-    if (locked || !user?.id) {
+    if (!user?.id) {
       setSearchResults([]);
       setSearchError('');
       setSearchLoading(false);
@@ -170,11 +150,11 @@ export function MirageGallery() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [locked, searchQuery, user?.id]);
+  }, [searchQuery, user?.id]);
 
   React.useEffect(() => {
     let cancelled = false;
-    if (!selectedCollectionId || locked) {
+    if (!selectedCollectionId) {
       setCollectionDetail(null);
       return () => { cancelled = true; };
     }
@@ -205,7 +185,7 @@ export function MirageGallery() {
       });
 
     return () => { cancelled = true; };
-  }, [locked, selectedCollectionId]);
+  }, [selectedCollectionId]);
 
   React.useEffect(() => {
     if (!notice) return undefined;
@@ -438,29 +418,6 @@ export function MirageGallery() {
       <MirageSkeletonStyles />
       <NavBar variant="app" active="mirage" />
 
-      {locked && (
-        <div style={{
-          position: 'fixed', top: 56, left: 0, right: 0, bottom: 0, zIndex: 10,
-          backdropFilter: 'blur(22px)', WebkitBackdropFilter: 'blur(22px)',
-          background: 'rgba(8, 8, 14, 0.82)',
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center', gap: 16,
-          textAlign: 'center', padding: 24,
-        }}>
-          <div style={{ fontSize: 48 }}>Lock</div>
-          <div style={{
-            fontFamily: 'var(--f-mono)', fontSize: isMobile ? 18 : 22,
-            letterSpacing: '0.12em', color: 'var(--ink)',
-            textTransform: 'uppercase', fontWeight: 700,
-          }}>
-            Unlocks at Round 2
-          </div>
-          <div style={{ fontSize: 14, color: 'var(--ink-mute)', maxWidth: 320, lineHeight: 1.6 }}>
-            Mirage opens its doors after Round 1. Come back for the full photo archive.
-          </div>
-        </div>
-      )}
-
       <div style={{ maxWidth: 1400, margin: '0 auto', padding: isMobile ? '24px 16px 60px' : '40px 28px 80px' }}>
         <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'flex-end', gap: 12 }}>
           <div>
@@ -474,27 +431,26 @@ export function MirageGallery() {
           )}
         </div>
 
-        {!locked && user?.id ? (
+        {user?.id ? (
           <div style={{ marginTop: 18 }}>
             {loading ? <MirageEnrollmentSkeleton /> : <MirageEnrollmentCard compact />}
           </div>
         ) : null}
 
-        {!locked && (
-          <div
-            style={{
-              marginTop: 18,
-              display: 'grid',
-              gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.25fr) minmax(300px, 0.62fr)',
-              gap: 16,
-              alignItems: 'start',
-            }}
-          >
-            <div>
-              {loading || !heroMoment
-                ? <MirageHeroSkeleton isMobile={isMobile} />
-                : <MirageMomentHero moment={heroMoment} isMobile={isMobile} />}
-            </div>
+        <div
+          style={{
+            marginTop: 18,
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.25fr) minmax(300px, 0.62fr)',
+            gap: 16,
+            alignItems: 'start',
+          }}
+        >
+          <div>
+            {loading || !heroMoment
+              ? <MirageHeroSkeleton isMobile={isMobile} />
+              : <MirageMomentHero moment={heroMoment} isMobile={isMobile} />}
+          </div>
 
             <div style={{ display: 'grid', gap: 14, alignContent: 'start' }}>
               {user?.id && (
@@ -679,22 +635,19 @@ export function MirageGallery() {
                 />
               )}
 
-            </div>
           </div>
-        )}
+        </div>
 
-        {!locked && (
-          loading ? (
-            <TrendingSkeleton isMobile={isMobile} />
-          ) : (
-            <TrendingCarousel
-              photos={overview.trending || []}
-              collections={allCollections}
-              imageSrc={imageSrc}
-              isMobile={isMobile}
-              onOpenPhoto={handleOpenPhoto}
-            />
-          )
+        {loading ? (
+          <TrendingSkeleton isMobile={isMobile} />
+        ) : (
+          <TrendingCarousel
+            photos={overview.trending || []}
+            collections={allCollections}
+            imageSrc={imageSrc}
+            isMobile={isMobile}
+            onOpenPhoto={handleOpenPhoto}
+          />
         )}
 
         {(loading || hasArchiveContent) && (
@@ -1068,11 +1021,11 @@ export function MirageGallery() {
           </div>
         )}
 
-        {!loading && !error && !hasArchiveContent && !locked && (
+        {!loading && !error && !hasArchiveContent && (
           <MirageArchiveEmptyState isMobile={isMobile} />
         )}
 
-        {loading && !error && !locked && (
+        {loading && !error && (
           <MirageContentSkeleton isMobile={isMobile} />
         )}
 

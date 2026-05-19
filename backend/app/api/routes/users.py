@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 from fastapi_cache.decorator import cache
 from pydantic import BaseModel
 from supabase import AsyncClient
@@ -37,14 +37,6 @@ from app.services.user_service import (
 from app.services.cache_service import auth_aware_cache_key_builder
 
 router = APIRouter()
-
-
-def _require_mirage_attendee(user: User) -> None:
-    if not user.is_attending:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Mirage is only available for attendees.",
-        )
 
 
 def _build_user_response(user: User) -> UserResponse:
@@ -126,7 +118,6 @@ async def get_my_mirage_profile(
     supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> MirageUserProfileResponse:
-    _require_mirage_attendee(current_user)
     payload = await get_mirage_profile(supabase, current_user)
     return MirageUserProfileResponse(**payload)
 
@@ -138,7 +129,6 @@ async def post_my_mirage_image(
     supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> MirageAnchorImageItem:
-    _require_mirage_attendee(current_user)
     payload = await upload_mirage_anchor_image(supabase, current_user, file, poseLabel)
     return MirageAnchorImageItem(**payload)
 
@@ -149,7 +139,6 @@ async def remove_my_mirage_image(
     supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    _require_mirage_attendee(current_user)
     await delete_mirage_anchor_image(supabase, current_user, image_id)
 
 
@@ -159,7 +148,6 @@ async def submit_my_mirage_profile(
     supabase: AsyncClient = Depends(get_supabase),
     current_user: User = Depends(get_current_user),
 ) -> MirageUserProfileResponse:
-    _require_mirage_attendee(current_user)
     payload = await submit_mirage_profile(supabase, current_user, body.consentEnabled)
     return MirageUserProfileResponse(**payload)
 

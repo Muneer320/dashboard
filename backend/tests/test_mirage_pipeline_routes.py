@@ -153,15 +153,31 @@ def test_user_mirage_enrollment_routes(monkeypatch, client):
     assert delete_response.status_code == 204
 
 
-def test_user_mirage_enrollment_requires_attendee(client):
+def test_user_mirage_enrollment_allows_any_authenticated_user(monkeypatch, client):
+    from app.api.routes import users as users_routes
+
     current_user = _make_user(is_attending=False)
     app.dependency_overrides[get_current_user] = lambda: current_user
+
+    async def fake_get_mirage_profile(*args, **kwargs):
+        return {
+            "userId": str(current_user.id),
+            "consentEnabled": False,
+            "enrollmentStatus": "draft",
+            "approvedAnchorCount": 0,
+            "requiredAnchorCount": 6,
+            "maxAnchorCount": 10,
+            "readyForSubmission": False,
+            "images": [],
+        }
+
+    monkeypatch.setattr(users_routes, "get_mirage_profile", fake_get_mirage_profile, raising=False)
 
     headers = {"Authorization": f"Bearer {_user_token(current_user)}"}
 
     profile_response = client.get("/api/v1/users/me/mirage/profile", headers=headers)
-    assert profile_response.status_code == 403
-    assert profile_response.json()["detail"] == "Mirage is only available for attendees."
+    assert profile_response.status_code == 200
+    assert profile_response.json()["enrollmentStatus"] == "draft"
 
 
 def test_admin_mirage_job_routes(monkeypatch, client):
