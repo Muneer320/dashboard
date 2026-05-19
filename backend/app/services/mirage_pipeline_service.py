@@ -1257,6 +1257,98 @@ async def list_my_mirage_photos(supabase: AsyncClient, user: User) -> list[dict]
         raise
 
 
+async def list_liked_mirage_photos(supabase: AsyncClient, user: User) -> list[dict]:
+    try:
+        user_id = str(user.id)
+        likes_response = await (
+            supabase.table("mirage_photo_likes")
+            .select("job_image_id, user_id, created_at")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        like_rows = rows(likes_response)
+        liked_image_ids = [
+            str(row["job_image_id"])
+            for row in like_rows
+            if row.get("job_image_id")
+        ]
+        if not liked_image_ids:
+            return []
+
+        image_response = await (
+            supabase.table("mirage_job_images")
+            .select("*")
+            .in_("id", liked_image_ids)
+            .eq("status", "approved")
+            .execute()
+        )
+        image_rows = rows(image_response)
+        if not image_rows:
+            return []
+
+        job_ids = sorted({str(image["job_id"]) for image in image_rows if image.get("job_id")})
+        if not job_ids:
+            return []
+
+        jobs_response = await (
+            supabase.table("mirage_jobs")
+            .select("*")
+            .in_("id", job_ids)
+            .eq("gallery_visibility", "live")
+            .execute()
+        )
+        jobs_by_id = {str(job["id"]): job for job in rows(jobs_response)}
+        if not jobs_by_id:
+            return []
+
+        images_by_id = {str(image["id"]): image for image in image_rows}
+        live_image_ids = [
+            image_id
+            for image_id, image in images_by_id.items()
+            if str(image.get("job_id")) in jobs_by_id
+        ]
+        like_counts, liked_ids = await _load_like_maps(supabase, live_image_ids, user)
+        matched_image_ids = await _load_user_matched_image_ids(supabase, live_image_ids, user)
+
+        liked_at_by_image_id = {
+            str(row["job_image_id"]): _to_iso_or_none(row.get("created_at")) or ""
+            for row in like_rows
+            if row.get("job_image_id")
+        }
+        sorted_image_ids = sorted(
+            live_image_ids,
+            key=lambda image_id: (
+                liked_at_by_image_id.get(image_id, ""),
+                _to_iso_or_none(images_by_id[image_id].get("created_at")) or "",
+            ),
+            reverse=True,
+        )
+
+        photos: list[dict] = []
+        for image_id in sorted_image_ids:
+            image = images_by_id[image_id]
+            job = jobs_by_id.get(str(image.get("job_id")))
+            if job is None:
+                continue
+            photos.append(
+                await _serialize_job_image_for_photo(
+                    supabase,
+                    job,
+                    image,
+                    user,
+                    like_counts,
+                    liked_ids,
+                    trend_score=_trend_score_for_image(image, like_counts.get(image_id, 0)),
+                    matched_image_ids=matched_image_ids,
+                )
+            )
+        return photos
+    except Exception as exc:
+        if _is_missing_mirage_table_error(exc) or _is_unconfigured_mirage_backend(exc):
+            return []
+        raise
+
+
 def _normalize_search_value(value: object | None) -> str:
     if value is None:
         return ""

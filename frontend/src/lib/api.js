@@ -167,6 +167,7 @@ export const mirage = {
   },
   searchParticipant: (userId) => get(`/mirage/search/people/${userId}`),
   myPhotos: () => get('/mirage/me/photos'),
+  likedPhotos: () => get('/mirage/me/liked-photos'),
   toggleLike: (photoId) => post(`/mirage/photos/${photoId}/like`, {}),
 };
 

@@ -20,6 +20,8 @@ export function MirageGallery() {
   });
   const [myPhotos, setMyPhotos] = React.useState([]);
   const [loadingMyPhotos, setLoadingMyPhotos] = React.useState(false);
+  const [likedPhotos, setLikedPhotos] = React.useState([]);
+  const [loadingLikedPhotos, setLoadingLikedPhotos] = React.useState(false);
   const [selectedDay, setSelectedDay] = React.useState('All');
   const [loading, setLoading] = React.useState(true);
   const [loadingCollection, setLoadingCollection] = React.useState(false);
@@ -106,6 +108,28 @@ export function MirageGallery() {
       })
       .finally(() => {
         if (!cancelled) setLoadingMyPhotos(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!user?.id) {
+      setLikedPhotos([]);
+      return () => { cancelled = true; };
+    }
+
+    setLoadingLikedPhotos(true);
+    mirageApi.likedPhotos()
+      .then((data) => {
+        if (!cancelled) setLikedPhotos(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setLikedPhotos([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingLikedPhotos(false);
       });
 
     return () => { cancelled = true; };
@@ -206,6 +230,7 @@ export function MirageGallery() {
     || (overview.highlights || []).length > 0
     || (overview.trending || []).length > 0
     || myPhotos.length > 0
+    || likedPhotos.length > 0
     || allCollections.some((collection) =>
       (collection.imageCount || 0) > 0
       || collection.coverImage
@@ -225,6 +250,7 @@ export function MirageGallery() {
       overview.highlights || [],
       overview.trending || [],
       myPhotos || [],
+      likedPhotos || [],
       ...(overview.featuredCollections || []).map((collection) => ([
         collection.coverImage,
         ...(collection.previewImages || []),
@@ -243,7 +269,7 @@ export function MirageGallery() {
     }
 
     return null;
-  }, [lightbox, myPhotos, overview, selectedCollection]);
+  }, [lightbox, likedPhotos, myPhotos, overview, selectedCollection]);
 
   const syncUrlState = React.useCallback((next) => {
     const url = new URL(window.location.href);
@@ -301,6 +327,9 @@ export function MirageGallery() {
     });
 
     setLightbox((current) => (current?.photoId === photoId ? updater(current) : current));
+    setLikedPhotos((current) =>
+      current.map((photo) => (photo?.photoId === photoId ? updater(photo) : photo))
+    );
   }, []);
 
   const handleSelectCollection = React.useCallback((collection) => {
@@ -352,11 +381,28 @@ export function MirageGallery() {
 
     try {
       const result = await mirageApi.toggleLike(photoId);
+      const likedPhoto = current
+        ? {
+            ...current,
+            liked: result.liked,
+            likeCount: result.likeCount,
+          }
+        : null;
       updatePhotoState(photoId, (photo) => ({
         ...photo,
         liked: result.liked,
         likeCount: result.likeCount,
       }));
+      setLikedPhotos((items) => {
+        if (!result.liked) {
+          return items.filter((photo) => photo.photoId !== photoId);
+        }
+        if (!likedPhoto) return items;
+        const exists = items.some((photo) => photo.photoId === photoId);
+        return exists
+          ? items.map((photo) => (photo.photoId === photoId ? likedPhoto : photo))
+          : [likedPhoto, ...items];
+      });
     } catch (err) {
       updatePhotoState(photoId, (photo) => ({
         ...photo,
@@ -1070,6 +1116,59 @@ export function MirageGallery() {
                       return (
                         <MiragePhotoCard
                           key={`mine-${image.photoId}`}
+                          image={image}
+                          collection={collection}
+                          isMobile={isMobile}
+                          onOpen={handleOpenPhoto}
+                          onToggleLike={handleToggleLike}
+                          onShare={handleShare}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 22 }} className="glass">
+              <div style={{ padding: isMobile ? 16 : 20 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div className="eyebrow">Liked By You</div>
+                    <div style={{ marginTop: 8, fontFamily: 'var(--f-display)', fontSize: isMobile ? 24 : 30, color: 'var(--ink)' }}>
+                      Your liked frames
+                    </div>
+                  </div>
+                  <div style={{ fontFamily: 'var(--f-mono)', fontSize: 11, color: 'var(--ink-mute)', letterSpacing: '0.08em' }}>
+                    {loadingLikedPhotos ? 'LOADING' : `${likedPhotos.length} LIKED`}
+                  </div>
+                </div>
+
+                {loadingLikedPhotos ? (
+                  <PhotoGridSkeleton count={isMobile ? 4 : 4} isMobile={isMobile} />
+                ) : likedPhotos.length === 0 ? (
+                  <div style={{ marginTop: 16, color: 'var(--ink-mute)', fontSize: 13, lineHeight: 1.6 }}>
+                    Photos you like in Mirage will collect here.
+                  </div>
+                ) : (
+                  <div style={{
+                    marginTop: 18,
+                    display: 'grid',
+                    gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))',
+                    gap: 12,
+                  }}>
+                    {likedPhotos.slice(0, 12).map((image) => {
+                      const collection = (overview.collectionsByDay || [])
+                        .flatMap((group) => group.collections || [])
+                        .find((item) => item.id === image.jobId)
+                        || {
+                          id: image.jobId || 'liked-photo',
+                          dayLabel: image.dayLabel || 'Mirage',
+                          sectionTitle: image.eventName || 'Liked photo',
+                        };
+                      return (
+                        <MiragePhotoCard
+                          key={`liked-${image.photoId}`}
                           image={image}
                           collection={collection}
                           isMobile={isMobile}

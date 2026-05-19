@@ -20,6 +20,7 @@ from app.services.mirage_pipeline_service import (
     get_mirage_search_person_detail,
     get_collection_detail,
     get_drive_file_payload,
+    list_liked_mirage_photos,
     get_overview_payload,
     list_my_mirage_photos,
     list_public_gallery,
@@ -83,6 +84,15 @@ async def get_my_photos(
     user: User = Depends(get_current_user),
 ) -> list[MiragePhotoItem]:
     items = await list_my_mirage_photos(supabase, user)
+    return [MiragePhotoItem(**item) for item in items]
+
+
+@router.get("/me/liked-photos", response_model=list[MiragePhotoItem])
+async def get_my_liked_photos(
+    supabase: AsyncClient = Depends(get_supabase),
+    user: User = Depends(get_current_user),
+) -> list[MiragePhotoItem]:
+    items = await list_liked_mirage_photos(supabase, user)
     return [MiragePhotoItem(**item) for item in items]
 
 

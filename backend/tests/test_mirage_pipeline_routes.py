@@ -385,6 +385,37 @@ def test_mirage_me_photos_route(monkeypatch, client):
     assert response.json()[0]["photoId"] == "photo-1"
 
 
+def test_mirage_me_liked_photos_route(monkeypatch, client):
+    from app.api.routes import mirage as mirage_routes
+
+    current_user = _make_user()
+    app.dependency_overrides[get_current_user] = lambda: current_user
+
+    async def fake_list_liked_mirage_photos(*args, **kwargs):
+        return [{
+            "photoId": "photo-liked",
+            "fileId": "drive-file-liked",
+            "name": "IMG_LIKED.jpg",
+            "mimeType": "image/jpeg",
+            "url": "/api/v1/mirage/files/drive-file-liked",
+            "eventId": "event-1",
+            "eventName": "Freshers Day 2026",
+            "dayLabel": "Day 1",
+            "jobId": "job-1",
+            "liked": True,
+            "likeCount": 4,
+            "isFeatured": False,
+        }]
+
+    monkeypatch.setattr(mirage_routes, "list_liked_mirage_photos", fake_list_liked_mirage_photos, raising=False)
+
+    headers = {"Authorization": f"Bearer {_user_token(current_user)}"}
+    response = client.get("/api/v1/mirage/me/liked-photos", headers=headers)
+    assert response.status_code == 200
+    assert response.json()[0]["photoId"] == "photo-liked"
+    assert response.json()[0]["liked"] is True
+
+
 def test_mirage_file_route_requires_valid_signature(monkeypatch, client):
     from app.api.routes import mirage as mirage_routes
 
@@ -739,50 +770,53 @@ async def test_get_public_mirage_moment_returns_published_payload():
 
     payload = await mirage_pipeline_service.get_public_mirage_moment(_FakeSupabase(store))
 
-    assert payload == {
-        "momentId": published_moment_id,
-        "title": "Moment of the Day",
-        "subtitle": "Freshers Day 2026",
-        "dayLabel": "Day 1",
-        "status": "published",
-        "publishedAt": "2026-05-14T10:00:00Z",
-        "images": [
-            {
-                "imageId": other_image_id,
-                "displayOrder": 1,
-                "storagePath": "mirage/moments/day-1-1.jpg",
-                "filename": "day-1-1.jpg",
-                "mimeType": "image/jpeg",
-                "isCover": False,
-                "imageUrl": "https://cdn.example.com/day-1-1.jpg",
-                "thumbnailUrl": "https://cdn.example.com/day-1-1-thumb.jpg",
-                "slideTitle": "Opening",
-                "width": 1920,
-                "height": 1080,
-                "participants": [],
-            },
-            {
-                "imageId": published_image_id,
-                "displayOrder": 2,
-                "storagePath": "mirage/moments/day-1-cover.jpg",
-                "filename": "day-1-cover.jpg",
-                "mimeType": "image/jpeg",
-                "isCover": True,
-                "imageUrl": "https://cdn.example.com/day-1-cover.jpg",
-                "thumbnailUrl": "https://cdn.example.com/day-1-cover-thumb.jpg",
-                "slideTitle": "Main Stage",
-                "width": 1920,
-                "height": 1080,
-                "participants": [
-                    {
-                        "userId": participant_id,
-                        "name": "Asha",
-                        "username": "asha",
-                    }
-                ],
-            },
-        ],
-    }
+    assert payload["momentId"] == published_moment_id
+    assert payload["title"] == "Moment of the Day"
+    assert payload["subtitle"] == "Freshers Day 2026"
+    assert payload["dayLabel"] == "Day 1"
+    assert payload["status"] == "published"
+    assert payload["publishedAt"] == "2026-05-14T10:00:00Z"
+    assert [
+        {
+            key: value
+            for key, value in image.items()
+            if key not in {"imageUrl", "thumbnailUrl"}
+        }
+        for image in payload["images"]
+    ] == [
+        {
+            "imageId": other_image_id,
+            "displayOrder": 1,
+            "storagePath": "mirage/moments/day-1-1.jpg",
+            "filename": "day-1-1.jpg",
+            "mimeType": "image/jpeg",
+            "isCover": False,
+            "slideTitle": "Opening",
+            "width": 1920,
+            "height": 1080,
+            "participants": [],
+        },
+        {
+            "imageId": published_image_id,
+            "displayOrder": 2,
+            "storagePath": "mirage/moments/day-1-cover.jpg",
+            "filename": "day-1-cover.jpg",
+            "mimeType": "image/jpeg",
+            "isCover": True,
+            "slideTitle": "Main Stage",
+            "width": 1920,
+            "height": 1080,
+            "participants": [
+                {
+                    "userId": participant_id,
+                    "name": "Asha",
+                    "username": "asha",
+                }
+            ],
+        },
+    ]
+    assert all("mirage/moments/" in image["imageUrl"] for image in payload["images"])
+    assert all("X-Amz-Expires=604800" in image["imageUrl"] for image in payload["images"])
 
 
 @pytest.mark.asyncio
@@ -1318,6 +1352,68 @@ async def test_get_mirage_search_person_detail_returns_photos():
     assert payload["participant"]["userId"] == target_user_id
     assert payload["participant"]["coverPhoto"]["photoId"] == cover_image_id
     assert [photo["photoId"] for photo in payload["photos"]] == [cover_image_id, extra_image_id]
+
+
+@pytest.mark.asyncio
+async def test_list_liked_mirage_photos_returns_current_users_live_likes():
+    current_user = _make_user(is_attending=True)
+    liked_image_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    other_image_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    hidden_image_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    job_id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+    hidden_job_id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+    store = {
+        "mirage_photo_likes": [
+            {"id": "like-1", "job_image_id": liked_image_id, "user_id": str(current_user.id)},
+            {"id": "like-2", "job_image_id": other_image_id, "user_id": "ffffffff-ffff-4fff-8fff-ffffffffffff"},
+            {"id": "like-3", "job_image_id": hidden_image_id, "user_id": str(current_user.id)},
+        ],
+        "mirage_job_images": [
+            {
+                "id": liked_image_id,
+                "job_id": job_id,
+                "drive_file_id": "drive-liked",
+                "filename": "liked.jpg",
+                "mime_type": "image/jpeg",
+                "status": "approved",
+                "display_order": 0,
+                "created_at": "2026-05-14T10:00:00Z",
+            },
+            {
+                "id": hidden_image_id,
+                "job_id": hidden_job_id,
+                "drive_file_id": "drive-hidden",
+                "filename": "hidden.jpg",
+                "mime_type": "image/jpeg",
+                "status": "approved",
+                "display_order": 1,
+                "created_at": "2026-05-14T11:00:00Z",
+            },
+        ],
+        "mirage_jobs": [
+            {
+                "id": job_id,
+                "event_id": None,
+                "event_name_snapshot": "Freshers Day",
+                "day_label": "Day 1",
+                "gallery_visibility": "live",
+            },
+            {
+                "id": hidden_job_id,
+                "event_id": None,
+                "event_name_snapshot": "Hidden Day",
+                "day_label": "Hidden",
+                "gallery_visibility": "draft",
+            },
+        ],
+        "image_user_mappings": [],
+    }
+
+    photos = await mirage_pipeline_service.list_liked_mirage_photos(_FakeSupabase(store), current_user)
+
+    assert [photo["photoId"] for photo in photos] == [liked_image_id]
+    assert photos[0]["liked"] is True
+    assert photos[0]["likeCount"] == 1
 
 
 @pytest.mark.asyncio
