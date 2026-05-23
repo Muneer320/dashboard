@@ -1,23 +1,17 @@
-# CODING AGENTS: READ THIS FIRST
+# Ascent public frontend
 
-This is a **handoff bundle** from Claude Design (claude.ai/design).
+The participant/admin web interface from Ascent 2026, preserved as part of the [historical dashboard archive](../README.md). The public landing page, FAQ and merchandise display can be explored locally; the original participant services are disconnected and checkout is closed.
 
-A user mocked up designs in HTML/CSS/JS using an AI design tool, then exported this bundle so a coding agent can implement the designs for real.
+From this directory, with Node.js/npm installed (verified with Node 24):
 
-## What you should do — IMPORTANT
+```sh
+npm ci
+npm run build
+npm run preview -- --host 127.0.0.1 --port 5177
+```
 
-**Read `ascent/project/index.html` in full.** The user had this file open when they triggered the handoff, so it's almost certainly the primary design they want built. Read it top to bottom — don't skim. Then **follow its imports**: open every file it pulls in (shared components, CSS, scripts) so you understand how the pieces fit together before you start implementing.
+Open http://127.0.0.1:5177. The archive notice remains visible. Use a fresh browser profile and synthetic inputs only. Authenticated screens are retained as source; this preview does not provide a working backend, account or participant dataset.
 
-**If anything is ambiguous, ask the user to confirm before you start implementing.** It's much cheaper to clarify scope up front than to build the wrong thing.
+The original local artwork and logo are used for the landing preview. Historical sponsor names remain text where old hosted logos are unavailable. Promotional figures are historical copy, not verified usage evidence. Merchandise remains sold out, and former payment/form destinations have been scrubbed.
 
-## About the design files
-
-The design medium is **HTML/CSS/JS** — these are prototypes, not production code. Your job is to **recreate them pixel-perfectly** in whatever technology makes sense for the target codebase (React, Vue, native, whatever fits). Match the visual output; don't copy the prototype's internal structure unless it happens to fit.
-
-**Don't render these files in a browser or take screenshots unless the user asks you to.** Everything you need — dimensions, colors, layout rules — is spelled out in the source. Read the HTML and CSS directly; a screenshot won't tell you anything they don't.
-
-## Bundle contents
-
-- `ascent/README.md` — this file
-- `ascent/project/` — the `Ascent` project files (HTML prototypes, assets, components)
-
+The production npm audit is clear after a compatible router update. Development-tool audit findings and bundle-size warnings remain recorded separately; this historical stack is not certified for a new deployment. See [archive notes](../ARCHIVE_NOTES.md) and preserve all teammate credits and licensing boundaries described in the main README.

@@ -1,27 +1,7 @@
-# SQL Migrations for Supabase
+# Historical schema migrations
 
-These files are intended for the Supabase SQL editor.
+These SQL/Python files preserve Ascent Dashboard's schema evolution. They are not a verified fresh-install sequence: numbers overlap, an additional schema exists under `supabase/`, and operational account/test seeds have been removed from the public archive.
 
-Apply them in order after creating your Supabase project and configuring the Supabase environment values in `backend/.env`.
+Do not apply this folder blindly in filename order. A future fork must reconcile the schema and migration graph against its models, then verify apply/reverse/bootstrap behavior with synthetic data in an isolated database. Do not use the former team's credentials or records.
 
-## Order
-
-1. `001_init_schema.sql`
-2. `002_seed_admin_user.sql` (optional, local/dev only)
-3. `003_rate_limit_entries.sql`
-4. `004_rls_policies.sql`
-5. `005_create_submissions_bucket.sql`
-6. `006_update_users_schema.sql`
-7. `007_update_user_roles.sql`
-
-## When to create the Supabase project
-
-Create the Supabase project before applying any migration SQL.
-You need the project details first so `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` can be configured correctly.
-
-## Notes
-
-- The app expects PostgreSQL with `pgcrypto` available.
-- The schema is designed to match the current SQLAlchemy models in `backend/app/models/`.
-- `004_rls_policies.sql` is for direct Supabase client access. The backend can still use its existing database connection path.
-- `005_create_submissions_bucket.sql` creates the private Storage bucket used by file submissions.
+See the [archive notes](../../ARCHIVE_NOTES.md) for the exact verification boundary and the [API source guide](../README.md) for context. Original application and contributor history is preserved; no production migration result is claimed here.

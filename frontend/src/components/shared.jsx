@@ -193,13 +193,13 @@ export function useMobile(breakpoint = 768) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Logo placeholder — user will swap with real logo
+// Original event mark bundled with the archive.
 // ─────────────────────────────────────────────────────────────
 export function AscentLogo({ size = 22, withMark = true }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <img 
-        src="https://res.cloudinary.com/dglvt0iom/image/upload/v1777041823/ascent_logo_uvllh8.svg" 
+        src="/Logo.svg"
         alt="Ascent Logo" 
         style={{ height: size * 1.5, display: "block" }} 
       />

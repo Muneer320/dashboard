@@ -2,6 +2,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMobile, NavBar, PageBackground, Countdown, NumberCounter, PosterPlaceholder, Footer } from './shared';
+import anvilPoster from '../../uploads/Events/Anvil.png';
+import shipPoster from '../../uploads/Events/Ship to Scaler.png';
+import impulsePoster from '../../uploads/Events/Impulse.png';
+import launchpadPoster from '../../uploads/Events/Launchpad.png';
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -22,7 +26,7 @@ export default function Landing() {
     return () => el.removeEventListener('mousemove', onMove);
   }, []);
 
-  const LANDING_BG = 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776879187/landing_hero_x2pe3l.jpg';
+  const LANDING_BG = new URL('../../uploads/landing_hero.jpg', import.meta.url).href;
   const hPad = isMobile ? '20px' : '48px';
 
   return (
@@ -101,7 +105,7 @@ export default function Landing() {
           textAlign: 'center',
         }}>
           <img 
-            src="https://res.cloudinary.com/dglvt0iom/image/upload/v1777041823/ascent_logo_uvllh8.svg" 
+            src="/Logo.svg"
             alt="Ascent" 
             style={{ 
               height: isMobile ? 80 : 180, 
@@ -297,10 +301,10 @@ export default function Landing() {
             gap: 16,
           }}>
             {[
-              { title: 'Anvil', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Anvil_poydj2.png', linkUrl: 'https://unstop.com/hackathons/the-anvil-hackathon-ascent-scaler-school-of-technology-bengaluru-karnataka-1669632' },
-              { title: 'Ship to Scale', imgUrl: 'https://res.cloudinary.com/dt1hemzmb/image/upload/f_auto,q_auto/1000126955_jjytt0', linkUrl: 'https://unstop.com/events/ship-to-scale-build-break-bank-ascent-scaler-school-of-technology-bengaluru-karnataka-1679327' },
-              { title: 'Impulse', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Impulse_fhczet.png', linkUrl: 'https://unstop.com/hackathons/impulse-cp-team-contest-ascent-scaler-school-of-technology-bengaluru-karnataka-1669639' },
-              { title: 'Launchpad', imgUrl: 'https://res.cloudinary.com/dglvt0iom/image/upload/v1776878460/Launchpad_dixz7h.png', linkUrl: 'https://unstop.com/events/launchpad-from-idea-to-impact-ascent-scaler-school-of-technology-bengaluru-karnataka-1669644' },
+              { title: 'Anvil', imgUrl: anvilPoster, linkUrl: 'https://unstop.com/hackathons/the-anvil-hackathon-ascent-scaler-school-of-technology-bengaluru-karnataka-1669632' },
+              { title: 'Ship to Scale', imgUrl: shipPoster, linkUrl: 'https://unstop.com/events/ship-to-scale-build-break-bank-ascent-scaler-school-of-technology-bengaluru-karnataka-1679327' },
+              { title: 'Impulse', imgUrl: impulsePoster, linkUrl: 'https://unstop.com/hackathons/impulse-cp-team-contest-ascent-scaler-school-of-technology-bengaluru-karnataka-1669639' },
+              { title: 'Launchpad', imgUrl: launchpadPoster, linkUrl: 'https://unstop.com/events/launchpad-from-idea-to-impact-ascent-scaler-school-of-technology-bengaluru-karnataka-1669644' },
             ].map(({ title, imgUrl, linkUrl }) => (
               linkUrl ? (
                 <a key={title} href={linkUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none' }}>
@@ -364,20 +368,12 @@ function Rings() {
   );
 }
 
-const s3Base = "https://ascent-users.s3.ap-south-1.amazonaws.com/sponsors";
+// Keep the original event names; their former private-bucket logos are unavailable.
 const SPONSORS_LIST = [
-  { name: 'Red Bull',              logo: `${s3Base}/RedBull.svg` },
-  { name: 'Google for Developers', logo: `${s3Base}/Google%20for%20Developers.svg` },
-  { name: 'Meta Cognition',        logo: `${s3Base}/MetaCognition.svg` },
-  { name: 'Vorflux.AI',            logo: `${s3Base}/Vorflux.svg` },
-  { name: 'Together Fund',         logo: `${s3Base}/TogetherFund.svg` },
-  { name: 'CodeCrafters',          logo: `${s3Base}/CodeCrafters.svg` },
-  { name: 'Dymension',             logo: `${s3Base}/Dymension.svg` },
-  { name: 'Omium AI',              logo: `${s3Base}/Omium.svg` },
-  { name: 'Fueler',                logo: `${s3Base}/Fueler.svg` },
-  { name: 'Eyecandy Robotics',     logo: `${s3Base}/EyeCandy%20Robotics.svg` },
-  { name: 'CCCL Claude Community', logo: `${s3Base}/CCCL.svg` },
-];
+  'Red Bull', 'Google for Developers', 'Meta Cognition', 'Vorflux.AI',
+  'Together Fund', 'CodeCrafters', 'Dymension', 'Omium AI', 'Fueler',
+  'Eyecandy Robotics', 'CCCL Claude Community',
+].map(name => ({ name }));
 
 function Marquee() {
   const all = [...SPONSORS_LIST, ...SPONSORS_LIST, ...SPONSORS_LIST];

@@ -1,104 +1,74 @@
+<p align="center"><img src="frontend/public/Logo.svg" width="240" alt="Ascent event mark"></p>
+
 # Ascent Dashboard
 
-Ascent Dashboard is the central platform for Ascent Techfest participants.
-It powers user onboarding, event participation, submissions, and QR-based validation.
+**One event, many moving parts: participants, teams, submissions, QR entry, volunteers and a shared leaderboard.**
 
-## Monorepo Structure
+Ascent Dashboard brought those workflows into one platform for Ascent 2026 at Scaler School of Technology. This repository preserves the team's implementation as a historical source archive, with operational records and private configuration removed from its published history.
 
-- `backend/`: FastAPI service (Python, uv, PostgreSQL/Supabase)
-- `frontend/`: Dashboard web application (to be implemented)
+[Explore the source](#inside-the-platform) · [My contribution](#a-team-project) · [Preview locally](#preview-the-public-frontend) · [Archive notes](ARCHIVE_NOTES.md)
 
-## Current Status
+![Actual archived Ascent landing page running locally, with its archive notice visible](docs/previews/landing-desktop.png)
 
-- Backend foundation is implemented with FastAPI.
-- Core modules are implemented: auth, admin sync, users, events, submissions, files, qr.
-- Background jobs, auth/role middleware, signed file uploads, persistent QR rate limiting, email hooks, and route-level/API tests are now included.
-- Access-control and dual-update consistency rules are enforced in service logic.
+*A real capture of the public frontend, using its bundled event artwork. The original promotional copy is historical, not verified usage or adoption evidence. Participant services are disconnected.*
 
-## Tech Stack
+## Inside the platform
 
-- Backend: FastAPI, SQLAlchemy async, asyncpg, JWT
-- Database: PostgreSQL (Supabase-compatible)
-- Package and environment management: uv
+| Part | What the team built |
+| --- | --- |
+| Participant experience | Event discovery, teams, registration, submissions, schedules and account flows |
+| Event operations | Admin tools, QR validation, volunteer/booth workflows, announcements and feedback |
+| Shared state | FastAPI services, PostgreSQL/Supabase records, Redis caching and leaderboard logic |
+| Sidequest | Event coins, activity records and redemption workflows |
+| Mirage | Photo-discovery pipeline, local processor, operator mapping/review tools and gallery integration |
 
-## Quick Start
-
-### 1. Backend setup
-
-```bash
-cd backend
-uv sync
-copy .env.example .env
+```mermaid
+flowchart LR
+    Participant[Participant and volunteer frontend] --> API[FastAPI services]
+    Admin[Admin interface] --> API
+    API --> DB[(PostgreSQL / Supabase)]
+    API --> Cache[(Redis)]
+    API --> Storage[File and image storage]
+    Processor[Mirage local processor] --> DB
+    Operator[Mirage mapping dashboard] --> Processor
 ```
 
-If you prefer pip over uv for dependency installation, use `backend/requirements.txt`.
+This is an implementation record of a team project. The diagram describes its original design; the archive does not provision the former databases, storage, accounts or event deployment.
 
-### 2. Create the Supabase project first
+## A team project
 
-Create the Supabase project before applying any SQL migrations.
-You need the Supabase connection details to set `backend/.env` correctly.
+I co-built the platform, with work on the **backend foundation, API/admin workflows, deployment support and caching/leaderboard behavior**. Examples in the retained history include [backend initialization](https://github.com/Muneer320/dashboard/commit/ca07a50), [core routing/admin/rate-limit configuration](https://github.com/Muneer320/dashboard/commit/12bbaa9), [Redis-backed caching](https://github.com/Muneer320/dashboard/commit/e6f637b) and [admin tooling](https://github.com/Muneer320/dashboard/commit/ae61588).
 
-### 3. Apply SQL migrations
+**Mirage's gallery, processor and mapping implementation is credited to X-DIABLO-X, with integration work across the team.** Kartik Dixit, Shambhu Yadav, Sauhard74 and the other contributors recorded in the history retain their work and credits. This is not a claim of sole authorship of the platform or its frontend.
 
-Open the Supabase SQL editor and run the migration files in order:
+## Preview the public frontend
 
-1. `backend/migrations/sql/001_init_schema.sql`
-2. `backend/migrations/sql/002_seed_admin_user.sql` if you want a local/dev admin user
-3. `backend/migrations/sql/003_rate_limit_entries.sql`
-4. `backend/migrations/sql/004_rls_policies.sql`
-5. `backend/migrations/sql/005_create_submissions_bucket.sql`
-6. `backend/migrations/sql/006_update_users_schema.sql`
-7. `backend/migrations/sql/007_update_user_roles.sql`
+Use Git and Node.js with npm. The archival build was checked with Node 24 on Windows. From a fresh clone:
 
-### 4. Run backend
-
-```bash
-cd backend
-uv run ascent-api
+```sh
+git clone https://github.com/Muneer320/dashboard.git
+cd dashboard/frontend
+npm ci
+npm run build
+npm run preview -- --host 127.0.0.1 --port 5177
 ```
 
-API base path: `/api/v1`
+Open **http://127.0.0.1:5177** to explore the landing page, FAQ and historical merchandise display. The page identifies itself as an archive. No account, database, payment destination or team credentials are needed for these public screens. Login, registration, submissions, participant/admin records and Mirage processing require the original services and are not part of this preview. Do not enter real personal data.
 
-The backend normalizes plain `postgresql://` URLs to the async driver at runtime, so the Supabase connection string in `backend/.env` can work as long as it points to the correct database.
+<details>
+<summary><strong>Phone-sized preview</strong></summary>
 
-### 5. Optional DB table bootstrap (local)
+<img src="docs/previews/landing-mobile.png" width="360" alt="Archived Ascent landing page on a phone-sized viewport">
 
-```bash
-cd backend
-uv run init-db
-```
+</details>
 
-### 6. Run backend tests
+## Archive status and lessons
 
-```bash
-cd backend
-uv run pytest
-```
+The event has ended; this copy is retained for architecture, implementation study and contribution context. Publication preserves most project history while removing database/credential exports, operational account seeds, sample identity datasets, private literals and unreviewed attachments. Contributor identities and original dates are retained. The original operational repository is separate and private.
 
-The test suite covers route wiring, admin phase controls, the scheduled-job helpers, signed file storage, persistent rate limiting, and the Unstop sync flow.
+The most useful lessons are in the boundaries: keeping participant/admin state consistent, designing retry-safe QR and submission workflows, adding caching to expensive leaderboard queries, and separating Mirage inference from operator review and publication.
 
-## Implemented Backend Additions Since the First Cut
+> [!IMPORTANT]
+> This is not a deployment template or a current production service. Historical authorization, concurrency and migration-ordering debt remains; the backend has not been re-certified for deployment. The local preview does not prove authentication, database migrations, QR operations or biometric processing work against a fresh service. See the precise [verification and limitations](ARCHIVE_NOTES.md).
 
-- Lifespan-managed background jobs for phase cleanup, rate-limit cleanup, and file-based Unstop sync.
-- JWT role claims with middleware enforcement for admin and scanner routes.
-- Multipart submission handling with signed file URLs and a file download endpoint.
-- Admin phase activation/locking endpoints for event lifecycle control.
-- API-level tests covering auth, events, submissions, admin sync, QR scanning, background jobs, signed storage, and persistent rate limiting.
-- Extended QR scanning functionality to include collegeEntry mode and expanded scanner authorization roles.
-- Schema updates to support is_attending flags and user cents balancing.
-
-## Supabase Note
-
-- Run `backend/migrations/sql/004_rls_policies.sql` if you want RLS policies in Supabase for direct client access.
-- The backend can keep using its existing database connection path.
-
-## Documentation
-
-See the `Database_schema_lastest.md` in the root directory for the comprehensive database schema and system overview.
-
-## Development Notes
-
-- Keep backend logic authoritative; frontend should stay thin.
-- For dual-structure updates (`users.events` and `events.participants`), always write both in one transaction.
-- Enforce event-scoped access control for all protected operations.
-- The SQLAlchemy models and the SQL migration files are intentionally aligned so the Supabase SQL editor can be used directly.
+Forks are welcome for study and continued work. Review the archive notes before adapting it, use synthetic records, and preserve teammate attribution. No repository-wide team-code license was supplied; no blanket reuse license is asserted here. Third-party dependencies and retained assets keep their own rights and licenses.
