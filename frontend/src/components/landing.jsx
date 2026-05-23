@@ -366,17 +366,17 @@ function Rings() {
 
 const s3Base = "https://ascent-users.s3.ap-south-1.amazonaws.com/sponsors";
 const SPONSORS_LIST = [
-  { name: 'Red Bull',              logo: `${s3Base}/RedBull.svg`,             tier: 'ENERGY' },
-  { name: 'Google for Developers', logo: `${s3Base}/Google%20for%20Developers.svg`, tier: 'GOLD' },
-  { name: 'Meta Cognition',        logo: `${s3Base}/MetaCognition.svg`,       tier: 'GOLD' },
-  { name: 'Vorflux.AI',            logo: `${s3Base}/Vorflux.svg`,             tier: 'GOLD' },
-  { name: 'Together Fund',         logo: `${s3Base}/TogetherFund.svg`,        tier: 'SILVER' },
-  { name: 'CodeCrafters',          logo: `${s3Base}/CodeCrafters.svg`,        tier: 'SILVER' },
-  { name: 'Dymension',             logo: `${s3Base}/Dymension.svg`,           tier: 'SILVER' },
-  { name: 'Omium AI',              logo: `${s3Base}/Omium.svg`,               tier: 'SILVER' },
-  { name: 'Fueler',                logo: `${s3Base}/Fueler.svg`,              tier: 'SILVER' },
-  { name: 'Eyecandy Robotics',     logo: `${s3Base}/EyeCandy%20Robotics.svg`, tier: 'ROBOTICS' },
-  { name: 'CCCL Claude Community', logo: `${s3Base}/CCCL.svg`,                tier: 'COMMUNITY' },
+  { name: 'Red Bull',              logo: `${s3Base}/RedBull.svg` },
+  { name: 'Google for Developers', logo: `${s3Base}/Google%20for%20Developers.svg` },
+  { name: 'Meta Cognition',        logo: `${s3Base}/MetaCognition.svg` },
+  { name: 'Vorflux.AI',            logo: `${s3Base}/Vorflux.svg` },
+  { name: 'Together Fund',         logo: `${s3Base}/TogetherFund.svg` },
+  { name: 'CodeCrafters',          logo: `${s3Base}/CodeCrafters.svg` },
+  { name: 'Dymension',             logo: `${s3Base}/Dymension.svg` },
+  { name: 'Omium AI',              logo: `${s3Base}/Omium.svg` },
+  { name: 'Fueler',                logo: `${s3Base}/Fueler.svg` },
+  { name: 'Eyecandy Robotics',     logo: `${s3Base}/EyeCandy%20Robotics.svg` },
+  { name: 'CCCL Claude Community', logo: `${s3Base}/CCCL.svg` },
 ];
 
 function Marquee() {
@@ -415,64 +415,47 @@ function Marquee() {
 }
 
 function SponsorStrip({ isMobile }) {
-  const tiers = [
-    { label: 'ENERGY', key: 'ENERGY' },
-    { label: 'GOLD', key: 'GOLD' },
-    { label: 'SILVER', key: 'SILVER' },
-    { label: 'ROBOTICS', key: 'ROBOTICS' },
-    { label: 'COMMUNITY', key: 'COMMUNITY' },
-  ];
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {tiers.map(tier => {
-        const sponsors = SPONSORS_LIST.filter(s => s.tier === tier.key);
-        if (sponsors.length === 0) return null;
-        return (
-          <div key={tier.label} style={{
-            display: isMobile ? 'flex' : 'grid',
-            flexDirection: isMobile ? 'column' : undefined,
-            gridTemplateColumns: isMobile ? undefined : '160px 1fr',
-            padding: isMobile ? '24px 20px' : '32px 48px',
-            borderTop: '1px solid var(--glass-border)',
-            alignItems: isMobile ? 'flex-start' : 'center',
-            gap: isMobile ? 14 : 0,
-            background: tier.key === 'ENERGY' ? 'rgba(127,119,221,0.03)' : 'transparent',
-          }}>
-            <div className="eyebrow" style={{ color: 'var(--ink-mute)', minWidth: isMobile ? undefined : 160 }}>{tier.label}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: isMobile ? 24 : 48, rowGap: 20, alignItems: 'center' }}>
-              {sponsors.map(s => (
-                <div key={s.name} style={{ transition: 'transform .2s', cursor: 'pointer' }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                  {s.logo ? (
-                    <img 
-                      src={s.logo} 
-                      alt={s.name} 
-                      style={{ 
-                        height: tier.key === 'ENERGY' ? (isMobile ? 32 : 44) : tier.key === 'GOLD' ? (isMobile ? 24 : 32) : (isMobile ? 20 : 26), 
-                        opacity: 0.9, 
-                        maxWidth: isMobile ? 140 : 200,
-                        objectFit: 'contain'
-                      }} 
-                    />
-                  ) : (
-                    <div style={{
-                      fontFamily: 'var(--f-display)',
-                      fontSize: tier.key === 'ENERGY' ? (isMobile ? 22 : 32) : tier.key === 'GOLD' ? (isMobile ? 18 : 24) : (isMobile ? 15 : 18),
-                      fontWeight: 600,
-                      color: 'var(--ink)',
-                      letterSpacing: '-0.01em',
-                    }}>
-                      {s.name}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+    <div style={{
+      padding: isMobile ? '32px 20px' : '40px 48px',
+      borderTop: '1px solid var(--glass-border)',
+    }}>
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: isMobile ? 32 : 56,
+        rowGap: isMobile ? 28 : 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+        {SPONSORS_LIST.map(s => (
+          <div key={s.name}
+            style={{ transition: 'transform .2s, opacity .2s', cursor: 'pointer', opacity: 0.85 }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)'; e.currentTarget.style.opacity = '1'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.opacity = '0.85'; }}
+          >
+            {s.logo ? (
+              <img
+                src={s.logo}
+                alt={s.name}
+                style={{
+                  height: isMobile ? 26 : 34,
+                  maxWidth: isMobile ? 120 : 160,
+                  objectFit: 'contain',
+                }}
+              />
+            ) : (
+              <div style={{
+                fontFamily: 'var(--f-display)',
+                fontSize: isMobile ? 16 : 20,
+                fontWeight: 600,
+                color: 'var(--ink)',
+                letterSpacing: '-0.01em',
+              }}>{s.name}</div>
+            )}
           </div>
-        );
-      })}
+        ))}
+      </div>
     </div>
   );
 }
